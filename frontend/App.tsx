@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -13,19 +15,44 @@ import {
   View,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-
-type Pledge = {
-  id: string;
-  amount: number;
-};
+import { createPledge, listPledges, type Pledge } from './lib/api';
+import { getOrCreateUserId } from './lib/userId';
 
 const PRESET_AMOUNTS = [1, 5, 10, 25];
 
 export default function App() {
   const [pledges, setPledges] = useState<Pledge[]>([]);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedPreset, setSelectedPreset] = useState<number | null>(null);
   const [customAmount, setCustomAmount] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const id = await getOrCreateUserId();
+        if (cancelled) return;
+        setUserId(id);
+        const data = await listPledges(id);
+        if (cancelled) return;
+        setPledges(data);
+      } catch (err) {
+        if (cancelled) return;
+        Alert.alert(
+          'Could not load pledges',
+          err instanceof Error ? err.message : 'Unknown error',
+        );
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const resetModalState = () => {
     setSelectedPreset(null);
@@ -54,16 +81,20 @@ export default function App() {
   const canConfirm = amount !== null && amount > 0;
 
   const handleConfirm = async () => {
-    if (!canConfirm || amount === null) return;
-
-    // TODO: send pledge to backend, then refresh from server.
-    // For now, just update local state.
-    const newPledge: Pledge = {
-      id: Date.now().toString(),
-      amount,
-    };
-    setPledges((prev) => [newPledge, ...prev]);
-    closeModal();
+    if (!canConfirm || amount === null || !userId || submitting) return;
+    setSubmitting(true);
+    try {
+      const saved = await createPledge(userId, amount);
+      setPledges((prev) => [saved, ...prev]);
+      closeModal();
+    } catch (err) {
+      Alert.alert(
+        'Could not save pledge',
+        err instanceof Error ? err.message : 'Unknown error',
+      );
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -78,7 +109,11 @@ export default function App() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Your Pledges</Text>
-          {pledges.length === 0 ? (
+          {loading ? (
+            <View style={styles.emptyState}>
+              <ActivityIndicator />
+            </View>
+          ) : pledges.length === 0 ? (
             <View style={styles.emptyState}>
               <Text style={styles.emptyStateText}>No pledges yet.</Text>
             </View>
@@ -176,17 +211,21 @@ export default function App() {
             <TouchableOpacity
               style={[
                 styles.confirmButton,
-                !canConfirm && styles.confirmButtonDisabled,
+                (!canConfirm || submitting) && styles.confirmButtonDisabled,
               ]}
               onPress={handleConfirm}
-              disabled={!canConfirm}
+              disabled={!canConfirm || submitting}
               activeOpacity={0.85}
             >
-              <Text style={styles.confirmButtonText}>
-                {amount !== null && amount > 0
-                  ? `Confirm Pledge · £${amount.toFixed(2)}`
-                  : 'Confirm Pledge'}
-              </Text>
+              {submitting ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.confirmButtonText}>
+                  {amount !== null && amount > 0
+                    ? `Confirm Pledge · £${amount.toFixed(2)}`
+                    : 'Confirm Pledge'}
+                </Text>
+              )}
             </TouchableOpacity>
 
             <TouchableOpacity
