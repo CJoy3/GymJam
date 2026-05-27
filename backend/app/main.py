@@ -17,7 +17,7 @@ def test_supabase():
     try:
         url = os.environ.get("SUPABASE_URL")
         key = os.environ.get("SUPABASE_ANON_KEY")
-        supabase = create_client(url, key)
+        #supabase = create_client(url, key)
         return {"status": "connected", "url": url}
     except Exception as e:
         return {"status": "failed", "error": str(e)}
