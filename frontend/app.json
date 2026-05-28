@@ -20,6 +20,12 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "cfce30b9-6169-4a0b-932a-8ed99cab0cb5"
+      }
+    },
+    "owner": "cjoy"
   }
 }
