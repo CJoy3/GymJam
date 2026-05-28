@@ -35,18 +35,26 @@ jobs:
         run: |
           set -euo pipefail
 
-          BUILD_JSON=$(npx eas-cli build --platform android --profile production --non-interactive --wait --json)
-          printf '%s\n' "$BUILD_JSON" > build-output.json
+          # Separate stderr (logs/warnings) from stdout (JSON)
+          npx eas-cli build --platform android --profile production --non-interactive --wait --json 2>eas-logs.txt > build-output.json || (cat eas-logs.txt && exit 1)
 
-          BUILD_ID=$(node -e "const fs=require('fs'); const data=JSON.parse(fs.readFileSync('build-output.json','utf8')); const id=data.id||data.buildId||(Array.isArray(data)?data[0]?.id:null); if(!id) process.exit(1); process.stdout.write(id)")
+          echo "=== Build output ===" && cat build-output.json
 
-          INSPECT_JSON=$(npx eas-cli build:view --platform android --id "$BUILD_ID" --json)
-          printf '%s\n' "$INSPECT_JSON" > build-inspect.json
+          ARTIFACT_URL=$(node -e "
+            const data = JSON.parse(require('fs').readFileSync('build-output.json','utf8'));
+            const arr = Array.isArray(data) ? data : [data];
+            const build = arr[0];
+            const url = build?.artifacts?.buildUrl
+              || build?.artifacts?.apk?.url
+              || build?.buildUrl
+              || build?.url;
+            if (!url) { console.error('Available keys:', JSON.stringify(build, null, 2)); process.exit(1); }
+            process.stdout.write(url);
+          ")
 
-          ARTIFACT_URL=$(node -e "const fs=require('fs'); const data=JSON.parse(fs.readFileSync('build-inspect.json','utf8')); const url=data.artifacts?.apk?.url||data.artifacts?.[0]?.url||data.artifacts?.url; if(!url) process.exit(1); process.stdout.write(url)")
-
+          echo "Downloading APK from: $ARTIFACT_URL"
           curl -L -o app.apk "$ARTIFACT_URL"
-
+          ls -lh app.apk
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
