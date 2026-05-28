@@ -12,3 +12,42 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+  build-apk:
+    name: Build Android APK (EAS)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build APK with EAS and upload artifact
+        working-directory: frontend
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          BUILD_JSON=$(npx eas-cli build --platform android --profile production --non-interactive --wait --json)
+          printf '%s\n' "$BUILD_JSON" > build-output.json
+
+          BUILD_ID=$(node -e "const fs=require('fs'); const data=JSON.parse(fs.readFileSync('build-output.json','utf8')); const id=data.id||data.buildId||(Array.isArray(data)?data[0]?.id:null); if(!id) process.exit(1); process.stdout.write(id)")
+
+          INSPECT_JSON=$(npx eas-cli build:view --platform android --id "$BUILD_ID" --json)
+          printf '%s\n' "$INSPECT_JSON" > build-inspect.json
+
+          ARTIFACT_URL=$(node -e "const fs=require('fs'); const data=JSON.parse(fs.readFileSync('build-inspect.json','utf8')); const url=data.artifacts?.apk?.url||data.artifacts?.[0]?.url||data.artifacts?.url; if(!url) process.exit(1); process.stdout.write(url)")
+
+          curl -L -o app.apk "$ARTIFACT_URL"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: frontend/app.apk
