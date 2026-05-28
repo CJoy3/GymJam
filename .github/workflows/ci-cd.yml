@@ -1,5 +1,4 @@
-name: Backend CI
-
+name: CI/CD Pipeline
 on:
   push:
     branches: [main]
@@ -9,24 +8,35 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 
-  build-apk:
-    name: Build Android APK (EAS)
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
+      - name: Run tests
+        working-directory: frontend
+        run: npm test
 
+  build-apk:
+    name: Build Android APK (EAS)
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
       - name: Build APK with EAS and upload artifact
         working-directory: frontend
         env:
@@ -34,12 +44,10 @@ jobs:
           EAS_BUILD_NO_EXPO_GO_WARNING: true
         run: |
           set -euo pipefail
-
-          # Separate stderr (logs/warnings) from stdout (JSON)
+          # Redirect stderr (logs/warnings) to file to keep stdout clean for JSON parsing
           npx eas-cli build --platform android --profile production --non-interactive --wait --json 2>eas-logs.txt > build-output.json || (cat eas-logs.txt && exit 1)
-
-          echo "=== Build output ===" && cat build-output.json
-
+          # Extract the APK download URL from the EAS build output
+          # Tries multiple possible key locations since EAS response shape has changed over versions
           ARTIFACT_URL=$(node -e "
             const data = JSON.parse(require('fs').readFileSync('build-output.json','utf8'));
             const arr = Array.isArray(data) ? data : [data];
@@ -51,8 +59,7 @@ jobs:
             if (!url) { console.error('Available keys:', JSON.stringify(build, null, 2)); process.exit(1); }
             process.stdout.write(url);
           ")
-
-          echo "Downloading APK from: $ARTIFACT_URL"
+          # Download the built APK from the EAS artifact URL
           curl -L -o app.apk "$ARTIFACT_URL"
           ls -lh app.apk
       - name: Upload APK artifact
@@ -60,3 +67,25 @@ jobs:
         with:
           name: android-apk
           path: frontend/app.apk
+
+  deploy:
+    name: Deploy to Vercel
+    needs: test
+    runs-on: ubuntu-latest
+    # Only deploy on pushes to main, not on pull requests
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Deploy to Vercel
+        working-directory: frontend
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: npx vercel --token ${{ secrets.VERCEL_TOKEN }} --prod
