@@ -2,3 +2,10 @@
 AGENTS.md
 CLAUDE.md
 /venv
+
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc

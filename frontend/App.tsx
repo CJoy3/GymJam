@@ -105,7 +105,7 @@ export default function App() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <Text style={styles.greeting}>Hello, Matthew</Text>
+        <Text style={styles.greeting}>Hello, Matthew!!</Text>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Your Pledges</Text>
