@@ -59,7 +59,6 @@ jobs:
           # Redirect stderr (logs/warnings) to file to keep stdout clean for JSON parsing
           npx eas-cli build --platform android --profile production --non-interactive --wait --json 2>eas-logs.txt > build-output.json || (cat eas-logs.txt && exit 1)
           # Extract the APK download URL from the EAS build output
-          # Tries multiple possible key locations since EAS response shape has changed over versions
           ARTIFACT_URL=$(node -e "
             const data = JSON.parse(require('fs').readFileSync('build-output.json','utf8'));
             const arr = Array.isArray(data) ? data : [data];
