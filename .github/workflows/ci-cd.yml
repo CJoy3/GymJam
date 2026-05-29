@@ -37,9 +37,25 @@ jobs:
         # Replace with tests 
         run: echo 'no tests yet'
 
+  deploy:
+    name: Deploy to Vercel
+    needs: [test-frontend, test-backend]
+    runs-on: ubuntu-latest
+    # Only deploy on pushes to main, not on pull requests
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy backend to Vercel
+        working-directory: backend
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: npx vercel --token ${{ secrets.VERCEL_TOKEN }} --prod --yes 
+
   build-apk:
     name: Build Android APK (EAS)
-    needs: [test-frontend, test-backend]
+    needs: deploy
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -78,19 +94,3 @@ jobs:
         with:
           name: android-apk
           path: frontend/app.apk
-
-  deploy:
-    name: Deploy to Vercel
-    needs: [test-frontend, test-backend]
-    runs-on: ubuntu-latest
-    # Only deploy on pushes to main, not on pull requests
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    steps:
-      - uses: actions/checkout@v4
-      - name: Deploy backend to Vercel
-        working-directory: backend
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-        run: npx vercel --token ${{ secrets.VERCEL_TOKEN }} --prod --yes 
