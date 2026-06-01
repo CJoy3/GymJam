@@ -1,9 +1,9 @@
 name: CI/CD Pipeline
 on:
   push:
-    branches: [main]
+    branches: ['**']
   pull_request:
-    branches: [main]
+    branches: ['**']
 
 jobs:
   test-frontend:
@@ -41,8 +41,7 @@ jobs:
     name: Deploy to Vercel
     needs: [test-frontend, test-backend]
     runs-on: ubuntu-latest
-    # Only deploy on pushes to main, not on pull requests
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/development')
     steps:
       - uses: actions/checkout@v4
       - name: Deploy backend to Vercel
@@ -51,12 +50,21 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-        run: npx vercel --token ${{ secrets.VERCEL_TOKEN }} --prod --yes 
+        run: |
+          if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            # Deploy to production on main
+            npx vercel --token ${{ secrets.VERCEL_TOKEN }} --prod --yes
+          else
+            # Deploy to preview on development
+            npx vercel --token ${{ secrets.VERCEL_TOKEN }} --yes
+          fi
 
   build-apk:
     name: Build Android APK (EAS)
     needs: deploy
     runs-on: ubuntu-latest
+    # Build and upload APK only on push to main branch
+    if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
