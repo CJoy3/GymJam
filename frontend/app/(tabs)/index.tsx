@@ -15,8 +15,8 @@ import {
   View,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { createPledge, listPledges, type Pledge } from './lib/api';
-import { getOrCreateUserId } from './lib/userId';
+import { createPledge, listPledges, type Pledge } from '../../lib/api';
+import { getOrCreateUserId } from '../../lib/userId';
 
 const PRESET_AMOUNTS = [1, 5, 10, 25];
 
