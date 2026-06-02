@@ -465,6 +465,31 @@ export function Progress({ onGymSpace }: { onGymSpace: () => void }) {
           </View>
         )}
       </Card>
+      <Text style={[styles.h2, { marginBottom: 12 }]}>Arena Ladder</Text>
+      <Card style={{ marginBottom: 16, padding: 0 }}>
+        {tiers.map((t, i) => {
+          const reached = elo >= t.min;
+          const current = i === ti;
+          const icon = ['fitness-center', 'directions-run', 'sports-martial-arts', 'military-tech'][i];
+          return (
+            <View key={t.name} style={[styles.ladderRow, i < tiers.length - 1 && { borderBottomWidth: 1, borderBottomColor: C.border }, current && { backgroundColor: 'rgba(168,225,12,0.08)' }]}>
+              <View style={[styles.ladderIcon, { backgroundColor: reached ? C.primary : C.muted }]}>
+                <MaterialIcons name={icon as any} size={20} color={reached ? C.primaryFg : C.mutedFg} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <View style={styles.rowGap}>
+                  <Text style={[styles.cardTitle, !reached && { color: C.mutedFg }]}>{t.name}</Text>
+                  {current && <Chip text="You are here" tone="primary" />}
+                </View>
+                <Sub>{t.max === Infinity ? `${t.min}+ ELO` : `${t.min}\u2013${t.max} ELO`}</Sub>
+              </View>
+              {reached
+                ? <MaterialIcons name="check-circle" size={20} color={C.primary} />
+                : <MaterialIcons name="lock" size={18} color={C.mutedFg} />}
+            </View>
+          );
+        })}
+      </Card>
       <Text style={[styles.h2, { marginBottom: 12 }]}>Badges</Text>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
         {badges.map((b) => (
@@ -515,7 +540,7 @@ export function GymSpace({ onBack }: { onBack: () => void }) {
       <Sub style={{ marginBottom: 16 }}>Earn rewards by leveling up, then decorate your space</Sub>
       <Text style={[styles.h2, { marginBottom: 8 }]}>My Room</Text>
       <Card style={{ marginBottom: 16, padding: 10 }}>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', aspectRatio: 1, backgroundColor: 'rgba(232,229,223,0.5)', borderRadius: RADIUS.md, padding: 6 }}>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', aspectRatio: 1, backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: RADIUS.md, padding: 6 }}>
           {Array.from({ length: 9 }).map((_, slot) => {
             const it = placed.find((i) => i.slot === slot);
             return (
@@ -562,6 +587,8 @@ const styles = StyleSheet.create({
   tabBar: { flexDirection: 'row', gap: 8, backgroundColor: C.muted, borderRadius: RADIUS.md, padding: 4, marginBottom: 16 },
   tab: { flex: 1, paddingVertical: 8, borderRadius: RADIUS.sm, alignItems: 'center' },
   tabOn: { backgroundColor: C.bg },
+  ladderRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: SPACE.lg },
+  ladderIcon: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
   avatar: { width: 44, height: 44, borderRadius: 22, backgroundColor: C.primary, alignItems: 'center', justifyContent: 'center' },
   avatarTxt: { color: C.primaryFg, fontWeight: '700', fontSize: 13 },
   input: { height: 44, paddingHorizontal: 12, borderRadius: RADIUS.md, backgroundColor: C.muted, borderWidth: 1, borderColor: C.border, color: C.ink, marginTop: 4 },

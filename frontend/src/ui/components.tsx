@@ -18,7 +18,7 @@ export function Btn({
 }) {
   const v = {
     primary: { bg: C.primary, fg: C.primaryFg, border: 'transparent' },
-    secondary: { bg: C.bg, fg: C.primaryFg, border: C.primary },
+    secondary: { bg: C.bg, fg: C.ink, border: C.primary },
     tertiary: { bg: 'transparent', fg: C.ink, border: 'transparent' },
   }[variant];
   return (
@@ -42,7 +42,7 @@ export function Btn({
 export function Chip({ text, tone = 'muted' }: { text: string; tone?: 'muted' | 'primary' | 'accent' }) {
   const map = {
     muted: { bg: C.muted, fg: C.mutedFg },
-    primary: { bg: 'rgba(168,225,12,0.15)', fg: '#5a7a00' },
+    primary: { bg: 'rgba(168,225,12,0.18)', fg: '#C7F24A' },
     accent: { bg: 'rgba(255,107,74,0.15)', fg: C.accent },
   }[tone];
   return (

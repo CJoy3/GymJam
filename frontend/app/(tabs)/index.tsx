@@ -5,12 +5,13 @@ import {
   Onboarding, Home, CheckIn, PlanWeek, GroupView, NoGroup,
   GymBrowser, PotTracker, Progress, GymSpace,
 } from '../../src/screens/Screens';
+import { ProfileView } from '../../src/screens/ProfileScreen';
 import { useAppState } from '../../src/state/AppState';
 import { C } from '../../src/theme/tokens';
 
 type Screen =
   | 'onboarding' | 'home' | 'check-in' | 'plan-week' | 'group'
-  | 'gym-browser' | 'pot-tracker' | 'progress' | 'gym-space';
+  | 'gym-browser' | 'pot-tracker' | 'progress' | 'gym-space' | 'profile';
 
 export default function GymJamApp() {
   const { groupName } = useAppState();
@@ -38,6 +39,8 @@ export default function GymJamApp() {
         return <Progress onGymSpace={() => setScreen('gym-space')} />;
       case 'gym-space':
         return <GymSpace onBack={() => setScreen('progress')} />;
+      case 'profile':
+        return <ProfileView onBrowse={() => setScreen('gym-browser')} />;
       default:
         return <Home onCheckIn={() => setScreen('check-in')} onPlan={() => setScreen('plan-week')} onPot={() => setScreen('pot-tracker')} />;
     }
@@ -53,6 +56,7 @@ export default function GymJamApp() {
           <Tab label="Home" icon="home" active={screen === 'home'} onPress={() => setScreen('home')} />
           <Tab label="Group" icon="group" active={['group', 'gym-browser'].includes(screen)} onPress={() => setScreen('group')} />
           <Tab label="Progress" icon="trending-up" active={['progress', 'gym-space'].includes(screen)} onPress={() => setScreen('progress')} />
+          <Tab label="Profile" icon="person" active={screen === 'profile'} onPress={() => setScreen('profile')} />
         </View>
       )}
     </SafeAreaView>

@@ -1,16 +1,16 @@
-// GymJam design tokens — ported from the v2 web design (warm, encouraging).
+// GymJam design tokens — dark mode (warm, encouraging; lime/coral on near-black).
 export const C = {
-  bg: '#FAF8F4',
-  card: '#FAF8F4',
-  ink: '#1A1A1A',
-  muted: '#E8E5DF',
-  mutedFg: '#6B6B6B',
+  bg: '#121212',          // near-black app background
+  card: '#1E1E1E',        // slightly raised card surface
+  ink: '#F5F3EF',         // warm off-white text
+  muted: '#2A2A2A',       // muted surfaces / tracks
+  mutedFg: '#A0A0A0',     // secondary text
   primary: '#A8E10C',     // electric lime
-  primaryFg: '#1A1A1A',
+  primaryFg: '#1A1A1A',   // dark text on lime
   accent: '#FF6B4A',      // warm coral
-  border: 'rgba(26,26,26,0.10)',
+  border: 'rgba(245,243,239,0.12)',
   white: '#FFFFFF',
-  danger: '#d4183d',
+  danger: '#FF5A6E',
 };
 
 export const RADIUS = { sm: 10, md: 14, lg: 16, xl: 22, pill: 999 };
