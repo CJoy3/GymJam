@@ -12,13 +12,9 @@ const mkWeek = (states: DayStatus['state'][]): DayStatus[] => LABELS.map((day, i
 
 /* ---------------- Onboarding ---------------- */
 export function Onboarding({ onDone }: { onDone: () => void }) {
-  const { setGym } = useAppState();
-  const [sel, setSel] = useState<string | null>(null);
-  const gyms = [
-    { name: 'PureGym Manchester', distance: '0.3 miles', groups: 12 },
-    { name: 'The Gym Group', distance: '0.5 miles', groups: 8 },
-    { name: 'Fitness First', distance: '0.8 miles', groups: 5 },
-  ];
+  const { gyms, setGym } = useAppState();
+  const [selId, setSelId] = useState<string | null>(null);
+  const selName = gyms.find((g) => g.id === selId)?.name;
   return (
     <View style={{ flex: 1, backgroundColor: C.bg }}>
       <ScrollView contentContainerStyle={wrap}>
@@ -27,15 +23,14 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
         <Text style={styles.h2}>Nearby Gyms</Text>
         <View style={{ gap: 12, marginTop: 12 }}>
           {gyms.map((g) => {
-            const on = sel === g.name;
+            const on = selId === g.id;
             return (
-              <Card key={g.name} onPress={() => setSel(g.name)} style={on ? { borderColor: C.primary, borderWidth: 2 } : undefined}>
+              <Card key={g.id} onPress={() => setSelId(g.id)} style={on ? { borderColor: C.primary, borderWidth: 2 } : undefined}>
                 <View style={styles.rowBetween}>
                   <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center', flex: 1 }}>
                     <View style={styles.iconCircle}><MaterialIcons name="place" size={20} color={C.primary} /></View>
                     <View>
                       <Text style={styles.cardTitle}>{g.name}</Text>
-                      <Sub>{g.distance} · {g.groups} groups</Sub>
                     </View>
                   </View>
                   {on && <MaterialIcons name="check-circle" size={22} color={C.primary} />}
@@ -46,8 +41,8 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
         </View>
       </ScrollView>
       <View style={styles.footer}>
-        <Btn label={sel ? `Continue with ${sel}` : 'Pick a gym to continue'} disabled={!sel}
-          onPress={() => { if (sel) { setGym(sel); onDone(); } }} />
+        <Btn label={selName ? `Continue with ${selName}` : 'Pick a gym to continue'} disabled={!selId}
+          onPress={async () => { if (selId) { await setGym(selId); onDone(); } }} />
       </View>
     </View>
   );
@@ -277,23 +272,27 @@ export function NoGroup({ onBrowse }: { onBrowse: () => void }) {
 
 /* ---------------- Gym browser (open/request + leader inbox + create) ---------------- */
 export function GymBrowser({ onBack, onJoined }: { onBack: () => void; onJoined: () => void }) {
-  const { gymName, groupName, groups, addGroup, joinGroup, leaveGroup, joinRequests, requestToJoin, approveRequest, rejectRequest } = useAppState();
+  const { gymName, groupId, groups, addGroup, joinGroup, leaveGroup, joinRequests, approveRequest, rejectRequest } = useAppState();
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState(''); const [stake, setStake] = useState('500');
   const [jt, setJt] = useState<'open' | 'request'>('open');
-  const [requested, setRequested] = useState<string[]>([]);
   const [inbox, setInbox] = useState(false);
-  const inGroup = groupName !== '';
+  const inGroup = groupId !== null;
 
-  const join = (g: Group) => {
+  const join = async (g: Group) => {
     if (inGroup) return;
-    if (g.joinType === 'open') { joinGroup(g.name); onJoined(); }
-    else { requestToJoin(g.name); setRequested((r) => [...r, g.name]); }
+    await joinGroup(g.id);
+    if (g.joinType === 'open') onJoined();
   };
-  const create = () => {
+  const create = async () => {
     if (!name.trim()) return;
-    addGroup({ name: name.trim(), members: 1, tier: 'Beginner', stake: `${stake} ELO`, joinType: jt, isLeader: true });
-    joinGroup(name.trim()); setCreating(false); setName(''); onJoined();
+    await addGroup({
+      name: name.trim(),
+      weekly_stake_elo: parseInt(stake, 10) || 500,
+      join_type: jt,
+    });
+    setCreating(false); setName('');
+    onJoined();
   };
 
   return (
@@ -322,7 +321,7 @@ export function GymBrowser({ onBack, onJoined }: { onBack: () => void; onJoined:
                   <Text>{req.userName} → {req.groupName}</Text>
                 </View>
                 <View style={{ flexDirection: 'row', gap: 6 }}>
-                  <Pressable onPress={() => { approveRequest(req.id); if (joinRequests.length === 1) setInbox(false); if (req.userName === 'You') onJoined(); }} style={[styles.actBtn, { backgroundColor: C.primary }]}><MaterialIcons name="check" size={16} color={C.primaryFg} /></Pressable>
+                  <Pressable onPress={() => { approveRequest(req.id); if (joinRequests.length === 1) setInbox(false); }} style={[styles.actBtn, { backgroundColor: C.primary }]}><MaterialIcons name="check" size={16} color={C.primaryFg} /></Pressable>
                   <Pressable onPress={() => { rejectRequest(req.id); if (joinRequests.length === 1) setInbox(false); }} style={[styles.actBtn, { backgroundColor: C.muted }]}><MaterialIcons name="close" size={16} color={C.mutedFg} /></Pressable>
                 </View>
               </View>
@@ -367,11 +366,11 @@ export function GymBrowser({ onBack, onJoined }: { onBack: () => void; onJoined:
 
       <View style={{ gap: 12 }}>
         {groups.map((g) => {
-          const isJoined = groupName === g.name;
+          const isJoined = g.isMember === true;
           const canAct = !inGroup;
-          const pending = requested.includes(g.name);
+          const pending = g.requested === true;
           return (
-            <Card key={g.name} style={isJoined ? { borderColor: C.primary, borderWidth: 2 } : undefined}>
+            <Card key={g.id} style={isJoined ? { borderColor: C.primary, borderWidth: 2 } : undefined}>
               <View style={{ flexDirection: 'row', gap: 12, marginBottom: 12 }}>
                 <View style={styles.avatar}><MaterialIcons name="group" size={22} color={C.primaryFg} /></View>
                 <View style={{ flex: 1 }}>

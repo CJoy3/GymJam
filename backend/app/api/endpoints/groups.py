@@ -1,0 +1,60 @@
+from fastapi import APIRouter, Depends
+
+from app.api.deps import get_current_user
+from app.schemas.group import (
+    Group,
+    GroupCreate,
+    GroupSummary,
+    JoinRequestOut,
+)
+from app.services import groups as groups_svc
+from app.services import pot as pot_svc
+
+router = APIRouter()
+
+
+@router.get("/by-gym/{gym_id}", response_model=list[GroupSummary])
+def list_groups_at_gym(gym_id: str, current: dict = Depends(get_current_user)) -> list[dict]:
+    return groups_svc.list_at_gym(gym_id, current["id"])
+
+
+@router.post("", response_model=Group, status_code=201)
+def create_group(payload: GroupCreate, current: dict = Depends(get_current_user)) -> dict:
+    return groups_svc.create_group(
+        creator_id=current["id"],
+        gym_id=payload.gym_id,
+        name=payload.name,
+        weekly_stake_elo=payload.weekly_stake_elo,
+        join_type=payload.join_type,
+    )
+
+
+@router.post("/{group_id}/join")
+def join_group(group_id: str, current: dict = Depends(get_current_user)) -> dict:
+    return groups_svc.join_or_request(group_id, current["id"])
+
+
+@router.post("/{group_id}/leave")
+def leave_group(group_id: str, current: dict = Depends(get_current_user)) -> dict:
+    groups_svc.leave_group(group_id, current["id"])
+    return {"ok": True}
+
+
+@router.get("/{group_id}/requests", response_model=list[JoinRequestOut])
+def list_requests(group_id: str, current: dict = Depends(get_current_user)) -> list[dict]:
+    return groups_svc.list_pending_requests(group_id, current["id"])
+
+
+@router.post("/requests/{request_id}/approve")
+def approve_request(request_id: str, current: dict = Depends(get_current_user)) -> dict:
+    return groups_svc.approve_request(request_id, current["id"])
+
+
+@router.post("/requests/{request_id}/reject")
+def reject_request(request_id: str, current: dict = Depends(get_current_user)) -> dict:
+    return groups_svc.reject_request(request_id, current["id"])
+
+
+@router.get("/{group_id}/pot")
+def get_pot(group_id: str, week: str = "current") -> dict:
+    return pot_svc.group_pot(group_id, week=week)

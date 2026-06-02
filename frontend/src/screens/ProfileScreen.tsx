@@ -7,21 +7,22 @@ import { useAppState } from '../state/AppState';
 
 const wrap = { padding: SPACE.lg, paddingTop: 56, paddingBottom: 40 } as const;
 
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 0 || !parts[0]) return 'YOU';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
+}
+
 export function ProfileView({ onBrowse }: { onBrowse: () => void }) {
-  const { elo, streak, gymName, groupName } = useAppState();
+  const { elo, streak, gymName, groupName, displayName, thisWeek } = useAppState();
+  const sessionsDone = thisWeek.filter((d) => d.state === 'checked-in').length;
 
   const stats = [
     { icon: 'emoji-events' as const, label: 'ELO', value: elo.toLocaleString(), color: C.primary },
     { icon: 'local-fire-department' as const, label: 'Streak', value: `${streak} wks`, color: C.accent },
-    { icon: 'event-available' as const, label: 'Sessions', value: '48', color: C.ink },
-    { icon: 'verified' as const, label: 'Pledges', value: '11', color: C.ink },
-  ];
-
-  const activity = [
-    { text: 'Checked in at the gym', when: 'Today, 7:14am' },
-    { text: "Joined Priya's Tuesday pledge", when: 'Yesterday' },
-    { text: "Completed last week's pledge", when: '3 days ago' },
-    { text: 'Won 250 ELO from the pot', when: '1 week ago' },
+    { icon: 'event-available' as const, label: 'Sessions', value: `${sessionsDone}`, color: C.ink },
+    { icon: 'verified' as const, label: 'Tier', value: tierForElo(elo), color: C.ink },
   ];
 
   return (
@@ -29,8 +30,8 @@ export function ProfileView({ onBrowse }: { onBrowse: () => void }) {
       <H1 style={{ marginBottom: 16 }}>Profile</H1>
 
       <Card style={{ marginBottom: 16, alignItems: 'center' }}>
-        <View style={styles.bigAvatar}><Text style={styles.bigAvatarTxt}>JD</Text></View>
-        <Text style={styles.name}>Jamie Doe</Text>
+        <View style={styles.bigAvatar}><Text style={styles.bigAvatarTxt}>{initialsOf(displayName)}</Text></View>
+        <Text style={styles.name}>{displayName}</Text>
         <Chip text={tierForElo(elo)} tone="primary" />
         {!!gymName && (
           <View style={[styles.rowGap, { marginTop: 8 }]}>
@@ -52,22 +53,8 @@ export function ProfileView({ onBrowse }: { onBrowse: () => void }) {
         ))}
       </View>
 
-      <Text style={[styles.h2, { marginVertical: 12 }]}>Recent Activity</Text>
-      <Card style={{ padding: 0, marginBottom: 16 }}>
-        {activity.map((a, i) => (
-          <View key={i} style={[styles.activityRow, i < activity.length - 1 && styles.divider]}>
-            <View style={styles.dot} />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.cardTitle}>{a.text}</Text>
-              <Sub>{a.when}</Sub>
-            </View>
-          </View>
-        ))}
-      </Card>
-
       <View style={{ gap: 12 }}>
         <Btn label="Browse / switch groups" variant="secondary" icon="group" onPress={onBrowse} />
-        <Btn label="Sign Out" variant="tertiary" icon="logout" />
       </View>
     </ScrollView>
   );
