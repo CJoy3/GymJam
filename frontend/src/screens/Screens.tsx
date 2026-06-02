@@ -196,14 +196,9 @@ export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: (
 
 /* ---------------- Group (with per-day join) ---------------- */
 export function GroupView({ onBrowse }: { onBrowse: () => void }) {
-  const { groupName, nextWeek, addNextWeekDay } = useAppState();
+  const { groupName, nextWeek, addNextWeekDay, groupMembers } = useAppState();
   const [tab, setTab] = useState<'this' | 'next'>('this');
   const [joined, setJoined] = useState<string[]>([]);
-  const members = [
-    { name: 'Sarah Chen', avatar: 'SC', thisWeek: mkWeek(['checked-in', 'planned', 'checked-in', 'unselected', 'planned', 'unselected', 'unselected']), nextWeek: mkWeek(['planned', 'unselected', 'planned', 'planned', 'unselected', 'unselected', 'unselected']) },
-    { name: 'Marcus Johnson', avatar: 'MJ', thisWeek: mkWeek(['checked-in', 'missed', 'unselected', 'unselected', 'planned', 'planned', 'unselected']), nextWeek: mkWeek(['planned', 'planned', 'unselected', 'planned', 'planned', 'unselected', 'unselected']) },
-    { name: 'Priya Patel', avatar: 'PP', thisWeek: mkWeek(['checked-in', 'checked-in', 'checked-in', 'planned', 'unselected', 'unselected', 'unselected']), nextWeek: mkWeek(['planned', 'planned', 'planned', 'planned', 'planned', 'unselected', 'unselected']) },
-  ];
   const joinDay = (member: string, i: number) => {
     const key = `${member}-${i}`;
     if (joined.includes(key)) return;
@@ -213,7 +208,7 @@ export function GroupView({ onBrowse }: { onBrowse: () => void }) {
     <ScrollView style={{ backgroundColor: C.bg }} contentContainerStyle={wrap}>
       <View style={[styles.rowBetween, { marginBottom: 16 }]}>
         <View><H1>{groupName}</H1>
-          <View style={[styles.rowGap, { marginTop: 4 }]}><MaterialIcons name="group" size={16} color={C.mutedFg} /><Sub>8 members</Sub><Chip text="Regular" tone="primary" /></View>
+          <View style={[styles.rowGap, { marginTop: 4 }]}><MaterialIcons name="group" size={16} color={C.mutedFg} /><Sub>{groupMembers.length} {groupMembers.length === 1 ? 'member' : 'members'}</Sub></View>
         </View>
         <Btn label="Browse" variant="tertiary" onPress={onBrowse} style={{ height: 40, paddingHorizontal: 12 }} />
       </View>
@@ -228,24 +223,31 @@ export function GroupView({ onBrowse }: { onBrowse: () => void }) {
 
       {tab === 'next' && <Sub style={{ marginBottom: 12 }}>Tap any of a member's planned days to join just that day. Mix and match across people.</Sub>}
 
-      <View style={{ gap: 12 }}>
-        {members.map((m) => (
-          <Card key={m.name}>
-            <View style={{ flexDirection: 'row', gap: 12, marginBottom: 12, alignItems: 'center' }}>
-              <View style={styles.avatar}><Text style={styles.avatarTxt}>{m.avatar}</Text></View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>{m.name}</Text>
-                <Sub>{tab === 'this'
-                  ? `${m.thisWeek.filter((d) => d.state === 'checked-in').length} of ${m.thisWeek.filter((d) => d.state !== 'unselected').length} done`
-                  : `${m.nextWeek.filter((d) => d.state === 'planned').length} sessions planned`}</Sub>
+      {groupMembers.length === 0 ? (
+        <Card><Sub style={{ textAlign: 'center' }}>No members yet.</Sub></Card>
+      ) : (
+        <View style={{ gap: 12 }}>
+          {groupMembers.map((m) => (
+            <Card key={m.userId}>
+              <View style={{ flexDirection: 'row', gap: 12, marginBottom: 12, alignItems: 'center' }}>
+                <View style={styles.avatar}><Text style={styles.avatarTxt}>{m.initials}</Text></View>
+                <View style={{ flex: 1 }}>
+                  <View style={styles.rowGap}>
+                    <Text style={styles.cardTitle}>{m.name}</Text>
+                    {m.isLeader && <Chip text="Leader" tone="accent" />}
+                  </View>
+                  <Sub>{tab === 'this'
+                    ? `${m.thisWeek.filter((d) => d.state === 'checked-in').length} of ${m.thisWeek.filter((d) => d.state !== 'unselected').length} done`
+                    : `${m.nextWeek.filter((d) => d.state === 'planned' || d.state === 'locked').length} sessions planned`}</Sub>
+                </View>
               </View>
-            </View>
-            {tab === 'this'
-              ? <DayPicker days={m.thisWeek} />
-              : <JoinableDayRow days={m.nextWeek} joinedKeys={joined} memberName={m.name} onJoin={(i) => joinDay(m.name, i)} />}
-          </Card>
-        ))}
-      </View>
+              {tab === 'this'
+                ? <DayPicker days={m.thisWeek} />
+                : <JoinableDayRow days={m.nextWeek} joinedKeys={joined} memberName={m.userId} onJoin={(i) => joinDay(m.userId, i)} />}
+            </Card>
+          ))}
+        </View>
+      )}
 
       {tab === 'next' && (
         <Card style={{ marginTop: 16, backgroundColor: 'rgba(255,107,74,0.05)', borderColor: 'rgba(255,107,74,0.2)' }}>
@@ -399,13 +401,15 @@ export function GymBrowser({ onBack, onJoined }: { onBack: () => void; onJoined:
 
 /* ---------------- Pot tracker ---------------- */
 export function PotTracker({ onBack }: { onBack: () => void }) {
-  const { pot } = useAppState();
-  const breakdown = [
-    { name: 'Sarah Chen', done: 3, pledged: 4, risk: 100 },
-    { name: 'Marcus Johnson', done: 1, pledged: 4, risk: 300 },
-    { name: 'Priya Patel', done: 4, pledged: 4, risk: 0 },
-    { name: 'Jordan Davis', done: 2, pledged: 4, risk: 200 },
-  ];
+  const { pot, groupMembers } = useAppState();
+  const breakdown = groupMembers.map((m) => {
+    const done = m.thisWeek.filter((d) => d.state === 'checked-in').length;
+    const pledged = m.thisWeek.filter((d) =>
+      d.state === 'planned' || d.state === 'locked' || d.state === 'checked-in' || d.state === 'missed'
+    ).length;
+    const risk = Math.max(0, (pledged - done) * 100);
+    return { name: m.name, done, pledged, risk };
+  });
   return (
     <ScrollView style={{ backgroundColor: C.bg }} contentContainerStyle={wrap}>
       <Pressable onPress={onBack} style={[styles.rowGap, { marginBottom: 16 }]}><MaterialIcons name="arrow-back" size={18} color={C.mutedFg} /><Sub>Back</Sub></Pressable>
@@ -419,24 +423,38 @@ export function PotTracker({ onBack }: { onBack: () => void }) {
         </View>
       </Card>
       <Text style={[styles.h2, { marginBottom: 12 }]}>Member Breakdown</Text>
-      <View style={{ gap: 12 }}>
-        {breakdown.map((m) => (
-          <Card key={m.name}>
-            <View style={styles.rowBetween}>
-              <Text style={styles.cardTitle}>{m.name}</Text>
-              <Chip text={m.risk === 0 ? 'Complete' : `${m.risk} at risk`} tone={m.risk === 0 ? 'primary' : 'accent'} />
-            </View>
-            <Sub style={{ marginTop: 4 }}>{m.done} of {m.pledged} sessions done</Sub>
-          </Card>
-        ))}
-      </View>
+      {breakdown.length === 0 ? (
+        <Card><Sub style={{ textAlign: 'center' }}>No members in the group yet.</Sub></Card>
+      ) : (
+        <View style={{ gap: 12 }}>
+          {breakdown.map((m) => (
+            <Card key={m.name}>
+              <View style={styles.rowBetween}>
+                <Text style={styles.cardTitle}>{m.name}</Text>
+                <Chip text={m.pledged === 0 ? 'No pledge' : m.risk === 0 ? 'On track' : `${m.risk} at risk`} tone={m.pledged === 0 ? 'muted' : m.risk === 0 ? 'primary' : 'accent'} />
+              </View>
+              <Sub style={{ marginTop: 4 }}>{m.done} of {m.pledged} sessions done</Sub>
+            </Card>
+          ))}
+        </View>
+      )}
     </ScrollView>
   );
 }
 
 /* ---------------- Progress ---------------- */
+type BadgeKey = keyof import('../../lib/api/badges').Badges;
+const BADGE_CATALOG: { key: BadgeKey; name: string; icon: string }[] = [
+  { key: 'first_week', name: 'First Week', icon: '🎯' },
+  { key: 'streak_master', name: 'Streak Master', icon: '🔥' },
+  { key: 'early_bird', name: 'Early Bird', icon: '🌅' },
+  { key: 'consistency_king', name: 'Consistency King', icon: '👑' },
+  { key: 'pot_winner', name: 'Pot Winner', icon: '💰' },
+  { key: 'group_leader', name: 'Group Leader', icon: '⭐' },
+];
+
 export function Progress({ onGymSpace }: { onGymSpace: () => void }) {
-  const { elo } = useAppState();
+  const { elo, badges: badgeFlags } = useAppState();
   const tiers = [
     { name: 'Beginner', min: 0, max: 500 }, { name: 'Rookie', min: 500, max: 1000 },
     { name: 'Regular', min: 1000, max: 2000 }, { name: 'Mogger', min: 2000, max: Infinity },
@@ -444,11 +462,7 @@ export function Progress({ onGymSpace }: { onGymSpace: () => void }) {
   const ti = tiers.findIndex((t) => elo >= t.min && elo < t.max);
   const cur = tiers[ti]; const next = tiers[ti + 1];
   const pct = next ? ((elo - cur.min) / (next.min - cur.min)) * 100 : 100;
-  const badges = [
-    { name: 'First Week', icon: '🎯', on: true }, { name: 'Streak Master', icon: '🔥', on: true },
-    { name: 'Early Bird', icon: '🌅', on: true }, { name: 'Consistency King', icon: '👑', on: false },
-    { name: 'Pot Winner', icon: '💰', on: false }, { name: 'Group Leader', icon: '⭐', on: false },
-  ];
+  const badges = BADGE_CATALOG.map((b) => ({ ...b, on: badgeFlags[b.key] }));
   return (
     <ScrollView style={{ backgroundColor: C.bg }} contentContainerStyle={wrap}>
       <H1 style={{ marginBottom: 4 }}>Progress</H1>
@@ -509,29 +523,42 @@ export function Progress({ onGymSpace }: { onGymSpace: () => void }) {
 }
 
 /* ---------------- Gym Space ---------------- */
-interface SpaceItem { id: string; name: string; emoji: string; unlockElo: number; slot: number | null; }
+interface SpaceItemDef { id: string; name: string; emoji: string; unlockElo: number; }
+
+const ROOM_ITEMS: SpaceItemDef[] = [
+  { id: 'mat',    name: 'Yoga Mat',    emoji: '🧘', unlockElo: 0 },
+  { id: 'db',     name: 'Dumbbells',   emoji: '🏋️', unlockElo: 0 },
+  { id: 'plant',  name: 'Plant',       emoji: '🪴', unlockElo: 500 },
+  { id: 'bench',  name: 'Bench',       emoji: '🛋️', unlockElo: 500 },
+  { id: 'banner', name: 'Banner',      emoji: '🏆', unlockElo: 1000 },
+  { id: 'tread',  name: 'Treadmill',   emoji: '🏃', unlockElo: 1000 },
+  { id: 'neon',   name: 'Neon Sign',   emoji: '💡', unlockElo: 1200 },
+  { id: 'ring',   name: 'Boxing Ring', emoji: '🥊', unlockElo: 2000 },
+  { id: 'mascot', name: 'Mascot',      emoji: '🐯', unlockElo: 2000 },
+];
+
 export function GymSpace({ onBack }: { onBack: () => void }) {
-  const { elo } = useAppState();
-  const [items, setItems] = useState<SpaceItem[]>([
-    { id: 'mat', name: 'Yoga Mat', emoji: '🧘', unlockElo: 0, slot: 0 },
-    { id: 'db', name: 'Dumbbells', emoji: '🏋️', unlockElo: 0, slot: 4 },
-    { id: 'plant', name: 'Plant', emoji: '🪴', unlockElo: 500, slot: 2 },
-    { id: 'bench', name: 'Bench', emoji: '🛋️', unlockElo: 500, slot: null },
-    { id: 'banner', name: 'Banner', emoji: '🏆', unlockElo: 1000, slot: 6 },
-    { id: 'tread', name: 'Treadmill', emoji: '🏃', unlockElo: 1000, slot: null },
-    { id: 'neon', name: 'Neon Sign', emoji: '💡', unlockElo: 1200, slot: null },
-    { id: 'ring', name: 'Boxing Ring', emoji: '🥊', unlockElo: 2000, slot: null },
-    { id: 'mascot', name: 'Mascot', emoji: '🐯', unlockElo: 2000, slot: null },
-  ]);
-  const unlocked = (it: SpaceItem) => elo >= it.unlockElo;
-  const placed = items.filter((i) => i.slot !== null);
-  const freeSlot = () => { const taken = new Set(placed.map((i) => i.slot)); for (let s = 0; s < 9; s++) if (!taken.has(s)) return s; return null; };
-  const toggle = (it: SpaceItem) => {
-    if (!unlocked(it)) return;
-    if (it.slot !== null) { setItems((p) => p.map((x) => x.id === it.id ? { ...x, slot: null } : x)); return; }
-    const f = freeSlot(); if (f === null) return;
-    setItems((p) => p.map((x) => x.id === it.id ? { ...x, slot: f } : x));
+  const { elo, roomItems, placeRoomItem } = useAppState();
+  const placementByItem = new Map(roomItems.map((r) => [r.item_id, r.slot] as const));
+  const placedSlots = new Set(roomItems.map((r) => r.slot));
+
+  const unlocked = (it: SpaceItemDef) => elo >= it.unlockElo;
+  const freeSlot = () => {
+    for (let s = 0; s < 9; s++) if (!placedSlots.has(s)) return s;
+    return null;
   };
+  const toggle = (it: SpaceItemDef) => {
+    if (!unlocked(it)) return;
+    const currentSlot = placementByItem.get(it.id);
+    if (currentSlot !== undefined) {
+      placeRoomItem(it.id, null);
+      return;
+    }
+    const f = freeSlot();
+    if (f === null) return;
+    placeRoomItem(it.id, f);
+  };
+
   return (
     <ScrollView style={{ backgroundColor: C.bg }} contentContainerStyle={wrap}>
       <Pressable onPress={onBack} style={[styles.rowGap, { marginBottom: 16 }]}><MaterialIcons name="arrow-back" size={18} color={C.mutedFg} /><Sub>Back</Sub></Pressable>
@@ -541,11 +568,12 @@ export function GymSpace({ onBack }: { onBack: () => void }) {
       <Card style={{ marginBottom: 16, padding: 10 }}>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', aspectRatio: 1, backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: RADIUS.md, padding: 6 }}>
           {Array.from({ length: 9 }).map((_, slot) => {
-            const it = placed.find((i) => i.slot === slot);
+            const placement = roomItems.find((r) => r.slot === slot);
+            const def = placement && ROOM_ITEMS.find((i) => i.id === placement.item_id);
             return (
               <View key={slot} style={{ width: '33.33%', aspectRatio: 1, padding: 4 }}>
-                <View style={{ flex: 1, borderRadius: RADIUS.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: it ? C.card : 'transparent', borderWidth: it ? 0 : 2, borderColor: C.border, borderStyle: 'dashed' }}>
-                  {it && <Text style={{ fontSize: 32 }}>{it.emoji}</Text>}
+                <View style={{ flex: 1, borderRadius: RADIUS.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: def ? C.card : 'transparent', borderWidth: def ? 0 : 2, borderColor: C.border, borderStyle: 'dashed' }}>
+                  {def && <Text style={{ fontSize: 32 }}>{def.emoji}</Text>}
                 </View>
               </View>
             );
@@ -554,8 +582,9 @@ export function GymSpace({ onBack }: { onBack: () => void }) {
         <Sub style={{ textAlign: 'center', marginTop: 8 }}>Tap an item to place it · tap a placed item to remove</Sub>
       </Card>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
-        {items.map((it) => {
-          const on = unlocked(it); const isPlaced = it.slot !== null;
+        {ROOM_ITEMS.map((it) => {
+          const on = unlocked(it);
+          const isPlaced = placementByItem.has(it.id);
           return (
             <Pressable key={it.id} disabled={!on} onPress={() => toggle(it)}
               style={[styles.itemCard, { opacity: on ? 1 : 0.5 }]}>

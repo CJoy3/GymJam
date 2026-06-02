@@ -1,4 +1,5 @@
 import { apiGet, apiPost } from './client';
+import type { PlanDay } from './plans';
 
 export type JoinType = 'open' | 'request';
 
@@ -62,3 +63,16 @@ export const rejectRequest = (request_id: string) =>
 
 export const getGroupPot = (group_id: string, week: 'current' | 'next' = 'current') =>
   apiGet<Pot>(`/groups/${group_id}/pot?week=${week}`);
+
+export interface GroupMemberDetail {
+  user_id: string;
+  display_name: string;
+  elo: number;
+  role: 'member' | 'leader';
+  joined_at: string;
+  this_week_days: PlanDay[];
+  next_week_days: PlanDay[];
+}
+
+export const listGroupMembers = (group_id: string) =>
+  apiGet<GroupMemberDetail[]>(`/groups/${group_id}/members`);

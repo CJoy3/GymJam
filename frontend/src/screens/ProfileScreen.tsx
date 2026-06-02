@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, ScrollView, StyleSheet } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { C, RADIUS, SPACE, tierForElo } from '../theme/tokens';
 import { Card, Btn, Chip, H1, Sub } from '../ui/components';
@@ -15,8 +15,13 @@ function initialsOf(name: string): string {
 }
 
 export function ProfileView({ onBrowse }: { onBrowse: () => void }) {
-  const { elo, streak, gymName, groupName, displayName, thisWeek } = useAppState();
+  const { elo, streak, gymName, groupName, displayName, thisWeek, updateDisplayName } = useAppState();
   const sessionsDone = thisWeek.filter((d) => d.state === 'checked-in').length;
+
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(displayName);
+  // Keep the draft in sync when the persisted name changes (e.g. after save).
+  useEffect(() => { if (!editing) setDraft(displayName); }, [displayName, editing]);
 
   const stats = [
     { icon: 'emoji-events' as const, label: 'ELO', value: elo.toLocaleString(), color: C.primary },
@@ -25,13 +30,44 @@ export function ProfileView({ onBrowse }: { onBrowse: () => void }) {
     { icon: 'verified' as const, label: 'Tier', value: tierForElo(elo), color: C.ink },
   ];
 
+  const save = async () => {
+    const next = draft.trim();
+    if (next && next !== displayName) {
+      await updateDisplayName(next);
+    }
+    setEditing(false);
+  };
+
   return (
     <ScrollView style={{ backgroundColor: C.bg }} contentContainerStyle={wrap}>
       <H1 style={{ marginBottom: 16 }}>Profile</H1>
 
       <Card style={{ marginBottom: 16, alignItems: 'center' }}>
         <View style={styles.bigAvatar}><Text style={styles.bigAvatarTxt}>{initialsOf(displayName)}</Text></View>
-        <Text style={styles.name}>{displayName}</Text>
+        {editing ? (
+          <View style={{ width: '100%', marginTop: 12, gap: 8 }}>
+            <TextInput
+              value={draft}
+              onChangeText={setDraft}
+              placeholder="Your name"
+              placeholderTextColor={C.mutedFg}
+              autoFocus
+              maxLength={48}
+              style={styles.nameInput}
+            />
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <Btn label="Save" onPress={save} disabled={!draft.trim()} style={{ flex: 1 }} />
+              <Btn label="Cancel" variant="secondary" onPress={() => { setEditing(false); setDraft(displayName); }} style={{ flex: 1 }} />
+            </View>
+          </View>
+        ) : (
+          <Pressable onPress={() => setEditing(true)} style={{ alignItems: 'center' }}>
+            <View style={styles.rowGap}>
+              <Text style={styles.name}>{displayName}</Text>
+              <MaterialIcons name="edit" size={16} color={C.mutedFg} />
+            </View>
+          </Pressable>
+        )}
         <Chip text={tierForElo(elo)} tone="primary" />
         {!!gymName && (
           <View style={[styles.rowGap, { marginTop: 8 }]}>
@@ -69,7 +105,16 @@ const styles = StyleSheet.create({
   bigAvatarTxt: { fontSize: 28, fontWeight: '700', color: C.primaryFg },
   statGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', gap: 12 },
   statValue: { fontSize: 22, fontWeight: '700', color: C.ink, marginTop: 4 },
-  activityRow: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: SPACE.lg },
-  divider: { borderBottomWidth: 1, borderBottomColor: C.border },
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: C.primary },
+  nameInput: {
+    height: 44,
+    paddingHorizontal: 12,
+    borderRadius: RADIUS.md,
+    backgroundColor: C.muted,
+    borderWidth: 1,
+    borderColor: C.border,
+    color: C.ink,
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
 });
