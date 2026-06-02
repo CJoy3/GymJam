@@ -3,9 +3,11 @@ import React, {
 } from 'react';
 import { Alert } from 'react-native';
 
+import * as badgesApi from '../../lib/api/badges';
 import * as gymsApi from '../../lib/api/gyms';
 import * as groupsApi from '../../lib/api/groups';
 import * as plansApi from '../../lib/api/plans';
+import * as roomApi from '../../lib/api/room';
 import * as usersApi from '../../lib/api/users';
 import { getOrCreateUserId } from '../../lib/userId';
 
@@ -37,6 +39,16 @@ export interface JoinRequest {
   id: string;
   userName: string;
   groupName: string;
+}
+
+export interface GroupMember {
+  userId: string;
+  name: string;
+  initials: string;
+  elo: number;
+  isLeader: boolean;
+  thisWeek: DayStatus[];
+  nextWeek: DayStatus[];
 }
 
 interface AppStateShape {
@@ -80,6 +92,21 @@ interface AppStateShape {
   // Pot
   pot: number;
 
+  // Group members (this & next week pledges per person)
+  groupMembers: GroupMember[];
+  refreshMembers: () => Promise<void>;
+
+  // Badges (derived flags from real stats)
+  badges: badgesApi.Badges;
+  refreshBadges: () => Promise<void>;
+
+  // Profile
+  updateDisplayName: (name: string) => Promise<void>;
+
+  // Gym-space room
+  roomItems: roomApi.RoomItem[];
+  placeRoomItem: (itemId: string, slot: number | null) => Promise<void>;
+
   // Refetch hooks
   refreshAll: () => Promise<void>;
 }
@@ -96,6 +123,20 @@ function planToWeek(plan: plansApi.WeeklyPlan): DayStatus[] {
     const found = plan.days.find((d) => d.day_of_week === i);
     return { day, state: (found?.state ?? 'unselected') as DayState };
   });
+}
+
+function daysToWeek(days: plansApi.PlanDay[]): DayStatus[] {
+  return DAYS.map((day, i) => {
+    const found = days.find((d) => d.day_of_week === i);
+    return { day, state: (found?.state ?? 'unselected') as DayState };
+  });
+}
+
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (!parts[0]) return 'YOU';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[1][0]).toUpperCase();
 }
 
 function todayIndexForWeek(week: DayStatus[]): number {
@@ -134,6 +175,16 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [nextWeek, setNextWeek] = useState<DayStatus[]>(DAYS.map((d) => ({ day: d, state: 'unselected' })));
   const [pot, setPot] = useState(0);
   const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
+  const [groupMembers, setGroupMembers] = useState<GroupMember[]>([]);
+  const [badges, setBadges] = useState<badgesApi.Badges>({
+    first_week: false,
+    streak_master: false,
+    early_bird: false,
+    consistency_king: false,
+    pot_winner: false,
+    group_leader: false,
+  });
+  const [roomItems, setRoomItems] = useState<roomApi.RoomItem[]>([]);
 
   /* ----- loaders ----- */
 
@@ -170,6 +221,27 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const loadMembers = useCallback(async (groupId: string | null) => {
+    if (!groupId) {
+      setGroupMembers([]);
+      return;
+    }
+    try {
+      const list = await groupsApi.listGroupMembers(groupId);
+      setGroupMembers(list.map((m) => ({
+        userId: m.user_id,
+        name: m.display_name,
+        initials: initialsOf(m.display_name),
+        elo: m.elo,
+        isLeader: m.role === 'leader',
+        thisWeek: daysToWeek(m.this_week_days),
+        nextWeek: daysToWeek(m.next_week_days),
+      })));
+    } catch {
+      setGroupMembers([]);
+    }
+  }, []);
+
   const loadInbox = useCallback(async (groupId: string | null, isLeader: boolean | undefined) => {
     if (!groupId || !isLeader) {
       setJoinRequests([]);
@@ -180,6 +252,33 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       setJoinRequests(reqs.map((r) => ({ id: r.id, userName: r.display_name, groupName: '' })));
     } catch {
       setJoinRequests([]);
+    }
+  }, []);
+
+  const refreshGroupContext = useCallback(
+    async (groupId: string | null, isLeader: boolean | undefined) => {
+      await Promise.all([
+        loadPot(groupId),
+        loadInbox(groupId, isLeader),
+        loadMembers(groupId),
+      ]);
+    },
+    [loadPot, loadInbox, loadMembers],
+  );
+
+  const loadBadges = useCallback(async () => {
+    try {
+      setBadges(await badgesApi.getMyBadges());
+    } catch {
+      // keep prior state
+    }
+  }, []);
+
+  const loadRoom = useCallback(async () => {
+    try {
+      setRoomItems(await roomApi.getMyRoom());
+    } catch {
+      // keep prior state
     }
   }, []);
 
@@ -194,22 +293,23 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       await loadGyms();
       if (user.gym_id) {
         const mine = await loadGroupsForGym(user.gym_id, user.id);
-        await loadPot(mine?.id ?? null);
-        await loadInbox(mine?.id ?? null, mine?.isLeader);
+        await refreshGroupContext(mine?.id ?? null, mine?.isLeader);
       } else {
         setGroupsAtGym([]);
         setMyGroupSummary(null);
         setPot(0);
         setJoinRequests([]);
+        setGroupMembers([]);
       }
       await loadPlans();
+      await Promise.all([loadBadges(), loadRoom()]);
     } catch (e) {
       reportError('Failed to start GymJam', e);
     } finally {
       setReady(true);
       setReloading(false);
     }
-  }, [loadGyms, loadGroupsForGym, loadPlans, loadPot, loadInbox]);
+  }, [loadGyms, loadGroupsForGym, loadPlans, refreshGroupContext, loadBadges, loadRoom]);
 
   useEffect(() => {
     bootstrap();
@@ -222,20 +322,18 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       const u = await usersApi.updateMe({ gym_id: gymId });
       setMe(u);
       const mine = await loadGroupsForGym(gymId, u.id);
-      await loadPot(mine?.id ?? null);
-      await loadInbox(mine?.id ?? null, mine?.isLeader);
+      await refreshGroupContext(mine?.id ?? null, mine?.isLeader);
     } catch (e) {
       reportError('Could not set gym', e);
     }
-  }, [loadGroupsForGym, loadInbox, loadPot]);
+  }, [loadGroupsForGym, refreshGroupContext]);
 
   const joinGroup = useCallback(async (groupId: string) => {
     if (!me?.gym_id) return;
     try {
       const res = await groupsApi.joinGroup(groupId);
       const mine = await loadGroupsForGym(me.gym_id, me.id);
-      await loadPot(mine?.id ?? null);
-      await loadInbox(mine?.id ?? null, mine?.isLeader);
+      await refreshGroupContext(mine?.id ?? null, mine?.isLeader);
       await loadPlans();
       if (res.action === 'requested') {
         Alert.alert('Request sent', 'The group leader will review your request.');
@@ -243,20 +341,19 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       reportError('Could not join group', e);
     }
-  }, [loadGroupsForGym, loadInbox, loadPlans, loadPot, me]);
+  }, [loadGroupsForGym, loadPlans, refreshGroupContext, me]);
 
   const leaveGroup = useCallback(async () => {
     if (!myGroupSummary || !me?.gym_id) return;
     try {
       await groupsApi.leaveGroup(myGroupSummary.id);
       const mine = await loadGroupsForGym(me.gym_id, me.id);
-      await loadPot(mine?.id ?? null);
-      await loadInbox(mine?.id ?? null, mine?.isLeader);
+      await refreshGroupContext(mine?.id ?? null, mine?.isLeader);
       await loadPlans();
     } catch (e) {
       reportError('Could not leave group', e);
     }
-  }, [loadGroupsForGym, loadInbox, loadPlans, loadPot, me, myGroupSummary]);
+  }, [loadGroupsForGym, loadPlans, refreshGroupContext, me, myGroupSummary]);
 
   const addGroup = useCallback(async (g: {
     name: string;
@@ -272,24 +369,22 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         join_type: g.join_type,
       });
       const mine = await loadGroupsForGym(me.gym_id, me.id);
-      await loadPot(mine?.id ?? null);
-      await loadInbox(mine?.id ?? null, mine?.isLeader);
+      await refreshGroupContext(mine?.id ?? null, mine?.isLeader);
       await loadPlans();
     } catch (e) {
       reportError('Could not create group', e);
     }
-  }, [loadGroupsForGym, loadInbox, loadPlans, loadPot, me]);
+  }, [loadGroupsForGym, loadPlans, refreshGroupContext, me]);
 
   const approveRequest = useCallback(async (id: string) => {
     try {
       await groupsApi.approveRequest(id);
-      if (myGroupSummary?.id) {
-        await loadInbox(myGroupSummary.id, myGroupSummary.isLeader);
-      }
+      // Approved request → a new member joined; refresh members/pot too.
+      await refreshGroupContext(myGroupSummary?.id ?? null, myGroupSummary?.isLeader);
     } catch (e) {
       reportError('Could not approve request', e);
     }
-  }, [loadInbox, myGroupSummary]);
+  }, [refreshGroupContext, myGroupSummary]);
 
   const rejectRequest = useCallback(async (id: string) => {
     try {
@@ -306,11 +401,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     try {
       const plan = await plansApi.toggleNextDay(i);
       setNextWeek(planToWeek(plan));
-      if (myGroupSummary?.id) await loadPot(myGroupSummary.id);
+      await refreshGroupContext(myGroupSummary?.id ?? null, myGroupSummary?.isLeader);
     } catch (e) {
       reportError('Could not update plan', e);
     }
-  }, [loadPot, myGroupSummary]);
+  }, [refreshGroupContext, myGroupSummary]);
 
   const addNextWeekDay = useCallback(async (i: number) => {
     // "Join another member's day" is just an additive toggle on our plan.
@@ -323,19 +418,45 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     try {
       const plan = await plansApi.lockNextWeek();
       setNextWeek(planToWeek(plan));
-      if (myGroupSummary?.id) await loadPot(myGroupSummary.id);
+      await refreshGroupContext(myGroupSummary?.id ?? null, myGroupSummary?.isLeader);
     } catch (e) {
       reportError('Could not lock the week', e);
     }
-  }, [loadPot, myGroupSummary]);
+  }, [refreshGroupContext, myGroupSummary]);
 
   const checkInToday = useCallback(async () => {
     try {
       const res = await plansApi.checkInToday();
       setThisWeek(planToWeek(res.plan));
       setMe((prev) => (prev ? { ...prev, elo: res.new_elo } : prev));
+      await Promise.all([
+        refreshGroupContext(myGroupSummary?.id ?? null, myGroupSummary?.isLeader),
+        loadBadges(),
+      ]);
     } catch (e) {
       reportError('Could not check in', e);
+    }
+  }, [refreshGroupContext, myGroupSummary, loadBadges]);
+
+  const updateDisplayName = useCallback(async (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    try {
+      const u = await usersApi.updateMe({ display_name: trimmed });
+      setMe(u);
+      // Member list shows display_name, so refresh it.
+      if (myGroupSummary?.id) await loadMembers(myGroupSummary.id);
+    } catch (e) {
+      reportError('Could not update name', e);
+    }
+  }, [loadMembers, myGroupSummary]);
+
+  const placeRoomItem = useCallback(async (itemId: string, slot: number | null) => {
+    try {
+      const items = await roomApi.setItemPlacement(itemId, slot);
+      setRoomItems(items);
+    } catch (e) {
+      reportError('Could not update gym space', e);
     }
   }, []);
 
@@ -375,12 +496,24 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
       pot,
 
+      groupMembers,
+      refreshMembers: () => loadMembers(myGroupSummary?.id ?? null),
+
+      badges,
+      refreshBadges: loadBadges,
+
+      updateDisplayName,
+
+      roomItems,
+      placeRoomItem,
+
       refreshAll: bootstrap,
     };
   }, [
-    addGroup, addNextWeekDay, approveRequest, bootstrap, checkInToday, groupsAtGym, gyms,
-    joinGroup, joinRequests, leaveGroup, lockNextWeek, me, myGroupSummary, nextWeek, pot,
-    ready, rejectRequest, reloading, setGym, thisWeek, toggleNextWeekDay,
+    addGroup, addNextWeekDay, approveRequest, badges, bootstrap, checkInToday, groupMembers,
+    groupsAtGym, gyms, joinGroup, joinRequests, leaveGroup, loadBadges, loadMembers,
+    lockNextWeek, me, myGroupSummary, nextWeek, placeRoomItem, pot, ready, rejectRequest,
+    reloading, roomItems, setGym, thisWeek, toggleNextWeekDay, updateDisplayName,
   ]);
 
   // tier is purely a function of elo; expose for callers that want it

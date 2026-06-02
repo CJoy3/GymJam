@@ -47,3 +47,5 @@ export const apiPost = <T>(path: string, body?: unknown, opts?: RequestOptions) 
   request<T>('POST', path, body, opts);
 export const apiPatch = <T>(path: string, body?: unknown, opts?: RequestOptions) =>
   request<T>('PATCH', path, body, opts);
+export const apiPut = <T>(path: string, body?: unknown, opts?: RequestOptions) =>
+  request<T>('PUT', path, body, opts);
