@@ -73,10 +73,17 @@ interface AppStateShape {
   // Groups
   groupName: string;
   groupId: string | null;
+  isLeader: boolean;
   groups: Group[];
   joinGroup: (groupId: string) => Promise<void>;
   leaveGroup: () => Promise<void>;
-  addGroup: (g: { name: string; weekly_stake_elo: number; join_type: 'open' | 'request' }) => Promise<void>;
+  addGroup: (g: {
+    name: string;
+    weekly_stake_elo: number;
+    join_type: 'open' | 'request';
+    required_pledges: number;
+    stake_per_miss: number;
+  }) => Promise<void>;
 
   // Requests
   joinRequests: JoinRequest[];
@@ -431,6 +438,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     name: string;
     weekly_stake_elo: number;
     join_type: 'open' | 'request';
+    required_pledges: number;
+    stake_per_miss: number;
   }) => {
     if (!me?.gym_id) return;
     try {
@@ -439,6 +448,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         name: g.name,
         weekly_stake_elo: g.weekly_stake_elo,
         join_type: g.join_type,
+        required_pledges: g.required_pledges,
+        stake_per_miss: g.stake_per_miss,
       });
       const mine = await loadGroupsForGym(me.gym_id, me.id);
       await refreshGroupContext(mine?.id ?? null, mine?.isLeader);
@@ -600,6 +611,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
       groupName: myGroupSummary?.name ?? '',
       groupId: myGroupSummary?.id ?? null,
+      isLeader: myGroupSummary?.isLeader === true,
       groups: groupsAtGym,
       joinGroup,
       leaveGroup,

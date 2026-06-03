@@ -28,6 +28,8 @@ def create_group(payload: GroupCreate, current: dict = Depends(get_current_user)
         name=payload.name,
         weekly_stake_elo=payload.weekly_stake_elo,
         join_type=payload.join_type,
+        required_pledges=payload.required_pledges,
+        stake_per_miss=payload.stake_per_miss,
     )
 
 

@@ -7,7 +7,7 @@ import { C, FONT, RADIUS, SPACE, tierForElo } from '../theme/tokens';
 import {
   Btn, Card, Chip, Eyebrow, FadeInItem, H1, H3, Num, Ring, Stat, Sub,
 } from '../ui/components';
-import { DayPicker, JoinableDayRow } from '../ui/DayPicker';
+import { DayPicker } from '../ui/DayPicker';
 import { BlobBackground } from '../ui/Blob';
 import { useRefreshControl } from '../ui/useRefresh';
 import { showToast } from '../ui/toast';
@@ -233,7 +233,10 @@ function SimpleStat({ label, value, color = C.ink }: { label: string; value: str
    ╰─────────────────────────────────────────────────────────╯ */
 
 export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: () => void }) {
-  const { nextWeek, setPlannedDays, lockNextWeek, groupName, potNext, updatePotConditions } = useAppState();
+  const {
+    nextWeek, setPlannedDays, groupName, potNext, updatePotConditions,
+    isLeader, userId, groupMembers,
+  } = useAppState();
   const [local, setLocal] = useState<DayStatus['state'][]>(() => nextWeek.map((d) => d.state));
   const [saving, setSaving] = useState(false);
   useEffect(() => { if (!saving) setLocal(nextWeek.map((d) => d.state)); }, [nextWeek, saving]);
@@ -246,12 +249,14 @@ export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: (
   const overCap = sel > required;
   const overBy = Math.max(0, sel - required);
   const editableDays: DayStatus[] = local.map((state, i) => ({ day: LABELS[i], state }));
+  const myPlannedDows = local
+    .map((s, i) => ((s === 'planned' || s === 'locked') ? i : -1))
+    .filter((i) => i !== -1);
 
   const toggle = (i: number) => {
     setLocal((arr) => arr.map((s, idx) => {
       if (idx !== i) return s;
       if (s === 'checked-in' || s === 'missed') return s;
-      // Treat locked as toggleable (will get soft-unlocked on the server).
       if (s === 'unselected' && atCap) return s;
       return (s === 'planned' || s === 'locked') ? 'unselected' : 'planned';
     }));
@@ -265,10 +270,12 @@ export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: (
         .map((s, i) => ((s === 'planned' || s === 'locked') ? i : -1))
         .filter((i): i is number => i !== -1);
       await setPlannedDays(days);
-      await lockNextWeek();
+      showToast(days.length === 0 ? 'Pledges cleared' : 'Pledges saved', 'success');
       onDone();
     } finally { setSaving(false); }
   };
+
+  const otherMembers = groupMembers.filter((m) => m.userId !== userId);
 
   return (
     <View style={styles.screen}>
@@ -284,12 +291,33 @@ export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: (
               <MaterialIcons name="close" size={20} color={C.ink} />
             </Pressable>
           </View>
-          <Sub style={{ marginTop: 10 }}>Pick up to {required} {required === 1 ? 'day' : 'days'} — the cap is set by this week's pot rules.</Sub>
+          <Sub style={{ marginTop: 10 }}>
+            Pledging is optional. Pick up to {required} {required === 1 ? 'day' : 'days'} — edit any time before Sunday.
+          </Sub>
         </FadeInItem>
 
-        <FadeInItem delay={80} style={{ marginTop: 24 }}>
-          <PotConditionsEditor potNext={potNext} onSave={updatePotConditions} />
-        </FadeInItem>
+        {isLeader && (
+          <FadeInItem delay={80} style={{ marginTop: 24 }}>
+            <PotConditionsEditor potNext={potNext} onSave={updatePotConditions} />
+          </FadeInItem>
+        )}
+        {!isLeader && potNext && (
+          <FadeInItem delay={80} style={{ marginTop: 24 }}>
+            <Card padding={SPACE.lg} tone="default">
+              <View style={styles.rowGap}>
+                <View style={[styles.iconChip, { backgroundColor: C.successSoft }]}>
+                  <MaterialIcons name="gavel" size={18} color={C.success} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <H3>Next week's pot rules</H3>
+                  <Sub style={{ marginTop: 2 }}>
+                    {potNext.required_pledges} {potNext.required_pledges === 1 ? 'pledge' : 'pledges'} · {potNext.stake_per_miss} ELO per miss · set by {potNext.setter_display_name || 'leader'}
+                  </Sub>
+                </View>
+              </View>
+            </Card>
+          </FadeInItem>
+        )}
 
         <FadeInItem delay={140} style={{ marginTop: 14 }}>
           <Card padding={SPACE.xl}>
@@ -300,36 +328,57 @@ export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: (
             <DayPicker days={editableDays} editable onToggle={toggle} />
             {overCap && (
               <Sub style={{ marginTop: 14, color: C.accent }}>
-                You've pledged {overBy} more than this week's cap. Remove {overBy} to lock in.
+                You've pledged {overBy} more than this week's cap. Remove {overBy} to save.
               </Sub>
             )}
             <View style={styles.divider} />
-            <Eyebrow>Your stake this week</Eyebrow>
-            <Num style={{ marginTop: 6 }}>{(required * stakePerMiss).toLocaleString()} ELO</Num>
-            <Sub style={{ marginTop: 4 }}>{stakePerMiss.toLocaleString()} ELO lost per missed session</Sub>
+            <Eyebrow>Your stake</Eyebrow>
+            <Num style={{ marginTop: 6 }}>{(sel * stakePerMiss).toLocaleString()} ELO</Num>
+            <Sub style={{ marginTop: 4 }}>
+              {sel === 0
+                ? 'Pledge any number of days to enter the pot.'
+                : `${stakePerMiss.toLocaleString()} ELO lost per missed session.`}
+            </Sub>
           </Card>
         </FadeInItem>
 
-        <FadeInItem delay={200} style={{ marginTop: 14 }}>
-          <Card padding={SPACE.lg}>
-            <View style={styles.rowGap}>
-              <View style={[styles.iconChip, { backgroundColor: C.accentSoft }]}>
-                <MaterialIcons name="schedule" size={18} color={C.accent} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <H3>Locks Sunday 11:59pm</H3>
-                <Sub style={{ marginTop: 2 }}>You can update your pledge until then.</Sub>
-              </View>
+        {otherMembers.length > 0 && (
+          <FadeInItem delay={180} style={{ marginTop: 22 }}>
+            <View style={[styles.rowBetween, { marginBottom: 12 }]}>
+              <Eyebrow>Group's next-week pledges</Eyebrow>
+              <Sub>{otherMembers.length} {otherMembers.length === 1 ? 'member' : 'members'}</Sub>
             </View>
-          </Card>
-        </FadeInItem>
+            <Sub style={{ marginBottom: 12 }}>
+              Days you've picked are highlighted across the group — that's everyone you're joining.
+            </Sub>
+            <View style={{ gap: 10 }}>
+              {otherMembers.map((m) => (
+                <Card key={m.userId} padding={SPACE.lg}>
+                  <View style={[styles.rowGap, { marginBottom: 12 }]}>
+                    <View style={styles.avatar}>
+                      <Text style={styles.avatarText}>{m.initials}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.cardTitle}>{m.name}</Text>
+                      <Sub style={{ marginTop: 2 }}>
+                        {m.nextWeek.filter((d) => d.state === 'planned' || d.state === 'locked').length} planned
+                      </Sub>
+                    </View>
+                    {m.isLeader && <Chip text="Leader" tone="accent" compact />}
+                  </View>
+                  <MemberPlanRow days={m.nextWeek} highlightDows={myPlannedDows} />
+                </Card>
+              ))}
+            </View>
+          </FadeInItem>
+        )}
       </ScrollView>
 
       <View style={styles.footer}>
         <Btn
-          label={saving ? 'Saving…' : overCap ? `Remove ${overBy} to lock in` : 'Lock in my week'}
+          label={saving ? 'Saving…' : overCap ? `Remove ${overBy} to save` : 'Save'}
           loading={saving}
-          disabled={sel === 0 || saving || overCap}
+          disabled={saving || overCap}
           onPress={commit}
         />
       </View>
@@ -337,41 +386,74 @@ export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: (
   );
 }
 
+/** Read-only day row that highlights specific weekday columns the viewer cares about. */
+function MemberPlanRow({ days, highlightDows }: { days: DayStatus[]; highlightDows: number[] }) {
+  const highlight = new Set(highlightDows);
+  const pledged = days.some((d) => d.state === 'planned' || d.state === 'locked' || d.state === 'checked-in' || d.state === 'missed');
+  return (
+    <View style={{ flexDirection: 'row', gap: 6, opacity: pledged ? 1 : 0.4 }}>
+      {days.map((d, i) => {
+        const matched = highlight.has(i);
+        const isPlanned = d.state === 'planned' || d.state === 'locked';
+        const isDone = d.state === 'checked-in';
+        const isMissed = d.state === 'missed';
+        const bg = matched && isPlanned ? C.primary
+          : isDone ? C.success
+          : isPlanned ? 'transparent'
+          : isMissed ? C.dangerSoft
+          : 'transparent';
+        const fg = matched && isPlanned ? C.primaryFg
+          : isPlanned ? C.success
+          : isDone ? C.primaryFg
+          : isMissed ? C.danger
+          : C.mutedFg;
+        const border = matched && isPlanned ? C.primary
+          : isPlanned ? C.success
+          : isDone ? C.success
+          : isMissed ? C.dangerSoft
+          : C.border;
+        return (
+          <View
+            key={i}
+            style={{
+              flex: 1, minWidth: 32, height: 48, borderRadius: RADIUS.md,
+              alignItems: 'center', justifyContent: 'center', gap: 2,
+              backgroundColor: bg,
+              borderWidth: isPlanned && !matched ? 2 : 1,
+              borderColor: border,
+            }}
+          >
+            <Text style={{ fontFamily: FONT.bold, fontSize: 11, color: fg, letterSpacing: 0.5 }}>
+              {['M', 'T', 'W', 'T', 'F', 'S', 'S'][i]}
+            </Text>
+            {isPlanned && <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: fg }} />}
+            {isDone && <MaterialIcons name="check" size={12} color={fg} />}
+            {isMissed && <MaterialIcons name="close" size={12} color={fg} />}
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+/**
+ * Leader-only editor for next-week pot rules. Visibility is controlled by the
+ * caller (PlanWeek only renders this when isLeader=true).
+ */
 function PotConditionsEditor({
   potNext, onSave,
 }: {
   potNext: import('../../lib/api/pot').PotDetail | null;
   onSave: (week: 'current' | 'next', required: number, stake: number) => Promise<void>;
 }) {
-  const { userId } = useAppState();
-  if (!potNext) return null;
-  const isSetter = !!userId && userId === potNext.setter_user_id && !potNext.is_finalized;
-
-  const [required, setRequired] = useState(String(potNext.required_pledges));
-  const [stake, setStake] = useState(String(potNext.stake_per_miss));
+  const initialRequired = potNext && potNext.required_pledges > 0 ? potNext.required_pledges : 3;
+  const initialStake = potNext?.stake_per_miss ?? 100;
+  const [required, setRequired] = useState(String(initialRequired));
+  const [stake, setStake] = useState(String(initialStake));
   useEffect(() => {
-    setRequired(String(potNext.required_pledges));
-    setStake(String(potNext.stake_per_miss));
-  }, [potNext.required_pledges, potNext.stake_per_miss]);
-
-  if (!isSetter) {
-    return (
-      <Card padding={SPACE.lg} tone={potNext.is_finalized ? 'default' : 'sage'}>
-        <View style={styles.rowGap}>
-          <View style={[styles.iconChip, { backgroundColor: C.successSoft }]}>
-            <MaterialIcons name="gavel" size={18} color={C.success} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <H3>This week's pot rules</H3>
-            <Sub style={{ marginTop: 2 }}>
-              Set by {potNext.setter_display_name ?? 'the group'} · {potNext.required_pledges} {potNext.required_pledges === 1 ? 'pledge' : 'pledges'} · {potNext.stake_per_miss} ELO per miss
-              {potNext.is_finalized ? ' · Frozen' : ''}
-            </Sub>
-          </View>
-        </View>
-      </Card>
-    );
-  }
+    setRequired(String(initialRequired));
+    setStake(String(initialStake));
+  }, [initialRequired, initialStake]);
 
   const save = () => {
     const r = Math.max(1, Math.min(7, parseInt(required, 10) || 0));
@@ -383,19 +465,21 @@ function PotConditionsEditor({
     <Card padding={SPACE.xl} tone="sage">
       <View style={[styles.rowBetween, { marginBottom: 16 }]}>
         <View>
-          <Eyebrow>You're the setter</Eyebrow>
-          <H3 style={{ marginTop: 4 }}>Set this week's pot rules</H3>
+          <Eyebrow>You're the leader</Eyebrow>
+          <H3 style={{ marginTop: 4 }}>Next week's pot rules</H3>
         </View>
-        <Chip text="Setter" tone="success" icon="auto-awesome" compact />
+        <Chip text="Leader" tone="success" icon="auto-awesome" compact />
       </View>
       <View style={{ flexDirection: 'row', gap: 12 }}>
         <View style={{ flex: 1 }}>
-          <Eyebrow>Required pledges</Eyebrow>
+          <Eyebrow>Sessions / week</Eyebrow>
           <TextInput value={required} onChangeText={(t) => setRequired(t.replace(/[^0-9]/g, ''))} keyboardType="number-pad" style={styles.input} />
+          <Sub style={{ marginTop: 4, fontSize: 11 }}>1–7 days</Sub>
         </View>
         <View style={{ flex: 1 }}>
           <Eyebrow>Stake per miss</Eyebrow>
           <TextInput value={stake} onChangeText={(t) => setStake(t.replace(/[^0-9]/g, ''))} keyboardType="number-pad" style={styles.input} />
+          <Sub style={{ marginTop: 4, fontSize: 11 }}>ELO per missed day</Sub>
         </View>
       </View>
       <Btn label="Save rules" size="md" onPress={save} style={{ marginTop: 14 }} />
@@ -408,22 +492,9 @@ function PotConditionsEditor({
    ╰─────────────────────────────────────────────────────────╯ */
 
 export function GroupView({ onBrowse }: { onBrowse: () => void }) {
-  const { groupName, nextWeek, addNextWeekDay, groupMembers, refreshGroupsAtGym, potNext } = useAppState();
+  const { groupName, groupMembers, refreshGroupsAtGym } = useAppState();
   const refresh = useRefreshControl();
-  const [tab, setTab] = useState<'this' | 'next'>('this');
-  const [joined, setJoined] = useState<string[]>([]);
   useEffect(() => { refreshGroupsAtGym(); }, [refreshGroupsAtGym]);
-
-  const cap = potNext?.required_pledges ?? 7;
-  const myPledgedCount = nextWeek.filter((d) => d.state === 'planned' || d.state === 'locked').length;
-
-  const joinDay = (member: string, i: number) => {
-    const key = `${member}-${i}`;
-    if (joined.includes(key)) return;
-    if (myPledgedCount >= cap) { showToast(`Pot allows only ${cap} pledges this week`, 'info'); return; }
-    setJoined((j) => [...j, key]);
-    addNextWeekDay(i);
-  };
 
   return (
     <View style={styles.screen}>
@@ -435,7 +506,7 @@ export function GroupView({ onBrowse }: { onBrowse: () => void }) {
               <Eyebrow>Your group</Eyebrow>
               <H1 style={{ marginTop: 6 }}>{groupName}</H1>
               <Sub style={{ marginTop: 6 }}>
-                {groupMembers.length} {groupMembers.length === 1 ? 'member' : 'members'}
+                {groupMembers.length} {groupMembers.length === 1 ? 'member' : 'members'} · this week
               </Sub>
             </View>
             <Pressable onPress={onBrowse} style={styles.iconBtn}>
@@ -444,68 +515,39 @@ export function GroupView({ onBrowse }: { onBrowse: () => void }) {
           </View>
         </FadeInItem>
 
-        <FadeInItem delay={80} style={{ marginTop: 20 }}>
-          <View style={styles.tabBar}>
-            {(['this', 'next'] as const).map((t) => (
-              <Pressable key={t} onPress={() => setTab(t)} style={[styles.tab, tab === t && styles.tabOn]}>
-                <Text style={[styles.tabText, { color: tab === t ? C.primaryFg : C.mutedFg }]}>
-                  {t === 'this' ? 'This week' : 'Next week'}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        </FadeInItem>
-
-        {tab === 'next' && (
-          <FadeInItem delay={120} style={{ marginTop: 8 }}>
-            <Sub>Tap any planned day to join just that day. Mix and match.</Sub>
-          </FadeInItem>
-        )}
-
         {groupMembers.length === 0 ? (
           <FadeInItem delay={140} style={{ marginTop: 18 }}>
             <Card padding={SPACE.xl}><Sub style={{ textAlign: 'center' }}>No members yet.</Sub></Card>
           </FadeInItem>
         ) : (
-          <View style={{ gap: 12, marginTop: 16 }}>
-            {groupMembers.map((m, i) => (
-              <FadeInItem key={m.userId} delay={140 + i * 60}>
-                <Card padding={SPACE.lg}>
-                  <View style={[styles.rowBetween, { marginBottom: 14 }]}>
-                    <View style={styles.rowGap}>
-                      <View style={styles.avatar}>
-                        <Text style={styles.avatarText}>{m.initials}</Text>
+          <View style={{ gap: 12, marginTop: 22 }}>
+            {groupMembers.map((m, i) => {
+              const pledged = m.thisWeek.filter((d) => d.state !== 'unselected').length;
+              const done = m.thisWeek.filter((d) => d.state === 'checked-in').length;
+              const notPledging = pledged === 0;
+              return (
+                <FadeInItem key={m.userId} delay={140 + i * 60}>
+                  <Card padding={SPACE.lg} style={notPledging ? { opacity: 0.55 } : undefined}>
+                    <View style={[styles.rowBetween, { marginBottom: 14 }]}>
+                      <View style={styles.rowGap}>
+                        <View style={styles.avatar}>
+                          <Text style={styles.avatarText}>{m.initials}</Text>
+                        </View>
+                        <View>
+                          <Text style={styles.cardTitle}>{m.name}</Text>
+                          <Sub style={{ marginTop: 2 }}>
+                            {notPledging ? 'Sitting out this week' : `${done} of ${pledged} done`}
+                          </Sub>
+                        </View>
                       </View>
-                      <View>
-                        <Text style={styles.cardTitle}>{m.name}</Text>
-                        <Sub style={{ marginTop: 2 }}>
-                          {tab === 'this'
-                            ? `${m.thisWeek.filter((d) => d.state === 'checked-in').length} of ${m.thisWeek.filter((d) => d.state !== 'unselected').length} done`
-                            : `${m.nextWeek.filter((d) => d.state === 'planned' || d.state === 'locked').length} sessions planned`}
-                        </Sub>
-                      </View>
+                      {m.isLeader && <Chip text="Leader" tone="accent" compact />}
                     </View>
-                    {m.isLeader && <Chip text="Leader" tone="accent" compact />}
-                  </View>
-                  {tab === 'this'
-                    ? <DayPicker days={m.thisWeek} />
-                    : <JoinableDayRow days={m.nextWeek} joinedKeys={joined} memberName={m.userId} onJoin={(i) => joinDay(m.userId, i)} />}
-                </Card>
-              </FadeInItem>
-            ))}
+                    <DayPicker days={m.thisWeek} />
+                  </Card>
+                </FadeInItem>
+              );
+            })}
           </View>
-        )}
-
-        {tab === 'next' && (
-          <FadeInItem delay={200} style={{ marginTop: 16 }}>
-            <Card padding={SPACE.lg} tone="peach">
-              <Eyebrow style={{ color: C.accent }}>YOUR PLEDGE SO FAR</Eyebrow>
-              <Sub style={{ marginTop: 6, marginBottom: 12, color: C.inkSoft }}>
-                {nextWeek.filter((d) => d.state === 'planned' || d.state === 'locked').length} sessions planned
-              </Sub>
-              <DayPicker days={nextWeek} />
-            </Card>
-          </FadeInItem>
         )}
       </ScrollView>
     </View>
@@ -547,7 +589,8 @@ export function GymBrowser({ onBack, onJoined }: { onBack: () => void; onJoined:
   const refresh = useRefreshControl();
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
-  const [stake, setStake] = useState('500');
+  const [freq, setFreq] = useState('3');           // required_pledges per week, 1..7
+  const [stakePerMiss, setStakePerMiss] = useState('100');
   const [jt, setJt] = useState<'open' | 'request'>('open');
   const [inbox, setInbox] = useState(false);
   const inGroup = groupId !== null;
@@ -560,7 +603,15 @@ export function GymBrowser({ onBack, onJoined }: { onBack: () => void; onJoined:
   };
   const create = async () => {
     if (!name.trim()) return;
-    await addGroup({ name: name.trim(), weekly_stake_elo: parseInt(stake, 10) || 500, join_type: jt });
+    const requiredPledges = Math.max(1, Math.min(7, parseInt(freq, 10) || 3));
+    const stakeMiss = Math.max(0, parseInt(stakePerMiss, 10) || 100);
+    await addGroup({
+      name: name.trim(),
+      weekly_stake_elo: requiredPledges * stakeMiss,
+      join_type: jt,
+      required_pledges: requiredPledges,
+      stake_per_miss: stakeMiss,
+    });
     setCreating(false); setName('');
     onJoined();
   };
@@ -644,8 +695,28 @@ export function GymBrowser({ onBack, onJoined }: { onBack: () => void; onJoined:
               <Eyebrow style={{ marginTop: 16 }}>Group name</Eyebrow>
               <TextInput value={name} onChangeText={setName} placeholder="6am Club" placeholderTextColor={C.mutedFg} style={styles.input} />
 
-              <Eyebrow style={{ marginTop: 14 }}>Weekly stake hint (ELO)</Eyebrow>
-              <TextInput value={stake} onChangeText={(t) => setStake(t.replace(/[^0-9]/g, ''))} keyboardType="number-pad" style={styles.input} />
+              <View style={{ flexDirection: 'row', gap: 12, marginTop: 14 }}>
+                <View style={{ flex: 1 }}>
+                  <Eyebrow>Sessions / week</Eyebrow>
+                  <TextInput
+                    value={freq}
+                    onChangeText={(t) => setFreq(t.replace(/[^0-9]/g, ''))}
+                    keyboardType="number-pad"
+                    style={styles.input}
+                  />
+                  <Sub style={{ marginTop: 4, fontSize: 11 }}>1–7 days</Sub>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Eyebrow>Stake per miss</Eyebrow>
+                  <TextInput
+                    value={stakePerMiss}
+                    onChangeText={(t) => setStakePerMiss(t.replace(/[^0-9]/g, ''))}
+                    keyboardType="number-pad"
+                    style={styles.input}
+                  />
+                  <Sub style={{ marginTop: 4, fontSize: 11 }}>ELO per missed day</Sub>
+                </View>
+              </View>
 
               <Eyebrow style={{ marginTop: 14, marginBottom: 8 }}>Who can join?</Eyebrow>
               <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -785,7 +856,7 @@ export function PotTracker({ onBack }: { onBack: () => void }) {
             </View>
             {potCurrent.setter_display_name && (
               <Sub style={{ marginTop: 18 }}>
-                Set by {potCurrent.setter_display_name}
+                Set by {potCurrent.setter_display_name} (leader)
               </Sub>
             )}
           </Card>
@@ -813,10 +884,10 @@ export function PotTracker({ onBack }: { onBack: () => void }) {
                       <View>
                         <View style={styles.rowGap}>
                           <Text style={styles.cardTitle}>{m.display_name}</Text>
-                          {m.is_setter && <Chip text="Setter" tone="cream" compact />}
+                          {m.role === 'leader' && <Chip text="Leader" tone="accent" compact />}
                         </View>
                         <Sub style={{ marginTop: 2 }}>
-                          {m.completed_count} of {potCurrent.required_pledges} done
+                          {m.completed_count} of {m.pledged_count} done
                           {m.missed_count > 0 ? ` · ${m.missed_count} missed` : ''}
                         </Sub>
                       </View>

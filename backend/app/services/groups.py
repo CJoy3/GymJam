@@ -121,6 +121,8 @@ def create_group(
     name: str,
     weekly_stake_elo: int,
     join_type: JoinType,
+    required_pledges: int = 3,
+    stake_per_miss: int = 100,
 ) -> dict:
     if current_membership(creator_id):
         raise HTTPException(status_code=409, detail="Leave your current group first")
@@ -145,6 +147,18 @@ def create_group(
         "role": "leader",
     }).execute()
     _link_plans_to_group(creator_id, group["id"])
+
+    # Seed pot conditions for current + next week with the creator's chosen
+    # defaults. Setter is the leader (== creator).
+    from app.services import pot as pot_svc
+    from app.core.time_utils import current_week_start, next_week_start
+    for ws in (current_week_start(), next_week_start()):
+        pot_svc.seed_conditions(
+            group["id"], ws,
+            setter_user_id=creator_id,
+            required_pledges=required_pledges,
+            stake_per_miss=stake_per_miss,
+        )
     return group
 
 
