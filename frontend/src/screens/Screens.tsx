@@ -4,6 +4,8 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { C, RADIUS, SPACE, tierForElo } from '../theme/tokens';
 import { Card, Btn, Chip, H1, Sub, Ring } from '../ui/components';
 import { DayPicker, JoinableDayRow } from '../ui/DayPicker';
+import { useRefreshControl } from '../ui/useRefresh';
+import { showToast } from '../ui/toast';
 import { useAppState, DayStatus, Group } from '../state/AppState';
 
 const wrap = { padding: SPACE.lg, paddingTop: 56, paddingBottom: 40 } as const;
@@ -50,18 +52,28 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
 
 /* ---------------- Home ---------------- */
 export function Home({ onCheckIn, onPlan, onPot }: { onCheckIn: () => void; onPlan: () => void; onPot: () => void }) {
-  const { thisWeek, elo, streak, pot, checkInToday, todayIndex } = useAppState();
+  const { thisWeek, elo, streak, pot, checkInToday, todayIndex, displayName } = useAppState();
+  const refresh = useRefreshControl();
   const done = thisWeek.filter((d) => d.state === 'checked-in').length;
   const pledged = thisWeek.filter((d) => d.state === 'checked-in' || d.state === 'planned').length;
   const pct = pledged ? (done / pledged) * 100 : 0;
   const canCheck = todayIndex !== -1;
+  const firstName = displayName.split(' ')[0];
   return (
-    <ScrollView style={{ backgroundColor: C.bg }} contentContainerStyle={wrap}>
-      <View style={[styles.rowBetween, { marginBottom: 8 }]}>
-        <H1>This Week</H1>
-        <View style={styles.streakPill}><MaterialIcons name="local-fire-department" size={16} color={C.accent} /><Text style={styles.streakTxt}>{streak}</Text></View>
+    <ScrollView refreshControl={refresh} style={{ backgroundColor: C.bg }} contentContainerStyle={wrap}>
+      <View style={[styles.rowBetween, { marginBottom: 6 }]}>
+        <View style={{ flex: 1 }}>
+          <Sub style={{ marginBottom: 4 }}>Hi {firstName}</Sub>
+          <H1>This week</H1>
+        </View>
+        {streak > 0 && (
+          <View style={styles.streakPill}>
+            <MaterialIcons name="local-fire-department" size={16} color={C.accent} />
+            <Text style={styles.streakTxt}>{streak} wk</Text>
+          </View>
+        )}
       </View>
-      <Sub style={{ marginBottom: 16 }}>Monday, June 1 – Sunday, June 7</Sub>
+      <Sub style={{ marginBottom: 18 }}>Stay consistent. Your group is counting on you.</Sub>
 
       <Card style={{ marginBottom: 16 }}>
         <Text style={styles.label}>Your pledge</Text>
@@ -150,24 +162,27 @@ function Stat({ n, l, color = C.ink }: { n: string; l: string; color?: string })
 
 /* ---------------- Plan next week ---------------- */
 export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: () => void }) {
-  const { nextWeek, setPlannedDays, lockNextWeek, groupName } = useAppState();
+  const { nextWeek, setPlannedDays, lockNextWeek, groupName, potNext, updatePotConditions } = useAppState();
 
   // Local selection seeded from the persisted plan. Mutating this is free
   // (no network); we only commit when the user taps "Lock in my week".
   const [local, setLocal] = useState<DayStatus['state'][]>(() => nextWeek.map((d) => d.state));
   const [saving, setSaving] = useState(false);
-  // Re-seed if the server-side plan changes underneath us (e.g. another device).
   useEffect(() => {
     if (!saving) setLocal(nextWeek.map((d) => d.state));
   }, [nextWeek, saving]);
 
+  const required = potNext?.required_pledges ?? 7;
+  const stakePerMiss = potNext?.stake_per_miss ?? 0;
   const sel = local.filter((s) => s === 'planned').length;
+  const atCap = sel >= required;
   const editableDays: DayStatus[] = local.map((state, i) => ({ day: LABELS[i], state }));
 
   const toggleLocal = (i: number) => {
     setLocal((arr) => arr.map((s, idx) => {
       if (idx !== i) return s;
       if (s === 'locked' || s === 'checked-in' || s === 'missed') return s;
+      if (s === 'unselected' && atCap) return s; // hard cap
       return s === 'planned' ? 'unselected' : 'planned';
     }));
   };
@@ -190,34 +205,33 @@ export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: (
     <View style={{ flex: 1, backgroundColor: C.bg }}>
       <ScrollView contentContainerStyle={[wrap, { paddingBottom: 140 }]}>
         <View style={[styles.rowBetween, { marginBottom: 8 }]}>
-          <H1>Plan Next Week</H1>
+          <H1>Plan next week</H1>
           <Pressable onPress={onCancel}><MaterialIcons name="close" size={22} color={C.mutedFg} /></Pressable>
         </View>
-        <Sub style={{ marginBottom: 16 }}>Pick the days you'll hit the gym. Your group is counting on you!</Sub>
-        <Card style={{ marginBottom: 16, backgroundColor: 'rgba(255,107,74,0.05)', borderColor: 'rgba(255,107,74,0.2)' }}>
-          <View style={{ flexDirection: 'row', gap: 12 }}>
-            <MaterialIcons name="schedule" size={20} color={C.accent} />
-            <View style={{ flex: 1 }}><Text style={styles.cardTitle}>Locks Sunday 11:59pm</Text><Sub>Change your pledge until then. After that, it's locked in.</Sub></View>
-          </View>
-        </Card>
+        <Sub style={{ marginBottom: 16 }}>Pick up to {required} {required === 1 ? 'day' : 'days'} — the cap is this week's pot rule.</Sub>
+
+        <PotConditionsEditor potNext={potNext} onSave={updatePotConditions} />
+
         <Card style={{ marginBottom: 16 }}>
           <View style={[styles.rowBetween, { marginBottom: 10 }]}>
             <Text style={styles.label}>Choose your days</Text>
-            <Text style={{ color: C.primary, fontWeight: '600' }}>{sel} {sel === 1 ? 'day' : 'days'}</Text>
+            <Text style={{ color: C.primary, fontWeight: '600' }}>{sel} / {required}</Text>
           </View>
           <DayPicker days={editableDays} editable onToggle={toggleLocal} />
-          {sel > 0 && (
-            <View style={{ borderTopWidth: 1, borderTopColor: C.border, marginTop: 16, paddingTop: 16 }}>
-              <Sub>Your stake this week</Sub>
-              <Text style={styles.big}>{sel * 100} ELO</Text>
-            </View>
-          )}
+          <View style={{ borderTopWidth: 1, borderTopColor: C.border, marginTop: 16, paddingTop: 16 }}>
+            <Sub>Your stake</Sub>
+            <Text style={styles.big}>{(required * stakePerMiss).toLocaleString()} ELO</Text>
+            <Sub>{stakePerMiss.toLocaleString()} ELO lost per missed session</Sub>
+          </View>
         </Card>
+
         <Card>
           <View style={{ flexDirection: 'row', gap: 12 }}>
             <MaterialIcons name="event" size={20} color={C.primary} />
-            <View style={{ flex: 1 }}><Text style={styles.cardTitle}>Group challenge</Text>
-              <Sub>{groupName || 'Your group'}'s goal is {sel || 3} sessions this week. Everyone who hits their pledge splits the pot!</Sub></View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cardTitle}>Group challenge</Text>
+              <Sub>{groupName || 'Your group'} pledges {required} sessions each. The pot is split among everyone who hits the target.</Sub>
+            </View>
           </View>
         </Card>
       </ScrollView>
@@ -228,21 +242,92 @@ export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: (
   );
 }
 
+/* ---- Pot conditions editor (visible only to the next-week setter) ---- */
+function PotConditionsEditor({
+  potNext,
+  onSave,
+}: {
+  potNext: import('../../lib/api/pot').PotDetail | null;
+  onSave: (week: 'current' | 'next', required: number, stake: number) => Promise<void>;
+}) {
+  const { userId } = useAppState();
+  if (!potNext) return null;
+  const isSetter = userId != null && userId === potNext.setter_user_id && !potNext.is_finalized;
+
+  const [required, setRequired] = useState(String(potNext.required_pledges));
+  const [stake, setStake] = useState(String(potNext.stake_per_miss));
+  useEffect(() => {
+    setRequired(String(potNext.required_pledges));
+    setStake(String(potNext.stake_per_miss));
+  }, [potNext.required_pledges, potNext.stake_per_miss]);
+
+  if (!isSetter) {
+    return (
+      <Card style={{ marginBottom: 16, backgroundColor: 'rgba(138,177,125,0.07)', borderColor: 'rgba(138,177,125,0.22)' }}>
+        <View style={{ flexDirection: 'row', gap: 12 }}>
+          <MaterialIcons name="gavel" size={20} color={C.primary} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.cardTitle}>This week's pot rules</Text>
+            <Sub>
+              Set by {potNext.setter_display_name ?? 'the group'} — {potNext.required_pledges} {potNext.required_pledges === 1 ? 'pledge' : 'pledges'}, {potNext.stake_per_miss} ELO per miss.
+              {potNext.is_finalized ? ' Frozen.' : ''}
+            </Sub>
+          </View>
+        </View>
+      </Card>
+    );
+  }
+
+  const save = () => {
+    const r = Math.max(1, Math.min(7, parseInt(required, 10) || 0));
+    const s = Math.max(0, parseInt(stake, 10) || 0);
+    onSave('next', r, s);
+  };
+
+  return (
+    <Card style={{ marginBottom: 16, backgroundColor: 'rgba(138,177,125,0.07)', borderColor: 'rgba(138,177,125,0.22)' }}>
+      <View style={[styles.rowBetween, { marginBottom: 12 }]}>
+        <Text style={styles.cardTitle}>Set this week's pot rules</Text>
+        <Chip text="Setter" tone="primary" />
+      </View>
+      <View style={{ flexDirection: 'row', gap: 12 }}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.label}>Required pledges</Text>
+          <TextInput value={required} onChangeText={(t) => setRequired(t.replace(/[^0-9]/g, ''))} keyboardType="number-pad" style={styles.input} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.label}>Stake per miss</Text>
+          <TextInput value={stake} onChangeText={(t) => setStake(t.replace(/[^0-9]/g, ''))} keyboardType="number-pad" style={styles.input} />
+        </View>
+      </View>
+      <Btn label="Save rules" onPress={save} style={{ marginTop: 12 }} />
+    </Card>
+  );
+}
+
+
 /* ---------------- Group (with per-day join) ---------------- */
 export function GroupView({ onBrowse }: { onBrowse: () => void }) {
-  const { groupName, nextWeek, addNextWeekDay, groupMembers, refreshGroupsAtGym } = useAppState();
+  const { groupName, nextWeek, addNextWeekDay, groupMembers, refreshGroupsAtGym, potNext } = useAppState();
+  const refresh = useRefreshControl();
   const [tab, setTab] = useState<'this' | 'next'>('this');
   const [joined, setJoined] = useState<string[]>([]);
-  // Refetch each time this screen comes into view so other members' day-by-day
-  // pledges show up without an app restart.
   useEffect(() => { refreshGroupsAtGym(); }, [refreshGroupsAtGym]);
+
+  const cap = potNext?.required_pledges ?? 7;
+  const myPledgedCount = nextWeek.filter((d) => d.state === 'planned' || d.state === 'locked').length;
+
   const joinDay = (member: string, i: number) => {
     const key = `${member}-${i}`;
     if (joined.includes(key)) return;
+    if (myPledgedCount >= cap) {
+      showToast(`Pot allows only ${cap} pledges this week`, 'info');
+      return;
+    }
     setJoined((j) => [...j, key]); addNextWeekDay(i);
   };
   return (
-    <ScrollView style={{ backgroundColor: C.bg }} contentContainerStyle={wrap}>
+    <ScrollView refreshControl={refresh} style={{ backgroundColor: C.bg }} contentContainerStyle={wrap}>
       <View style={[styles.rowBetween, { marginBottom: 16 }]}>
         <View><H1>{groupName}</H1>
           <View style={[styles.rowGap, { marginTop: 4 }]}><MaterialIcons name="group" size={16} color={C.mutedFg} /><Sub>{groupMembers.length} {groupMembers.length === 1 ? 'member' : 'members'}</Sub></View>
@@ -287,7 +372,7 @@ export function GroupView({ onBrowse }: { onBrowse: () => void }) {
       )}
 
       {tab === 'next' && (
-        <Card style={{ marginTop: 16, backgroundColor: 'rgba(255,107,74,0.05)', borderColor: 'rgba(255,107,74,0.2)' }}>
+        <Card style={{ marginTop: 16, backgroundColor: 'rgba(208,135,112,0.07)', borderColor: 'rgba(208,135,112,0.22)' }}>
           <Text style={styles.cardTitle}>Your next-week pledge so far</Text>
           <Sub style={{ marginBottom: 12 }}>{nextWeek.filter((d) => d.state === 'planned' || d.state === 'locked').length} sessions planned</Sub>
           <DayPicker days={nextWeek} />
@@ -312,6 +397,7 @@ export function NoGroup({ onBrowse }: { onBrowse: () => void }) {
 /* ---------------- Gym browser (open/private + leader inbox + create) ---------------- */
 export function GymBrowser({ onBack, onJoined }: { onBack: () => void; onJoined: () => void }) {
   const { gymName, groupId, groups, addGroup, joinGroup, leaveGroup, joinRequests, approveRequest, rejectRequest, refreshGroupsAtGym } = useAppState();
+  const refresh = useRefreshControl();
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState(''); const [stake, setStake] = useState('500');
   const [jt, setJt] = useState<'open' | 'request'>('open');
@@ -359,7 +445,7 @@ export function GymBrowser({ onBack, onJoined }: { onBack: () => void; onJoined:
   void aloneAndLeader; // available for future header hint
 
   return (
-    <ScrollView style={{ backgroundColor: C.bg }} contentContainerStyle={wrap}>
+    <ScrollView refreshControl={refresh} style={{ backgroundColor: C.bg }} contentContainerStyle={wrap}>
       <View style={[styles.rowBetween, { marginBottom: 16 }]}>
         <Pressable onPress={onBack} style={styles.rowGap}><MaterialIcons name="arrow-back" size={18} color={C.mutedFg} /><Sub>Back</Sub></Pressable>
         {joinRequests.length > 0 && (
@@ -393,7 +479,7 @@ export function GymBrowser({ onBack, onJoined }: { onBack: () => void; onJoined:
         </Card>
       )}
 
-      <Card style={{ marginBottom: 16, backgroundColor: 'rgba(168,225,12,0.05)', borderColor: 'rgba(168,225,12,0.2)' }}>
+      <Card style={{ marginBottom: 16, backgroundColor: 'rgba(138,177,125,0.07)', borderColor: 'rgba(138,177,125,0.22)' }}>
         <View style={{ flexDirection: 'row', gap: 12 }}>
           <MaterialIcons name="group" size={20} color={C.primary} />
           <View style={{ flex: 1 }}><Text style={styles.cardTitle}>One group per gym</Text><Sub>Leave your current group to join a different one.</Sub></View>
@@ -414,7 +500,7 @@ export function GymBrowser({ onBack, onJoined }: { onBack: () => void; onJoined:
           <Text style={[styles.label, { marginTop: 10, marginBottom: 6 }]}>Who can join?</Text>
           <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
             {(['open', 'request'] as const).map((opt) => (
-              <Pressable key={opt} onPress={() => setJt(opt)} style={[styles.jtOpt, jt === opt && { borderColor: C.primary, backgroundColor: 'rgba(168,225,12,0.05)' }]}>
+              <Pressable key={opt} onPress={() => setJt(opt)} style={[styles.jtOpt, jt === opt && { borderColor: C.primary, backgroundColor: 'rgba(138,177,125,0.07)' }]}>
                 <View style={styles.rowGap}><MaterialIcons name={opt === 'open' ? 'person-add' : 'lock'} size={16} color={C.ink} /><Text style={{ fontWeight: '600' }}>{opt === 'open' ? 'Open' : 'Private'}</Text></View>
                 <Sub>{opt === 'open' ? 'Anyone joins instantly' : 'You approve each request'}</Sub>
               </Pressable>
@@ -467,41 +553,89 @@ export function GymBrowser({ onBack, onJoined }: { onBack: () => void; onJoined:
 
 /* ---------------- Pot tracker ---------------- */
 export function PotTracker({ onBack }: { onBack: () => void }) {
-  const { pot, groupMembers } = useAppState();
-  const breakdown = groupMembers.map((m) => {
-    const done = m.thisWeek.filter((d) => d.state === 'checked-in').length;
-    const pledged = m.thisWeek.filter((d) =>
-      d.state === 'planned' || d.state === 'locked' || d.state === 'checked-in' || d.state === 'missed'
-    ).length;
-    const risk = Math.max(0, (pledged - done) * 100);
-    return { name: m.name, done, pledged, risk };
-  });
+  const { potCurrent } = useAppState();
+  const refresh = useRefreshControl();
+
+  if (!potCurrent) {
+    return (
+      <ScrollView refreshControl={refresh} style={{ backgroundColor: C.bg }} contentContainerStyle={wrap}>
+        <Pressable onPress={onBack} style={[styles.rowGap, { marginBottom: 16 }]}><MaterialIcons name="arrow-back" size={18} color={C.mutedFg} /><Sub>Back</Sub></Pressable>
+        <H1 style={{ marginBottom: 16 }}>Weekly Pot</H1>
+        <Card><Sub style={{ textAlign: 'center' }}>Join a group to see the pot.</Sub></Card>
+      </ScrollView>
+    );
+  }
+
+  const totalAtStake = potCurrent.members.reduce((s, m) => s + m.elo_at_risk, 0);
+  const onTrack = potCurrent.members.filter((m) => m.is_on_track).length;
+
   return (
-    <ScrollView style={{ backgroundColor: C.bg }} contentContainerStyle={wrap}>
+    <ScrollView refreshControl={refresh} style={{ backgroundColor: C.bg }} contentContainerStyle={wrap}>
       <Pressable onPress={onBack} style={[styles.rowGap, { marginBottom: 16 }]}><MaterialIcons name="arrow-back" size={18} color={C.mutedFg} /><Sub>Back</Sub></Pressable>
       <H1 style={{ marginBottom: 4 }}>Weekly Pot</H1>
       <Sub style={{ marginBottom: 16 }}>Track the pot as it grows through the week</Sub>
-      <Card style={{ marginBottom: 16 }}><LivePot amount={pot} /></Card>
-      <Card style={{ marginBottom: 16, backgroundColor: 'rgba(168,225,12,0.05)', borderColor: 'rgba(168,225,12,0.2)' }}>
-        <View style={{ flexDirection: 'row', gap: 12 }}>
-          <MaterialIcons name="info" size={20} color={C.primary} />
-          <View style={{ flex: 1 }}><Text style={styles.cardTitle}>How it works</Text><Sub>You only lose stake for sessions you miss. At week's end the pot is shared among everyone who hit their pledge.</Sub></View>
-        </View>
+
+      <Card style={{ marginBottom: 16 }}>
+        <Sub style={{ fontWeight: '600' }}>Current pot</Sub>
+        <Text style={{ fontSize: 42, fontWeight: '700', color: C.accent, marginTop: 4 }}>
+          {potCurrent.total_pot_elo.toLocaleString()} ELO
+        </Text>
+        <Sub style={{ marginTop: 4 }}>
+          {onTrack} of {potCurrent.members.length} {potCurrent.members.length === 1 ? 'member' : 'members'} on track · {totalAtStake.toLocaleString()} ELO at stake
+        </Sub>
       </Card>
-      <Text style={[styles.h2, { marginBottom: 12 }]}>Member Breakdown</Text>
-      {breakdown.length === 0 ? (
+
+      <Card style={{ marginBottom: 16 }}>
+        <View style={styles.rowBetween}>
+          <Text style={styles.cardTitle}>This week's conditions</Text>
+          {potCurrent.is_finalized && <Chip text="Frozen" tone="muted" />}
+        </View>
+        <View style={{ marginTop: 12, gap: 8 }}>
+          <View style={styles.rowBetween}>
+            <Sub>Required pledges</Sub>
+            <Text style={styles.big}>{potCurrent.required_pledges}</Text>
+          </View>
+          <View style={styles.rowBetween}>
+            <Sub>Stake per miss</Sub>
+            <Text style={styles.big}>{potCurrent.stake_per_miss} ELO</Text>
+          </View>
+          <View style={styles.rowBetween}>
+            <Sub>Total at risk per person</Sub>
+            <Text style={styles.big}>{(potCurrent.required_pledges * potCurrent.stake_per_miss).toLocaleString()} ELO</Text>
+          </View>
+        </View>
+        {potCurrent.setter_display_name && (
+          <Sub style={{ marginTop: 12 }}>
+            Set by {potCurrent.setter_display_name}{potCurrent.members.find((m) => m.is_setter)?.role === 'leader' ? ' · Leader' : ''}
+          </Sub>
+        )}
+      </Card>
+
+      <Text style={[styles.h2, { marginBottom: 12 }]}>Member breakdown</Text>
+      {potCurrent.members.length === 0 ? (
         <Card><Sub style={{ textAlign: 'center' }}>No members in the group yet.</Sub></Card>
       ) : (
         <View style={{ gap: 12 }}>
-          {breakdown.map((m) => (
-            <Card key={m.name}>
-              <View style={styles.rowBetween}>
-                <Text style={styles.cardTitle}>{m.name}</Text>
-                <Chip text={m.pledged === 0 ? 'No pledge' : m.risk === 0 ? 'On track' : `${m.risk} at risk`} tone={m.pledged === 0 ? 'muted' : m.risk === 0 ? 'primary' : 'accent'} />
-              </View>
-              <Sub style={{ marginTop: 4 }}>{m.done} of {m.pledged} sessions done</Sub>
-            </Card>
-          ))}
+          {potCurrent.members.map((m) => {
+            const chipText = m.is_on_track
+              ? 'On track'
+              : `${m.elo_lost_so_far.toLocaleString()} at risk`;
+            const tone: 'primary' | 'accent' | 'muted' = m.is_on_track ? 'primary' : 'accent';
+            return (
+              <Card key={m.user_id}>
+                <View style={styles.rowBetween}>
+                  <View style={[styles.rowGap, { flexShrink: 1 }]}>
+                    <Text style={styles.cardTitle}>{m.display_name}</Text>
+                    {m.is_setter && <Chip text="Setter" tone="primary" />}
+                  </View>
+                  <Chip text={chipText} tone={tone} />
+                </View>
+                <Sub style={{ marginTop: 4 }}>
+                  {m.completed_count} of {potCurrent.required_pledges} sessions done · {m.missed_count > 0 ? `${m.missed_count} missed` : 'no misses'}
+                </Sub>
+              </Card>
+            );
+          })}
         </View>
       )}
     </ScrollView>
@@ -521,6 +655,7 @@ const BADGE_CATALOG: { key: BadgeKey; name: string; icon: string }[] = [
 
 export function Progress({ onGymSpace }: { onGymSpace: () => void }) {
   const { elo, badges: badgeFlags } = useAppState();
+  const refresh = useRefreshControl();
   const tiers = [
     { name: 'Beginner', min: 0, max: 500 }, { name: 'Rookie', min: 500, max: 1000 },
     { name: 'Regular', min: 1000, max: 2000 }, { name: 'Mogger', min: 2000, max: Infinity },
@@ -530,7 +665,7 @@ export function Progress({ onGymSpace }: { onGymSpace: () => void }) {
   const pct = next ? ((elo - cur.min) / (next.min - cur.min)) * 100 : 100;
   const badges = BADGE_CATALOG.map((b) => ({ ...b, on: badgeFlags[b.key] }));
   return (
-    <ScrollView style={{ backgroundColor: C.bg }} contentContainerStyle={wrap}>
+    <ScrollView refreshControl={refresh} style={{ backgroundColor: C.bg }} contentContainerStyle={wrap}>
       <H1 style={{ marginBottom: 4 }}>Progress</H1>
       <Sub style={{ marginBottom: 16 }}>Track your growth and unlock rewards</Sub>
       <Card style={{ marginBottom: 16 }}>
@@ -551,7 +686,7 @@ export function Progress({ onGymSpace }: { onGymSpace: () => void }) {
           const current = i === ti;
           const icon = ['fitness-center', 'directions-run', 'sports-martial-arts', 'military-tech'][i];
           return (
-            <View key={t.name} style={[styles.ladderRow, i < tiers.length - 1 && { borderBottomWidth: 1, borderBottomColor: C.border }, current && { backgroundColor: 'rgba(168,225,12,0.08)' }]}>
+            <View key={t.name} style={[styles.ladderRow, i < tiers.length - 1 && { borderBottomWidth: 1, borderBottomColor: C.border }, current && { backgroundColor: 'rgba(138,177,125,0.10)' }]}>
               <View style={[styles.ladderIcon, { backgroundColor: reached ? C.primary : C.muted }]}>
                 <MaterialIcons name={icon as any} size={20} color={reached ? C.primaryFg : C.mutedFg} />
               </View>
@@ -577,7 +712,7 @@ export function Progress({ onGymSpace }: { onGymSpace: () => void }) {
           </Card>
         ))}
       </View>
-      <Card onPress={onGymSpace} style={{ backgroundColor: 'rgba(168,225,12,0.08)', borderColor: 'rgba(168,225,12,0.2)' }}>
+      <Card onPress={onGymSpace} style={{ backgroundColor: 'rgba(138,177,125,0.10)', borderColor: 'rgba(138,177,125,0.22)' }}>
         <View style={{ flexDirection: 'row', gap: 12 }}>
           <MaterialIcons name="grid-view" size={20} color={C.primary} />
           <View style={{ flex: 1 }}><Text style={styles.cardTitle}>Your Gym Space</Text><Sub>Tap to decorate your space with rewards you've unlocked</Sub></View>
@@ -673,10 +808,10 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 15, fontWeight: '600', color: C.ink },
   label: { fontSize: 13, fontWeight: '600', color: C.mutedFg },
   big: { fontSize: 22, fontWeight: '700', color: C.ink },
-  iconCircle: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(168,225,12,0.15)', alignItems: 'center', justifyContent: 'center' },
-  bigCircle: { width: 96, height: 96, borderRadius: 48, backgroundColor: 'rgba(168,225,12,0.15)', alignItems: 'center', justifyContent: 'center' },
+  iconCircle: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(138,177,125,0.16)', alignItems: 'center', justifyContent: 'center' },
+  bigCircle: { width: 96, height: 96, borderRadius: 48, backgroundColor: 'rgba(138,177,125,0.16)', alignItems: 'center', justifyContent: 'center' },
   footer: { padding: SPACE.lg, paddingBottom: 32, backgroundColor: C.bg, borderTopWidth: 1, borderTopColor: C.border },
-  streakPill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: 'rgba(255,107,74,0.1)', borderRadius: RADIUS.pill },
+  streakPill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: 'rgba(208,135,112,0.13)', borderRadius: RADIUS.pill },
   streakTxt: { fontWeight: '700', color: C.accent },
   tabBar: { flexDirection: 'row', gap: 8, backgroundColor: C.muted, borderRadius: RADIUS.md, padding: 4, marginBottom: 16 },
   tab: { flex: 1, paddingVertical: 8, borderRadius: RADIUS.sm, alignItems: 'center' },

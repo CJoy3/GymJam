@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-
 import { MaterialIcons } from '@expo/vector-icons';
 import { C, RADIUS, SPACE, tierForElo } from '../theme/tokens';
 import { Card, Btn, Chip, H1, Sub } from '../ui/components';
+import { useRefreshControl } from '../ui/useRefresh';
 import { useAppState } from '../state/AppState';
 
 const wrap = { padding: SPACE.lg, paddingTop: 56, paddingBottom: 40 } as const;
@@ -16,6 +17,7 @@ function initialsOf(name: string): string {
 
 export function ProfileView({ onBrowse }: { onBrowse: () => void }) {
   const { elo, streak, gymName, groupName, displayName, thisWeek, updateDisplayName } = useAppState();
+  const refresh = useRefreshControl();
   const sessionsDone = thisWeek.filter((d) => d.state === 'checked-in').length;
 
   const [editing, setEditing] = useState(false);
@@ -39,7 +41,7 @@ export function ProfileView({ onBrowse }: { onBrowse: () => void }) {
   };
 
   return (
-    <ScrollView style={{ backgroundColor: C.bg }} contentContainerStyle={wrap}>
+    <ScrollView refreshControl={refresh} style={{ backgroundColor: C.bg }} contentContainerStyle={wrap}>
       <H1 style={{ marginBottom: 16 }}>Profile</H1>
 
       <Card style={{ marginBottom: 16, alignItems: 'center' }}>

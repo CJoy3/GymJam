@@ -5,6 +5,7 @@ from fastapi import HTTPException
 from app.core.supabase_client import get_supabase
 from app.core.time_utils import current_day_of_week, current_week_start, next_week_start
 from app.services import groups as groups_svc
+from app.services import pot as pot_svc
 from app.services import streak as streak_svc
 from app.services import users as users_svc
 
@@ -119,6 +120,8 @@ def set_planned_days(user_id: str, dows: list[int]) -> dict:
     if plan_row["is_locked"]:
         raise HTTPException(status_code=409, detail="Next week is locked")
 
+    _enforce_cap_against_pot(plan_row.get("group_id"), next_week_start(), len(set(dows)))
+
     selected = set(dows)
     sb = get_supabase()
     if selected:
@@ -159,9 +162,35 @@ def toggle_next_week_day(user_id: str, dow: int) -> dict:
     if current not in ("planned", "unselected"):
         raise HTTPException(status_code=409, detail=f"Cannot toggle a {current} day")
 
+    if new_state == "planned":
+        # Count current 'planned' days for this plan (excluding the toggling day itself).
+        already_planned = (
+            sb.table("plan_days")
+            .select("day_of_week", count="exact")
+            .eq("plan_id", plan_row["id"])
+            .eq("state", "planned")
+            .execute()
+        )
+        count = (already_planned.count or 0)
+        _enforce_cap_against_pot(plan_row.get("group_id"), next_week_start(), count + 1)
+
     sb.table("plan_days").update({"state": new_state}).eq("plan_id", plan_row["id"]).eq("day_of_week", dow).execute()
     _recompute_stake(plan_row["id"])
     return _load_plan_with_days(_ensure_plan(user_id, next_week_start()))
+
+
+def _enforce_cap_against_pot(group_id: str | None, week_start: date, requested: int) -> None:
+    """If the user belongs to a group, the requested pledge count must not exceed
+    the week's `required_pledges`. Solo users are unconstrained."""
+    if not group_id:
+        return
+    cond = pot_svc.get_conditions(group_id, "next" if week_start == next_week_start() else "current")
+    cap = cond.get("required_pledges", 7)
+    if requested > cap:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Group pot allows up to {cap} pledges this week",
+        )
 
 
 def lock_next_week(user_id: str) -> dict:
@@ -173,6 +202,13 @@ def lock_next_week(user_id: str) -> dict:
     sb.table("plan_days").update({"state": "locked"}).eq("plan_id", plan_row["id"]).eq("state", "planned").execute()
     sb.table("weekly_plans").update({"is_locked": True, "locked_at": _utc_now_iso()}).eq("id", plan_row["id"]).execute()
     _recompute_stake(plan_row["id"])
+
+    # If the user locking is the next-week setter, freeze the conditions.
+    if plan_row.get("group_id"):
+        cond = pot_svc.get_conditions(plan_row["group_id"], "next")
+        if cond.get("setter_user_id") == user_id and not cond.get("is_finalized"):
+            pot_svc.finalize_conditions(plan_row["group_id"], next_week_start())
+
     return _load_plan_with_days(_ensure_plan(user_id, next_week_start()))
 
 

@@ -11,6 +11,18 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _link_plans_to_group(user_id: str, group_id: str | None) -> None:
+    """Re-point the user's existing this-/next-week plans to a new group_id.
+    Called on join (group_id set) and leave (None) so the pot view stays accurate."""
+    sb = get_supabase()
+    sb.table("weekly_plans").update({"group_id": group_id}).eq(
+        "user_id", user_id
+    ).in_("week_start", [
+        current_week_start().isoformat(),
+        next_week_start().isoformat(),
+    ]).execute()
+
+
 def _empty_week() -> list[dict]:
     return [
         {"day_of_week": dow, "state": "unselected", "checked_in_at": None}
@@ -132,6 +144,7 @@ def create_group(
         "user_id": creator_id,
         "role": "leader",
     }).execute()
+    _link_plans_to_group(creator_id, group["id"])
     return group
 
 
@@ -148,6 +161,7 @@ def join_or_request(group_id: str, user_id: str) -> dict:
             "user_id": user_id,
             "role": "member",
         }).execute()
+        _link_plans_to_group(user_id, group_id)
         return {"action": "joined", "group": group}
 
     existing = (
@@ -207,6 +221,7 @@ def leave_group(group_id: str, user_id: str) -> dict:
         ).eq("user_id", promoted_user_id).execute()
 
     sb.table("group_memberships").delete().eq("group_id", group_id).eq("user_id", user_id).execute()
+    _link_plans_to_group(user_id, None)
     return {"deleted": False, "promoted_user_id": promoted_user_id}
 
 
@@ -308,6 +323,7 @@ def approve_request(request_id: str, leader_id: str) -> dict:
         "user_id": req["user_id"],
         "role": "member",
     }).execute()
+    _link_plans_to_group(req["user_id"], req["group_id"])
     sb.table("join_requests").update({
         "status": "approved",
         "resolved_at": _utc_now_iso(),
