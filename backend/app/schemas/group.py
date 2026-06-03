@@ -14,6 +14,9 @@ class GroupCreate(BaseModel):
     name: str = Field(min_length=1, max_length=64)
     weekly_stake_elo: int = Field(default=500, ge=0, le=100000)
     join_type: JoinType = "open"
+    # Initial pot conditions for the current AND next week.
+    required_pledges: int = Field(default=3, ge=1, le=7)
+    stake_per_miss: int = Field(default=100, ge=0, le=100000)
 
 
 class Group(BaseModel):

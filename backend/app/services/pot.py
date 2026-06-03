@@ -1,10 +1,9 @@
-"""Weekly pot — conditions, rotation, and member breakdown.
+"""Weekly pot — conditions and member breakdown.
 
-All Supabase calls are wrapped defensively: the endpoint must never 500 just
-because the optional `pot_conditions` table is missing or a query hiccups.
-A request that can't read/write conditions falls back to sensible defaults
-(3 required pledges, 100 ELO per miss) so the rest of the pledging flow
-keeps working.
+Conditions for each week are set by the group's leader (who is always the "setter").
+Pledging is optional: members who pledge 0 days are excluded from the pot entirely.
+All Supabase calls are wrapped in `_safe_exec` so the endpoint never 500s; it
+falls back to synthesized defaults when the conditions table is unavailable.
 """
 from datetime import date, datetime, timezone
 from typing import Any
@@ -12,7 +11,7 @@ from typing import Any
 from fastapi import HTTPException
 
 from app.core.supabase_client import get_supabase
-from app.core.time_utils import current_week_start, monday_of, next_week_start
+from app.core.time_utils import current_week_start, next_week_start
 
 
 def _utc_now_iso() -> str:
@@ -23,17 +22,7 @@ def _resolve_week(week: str) -> date:
     return next_week_start() if week == "next" else current_week_start()
 
 
-def _parse_iso(ts: str) -> datetime | None:
-    try:
-        if ts.endswith("Z"):
-            ts = ts[:-1] + "+00:00"
-        return datetime.fromisoformat(ts)
-    except (ValueError, AttributeError):
-        return None
-
-
 def _safe_exec(query: Any) -> Any | None:
-    """Execute a Supabase query; swallow exceptions and return None."""
     try:
         return query.execute()
     except Exception:
@@ -48,37 +37,25 @@ def _defaults_for(group_id: str, week_start: date, setter: str | None = None) ->
         "required_pledges": 3,
         "stake_per_miss": 100,
         "is_finalized": False,
+        "is_practice": False,
     }
 
 
-def _setter_for_week(group_id: str, week_start: date) -> str | None:
-    """Members ordered by joined_at; (weeks since group creation) % len picks the setter."""
+def _leader_id(group_id: str) -> str | None:
+    """The leader IS the setter — no rotation. Returns None if the group is leaderless."""
     sb = get_supabase()
-    res = _safe_exec(
-        sb.table("group_memberships")
-        .select("user_id, joined_at")
-        .eq("group_id", group_id)
-        .order("joined_at", desc=False)
-    )
-    members = (res.data if res else None) or []
-    if not members:
+    res = _safe_exec(sb.table("groups").select("leader_id").eq("id", group_id).limit(1))
+    if not res or not res.data:
         return None
-
-    grp_res = _safe_exec(sb.table("groups").select("created_at").eq("id", group_id).limit(1))
-    grp_data = (grp_res.data if grp_res else None) or []
-    if not grp_data:
-        return members[0]["user_id"]
-
-    parsed = _parse_iso(grp_data[0].get("created_at", ""))
-    grp_first_monday = monday_of(parsed.date()) if parsed else week_start
-    weeks_elapsed = max(0, (week_start - grp_first_monday).days // 7)
-    return members[weeks_elapsed % len(members)]["user_id"]
+    return res.data[0].get("leader_id")
 
 
 def _ensure_conditions(group_id: str, week_start: date) -> dict:
     """Read pot_conditions for this week, auto-creating with defaults if missing.
-    Returns synthesized defaults if the table doesn't exist or anything goes wrong."""
+    The stored `setter_user_id` is kept in sync with the group's current leader."""
     sb = get_supabase()
+    leader = _leader_id(group_id)
+
     res = _safe_exec(
         sb.table("pot_conditions")
         .select("*")
@@ -88,15 +65,23 @@ def _ensure_conditions(group_id: str, week_start: date) -> dict:
     )
     rows = (res.data if res else None) or []
     if rows:
-        return rows[0]
+        row = rows[0]
+        # Keep setter aligned with whoever currently leads (handles leader transfers).
+        if leader and row.get("setter_user_id") != leader:
+            _safe_exec(
+                sb.table("pot_conditions")
+                .update({"setter_user_id": leader})
+                .eq("group_id", group_id)
+                .eq("week_start", week_start.isoformat())
+            )
+            row["setter_user_id"] = leader
+        return row
 
-    setter = _setter_for_week(group_id, week_start)
-    payload = _defaults_for(group_id, week_start, setter)
+    payload = _defaults_for(group_id, week_start, leader)
     inserted = _safe_exec(sb.table("pot_conditions").insert(payload))
     if inserted and inserted.data:
         return inserted.data[0]
 
-    # Race: someone else may have inserted between our select and insert.
     res = _safe_exec(
         sb.table("pot_conditions")
         .select("*")
@@ -107,8 +92,45 @@ def _ensure_conditions(group_id: str, week_start: date) -> dict:
     rows = (res.data if res else None) or []
     if rows:
         return rows[0]
-
     return payload
+
+
+def seed_conditions(
+    group_id: str,
+    week_start: date,
+    *,
+    setter_user_id: str,
+    required_pledges: int,
+    stake_per_miss: int,
+    is_finalized: bool = False,
+    is_practice: bool = False,
+) -> None:
+    """Called by group creation to seed initial pot conditions for a week.
+    Idempotent — won't overwrite an existing row."""
+    sb = get_supabase()
+    existing = _safe_exec(
+        sb.table("pot_conditions")
+        .select("group_id")
+        .eq("group_id", group_id)
+        .eq("week_start", week_start.isoformat())
+        .limit(1)
+    )
+    if existing and existing.data:
+        return
+    payload = {
+        "group_id": group_id,
+        "week_start": week_start.isoformat(),
+        "setter_user_id": setter_user_id,
+        "required_pledges": required_pledges,
+        "stake_per_miss": stake_per_miss,
+        "is_finalized": is_finalized,
+        "is_practice": is_practice,
+    }
+    inserted = _safe_exec(sb.table("pot_conditions").insert(payload))
+    if not inserted:
+        # `is_practice` column may not exist yet on older schemas — retry without it.
+        payload.pop("is_practice", None)
+        _safe_exec(sb.table("pot_conditions").insert(payload))
 
 
 def update_conditions(
@@ -123,10 +145,12 @@ def update_conditions(
     if stake_per_miss < 0:
         raise HTTPException(status_code=400, detail="stake_per_miss must be >= 0")
 
+    leader = _leader_id(group_id)
+    if leader and leader != user_id:
+        raise HTTPException(status_code=403, detail="Only the group leader can edit pot rules")
+
     week_start = _resolve_week(week)
     cond = _ensure_conditions(group_id, week_start)
-    if cond.get("setter_user_id") and cond["setter_user_id"] != user_id:
-        raise HTTPException(status_code=403, detail="Only this week's pot setter can edit")
     if cond.get("is_finalized"):
         raise HTTPException(status_code=409, detail="Pot conditions are already finalized")
 
@@ -147,7 +171,6 @@ def update_conditions(
 
 
 def finalize_conditions(group_id: str, week_start: date) -> None:
-    """Idempotently lock conditions for a week."""
     sb = get_supabase()
     _safe_exec(
         sb.table("pot_conditions")
@@ -163,11 +186,13 @@ def get_conditions(group_id: str, week: str = "current") -> dict:
 
 
 def pot_detail(group_id: str, week: str = "current") -> dict:
-    """Full breakdown: conditions + per-member pledge state + pot total."""
+    """Full breakdown: conditions + per-member pledge state.
+    Members who haven't pledged any days are skipped (opt-out)."""
     week_start = _resolve_week(week)
     cond = _ensure_conditions(group_id, week_start)
     required = cond.get("required_pledges", 3)
     stake = cond.get("stake_per_miss", 100)
+    is_practice = bool(cond.get("is_practice"))
 
     sb = get_supabase()
 
@@ -192,7 +217,7 @@ def pot_detail(group_id: str, week: str = "current") -> dict:
         plans = (plans_res.data if plans_res else None) or []
         plan_by_user = {p["user_id"]: p for p in plans}
 
-    setter_id = cond.get("setter_user_id")
+    setter_id = cond.get("setter_user_id") or _leader_id(group_id)
     setter_name = None
     if setter_id:
         for m in memberships:
@@ -205,17 +230,17 @@ def pot_detail(group_id: str, week: str = "current") -> dict:
     for m in memberships:
         plan = plan_by_user.get(m["user_id"])
         days = (plan or {}).get("plan_days") or []
-        is_locked = bool(plan and plan.get("is_locked"))
         pledged_count = sum(
             1 for d in days if d["state"] in ("planned", "locked", "checked-in", "missed")
         )
+        # Pledging is OPTIONAL — non-pledgers aren't in the pot breakdown.
+        if pledged_count == 0:
+            continue
+
         completed_count = sum(1 for d in days if d["state"] == "checked-in")
         missed_count = sum(1 for d in days if d["state"] == "missed")
-        # Under-quota pledges only count as missed once the plan is locked.
-        shortfall = max(0, required - pledged_count) if is_locked else 0
-        effective_missed = missed_count + shortfall
-        elo_at_risk = required * stake
-        elo_lost = effective_missed * stake
+        elo_at_risk = pledged_count * stake
+        elo_lost = missed_count * stake
         pot_total += elo_lost
 
         member_rows.append({
@@ -224,11 +249,11 @@ def pot_detail(group_id: str, week: str = "current") -> dict:
             "role": m.get("role", "member"),
             "pledged_count": pledged_count,
             "completed_count": completed_count,
-            "missed_count": effective_missed,
+            "missed_count": missed_count,
             "elo_at_risk": elo_at_risk,
             "elo_lost_so_far": elo_lost,
             "is_setter": m["user_id"] == setter_id,
-            "is_on_track": effective_missed == 0,
+            "is_on_track": missed_count == 0,
         })
 
     return {
@@ -239,6 +264,7 @@ def pot_detail(group_id: str, week: str = "current") -> dict:
         "required_pledges": required,
         "stake_per_miss": stake,
         "is_finalized": bool(cond.get("is_finalized")),
+        "is_practice": is_practice,
         "total_pot_elo": pot_total,
         "members": member_rows,
     }

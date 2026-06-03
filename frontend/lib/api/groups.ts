@@ -44,6 +44,8 @@ export const createGroup = (payload: {
   name: string;
   weekly_stake_elo: number;
   join_type: JoinType;
+  required_pledges: number;
+  stake_per_miss: number;
 }) => apiPost<Group>('/groups', payload);
 
 export const joinGroup = (group_id: string) =>

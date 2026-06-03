@@ -15,12 +15,14 @@ export interface WeeklyPlan {
   week_start: string;
   is_locked: boolean;
   stake_elo: number;
+  is_practice: boolean;
   days: PlanDay[];
 }
 
 export interface TwoWeekView {
   this_week: WeeklyPlan;
   next_week: WeeklyPlan;
+  today_dow: number;
 }
 
 export interface CheckInResult {
@@ -36,6 +38,9 @@ export const toggleNextDay = (dow: number) =>
 
 export const setPlannedDays = (planned_days: number[]) =>
   apiPost<WeeklyPlan>('/plans/me/next/set', { planned_days });
+
+export const setCurrentWeekDays = (planned_days: number[]) =>
+  apiPost<WeeklyPlan>('/plans/me/current/set', { planned_days });
 
 export const lockNextWeek = () =>
   apiPost<WeeklyPlan>('/plans/me/next/lock');

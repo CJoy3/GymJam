@@ -28,5 +28,6 @@ class PotDetail(BaseModel):
     required_pledges: int
     stake_per_miss: int
     is_finalized: bool
+    is_practice: bool = False
     total_pot_elo: int
     members: list[PotMember]

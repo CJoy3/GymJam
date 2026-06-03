@@ -4,6 +4,7 @@ import React, {
 import { Alert } from 'react-native';
 
 import * as badgesApi from '../../lib/api/badges';
+import * as devApi from '../../lib/api/dev';
 import * as gymsApi from '../../lib/api/gyms';
 import * as groupsApi from '../../lib/api/groups';
 import * as plansApi from '../../lib/api/plans';
@@ -73,10 +74,17 @@ interface AppStateShape {
   // Groups
   groupName: string;
   groupId: string | null;
+  isLeader: boolean;
   groups: Group[];
   joinGroup: (groupId: string) => Promise<void>;
   leaveGroup: () => Promise<void>;
-  addGroup: (g: { name: string; weekly_stake_elo: number; join_type: 'open' | 'request' }) => Promise<void>;
+  addGroup: (g: {
+    name: string;
+    weekly_stake_elo: number;
+    join_type: 'open' | 'request';
+    required_pledges: number;
+    stake_per_miss: number;
+  }) => Promise<void>;
 
   // Requests
   joinRequests: JoinRequest[];
@@ -87,11 +95,17 @@ interface AppStateShape {
   thisWeek: DayStatus[];
   nextWeek: DayStatus[];
   todayIndex: number;
+  todayDow: number;                         // 0=Mon … 6=Sun (simulated clock)
+  thisWeekIsPractice: boolean;              // first week after group creation
   toggleNextWeekDay: (i: number) => Promise<void>;
   setPlannedDays: (days: number[]) => Promise<void>;
+  setThisWeekDays: (days: number[]) => Promise<void>;
   lockNextWeek: () => Promise<void>;
   addNextWeekDay: (i: number) => Promise<void>;
   checkInToday: () => Promise<void>;
+
+  // Dev clock — simulate the next week arriving
+  advanceWeek: () => Promise<void>;
 
   // Refresh on demand (used by screens that come back into focus)
   refreshGroupsAtGym: () => Promise<void>;
@@ -187,6 +201,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [myGroupSummary, setMyGroupSummary] = useState<Group | null>(null);
   const [thisWeek, setThisWeek] = useState<DayStatus[]>(DAYS.map((d) => ({ day: d, state: 'unselected' })));
   const [nextWeek, setNextWeek] = useState<DayStatus[]>(DAYS.map((d) => ({ day: d, state: 'unselected' })));
+  const [todayDow, setTodayDow] = useState<number>(() => {
+    const js = new Date().getDay();
+    return js === 0 ? 6 : js - 1;
+  });
+  const [thisWeekIsPractice, setThisWeekIsPractice] = useState(false);
   const [pot, setPot] = useState(0);
   const [potCurrent, setPotCurrent] = useState<potApi.PotDetail | null>(null);
   const [potNext, setPotNext] = useState<potApi.PotDetail | null>(null);
@@ -222,6 +241,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     const view = await plansApi.getMyPlans();
     setThisWeek(planToWeek(view.this_week));
     setNextWeek(planToWeek(view.next_week));
+    setTodayDow(view.today_dow);
+    setThisWeekIsPractice(!!view.this_week.is_practice);
   }, []);
 
   const loadPot = useCallback(async (groupId: string | null) => {
@@ -431,6 +452,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     name: string;
     weekly_stake_elo: number;
     join_type: 'open' | 'request';
+    required_pledges: number;
+    stake_per_miss: number;
   }) => {
     if (!me?.gym_id) return;
     try {
@@ -439,6 +462,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         name: g.name,
         weekly_stake_elo: g.weekly_stake_elo,
         join_type: g.join_type,
+        required_pledges: g.required_pledges,
+        stake_per_miss: g.stake_per_miss,
       });
       const mine = await loadGroupsForGym(me.gym_id, me.id);
       await refreshGroupContext(mine?.id ?? null, mine?.isLeader);
@@ -494,6 +519,17 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       await refreshGroupContext(myGroupSummary?.id ?? null, myGroupSummary?.isLeader);
     } catch (e) {
       reportError('Could not save plan', e);
+    }
+  }, [refreshGroupContext, myGroupSummary]);
+
+  const setThisWeekDays = useCallback(async (days: number[]) => {
+    try {
+      const plan = await plansApi.setCurrentWeekDays(days);
+      setThisWeek(planToWeek(plan));
+      setThisWeekIsPractice(!!plan.is_practice);
+      await refreshGroupContext(myGroupSummary?.id ?? null, myGroupSummary?.isLeader);
+    } catch (e) {
+      reportError('Could not save pledges', e);
     }
   }, [refreshGroupContext, myGroupSummary]);
 
@@ -573,6 +609,16 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     [myGroupSummary],
   );
 
+  const advanceWeek = useCallback(async () => {
+    try {
+      await devApi.advanceWeek();
+      await bootstrap();
+      showToast('Jumped to next week', 'success');
+    } catch (e) {
+      reportError('Could not advance week', e);
+    }
+  }, [bootstrap]);
+
   const placeRoomItem = useCallback(async (itemId: string, slot: number | null) => {
     try {
       const items = await roomApi.setItemPlacement(itemId, slot);
@@ -600,6 +646,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
       groupName: myGroupSummary?.name ?? '',
       groupId: myGroupSummary?.id ?? null,
+      isLeader: myGroupSummary?.isLeader === true,
       groups: groupsAtGym,
       joinGroup,
       leaveGroup,
@@ -612,11 +659,16 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       thisWeek,
       nextWeek,
       todayIndex: todayIndexForWeek(thisWeek),
+      todayDow,
+      thisWeekIsPractice,
       toggleNextWeekDay,
       setPlannedDays,
+      setThisWeekDays,
       addNextWeekDay,
       lockNextWeek,
       checkInToday,
+
+      advanceWeek,
 
       refreshGroupsAtGym,
 
@@ -639,11 +691,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       refreshAll: bootstrap,
     };
   }, [
-    addGroup, addNextWeekDay, approveRequest, badges, bootstrap, checkInToday, groupMembers,
-    groupsAtGym, gyms, joinGroup, joinRequests, leaveGroup, loadBadges, loadMembers,
+    addGroup, addNextWeekDay, advanceWeek, approveRequest, badges, bootstrap, checkInToday,
+    groupMembers, groupsAtGym, gyms, joinGroup, joinRequests, leaveGroup, loadBadges, loadMembers,
     lockNextWeek, me, myGroupSummary, nextWeek, placeRoomItem, pot, potCurrent, potNext,
     ready, refreshGroupsAtGym, rejectRequest, reloading, roomItems, setGym, setPlannedDays,
-    thisWeek, toggleNextWeekDay, updateDisplayName, updatePotConditions,
+    setThisWeekDays, thisWeek, thisWeekIsPractice, todayDow, toggleNextWeekDay, updateDisplayName,
+    updatePotConditions,
   ]);
 
   // tier is purely a function of elo; expose for callers that want it

@@ -121,6 +121,8 @@ def create_group(
     name: str,
     weekly_stake_elo: int,
     join_type: JoinType,
+    required_pledges: int = 3,
+    stake_per_miss: int = 100,
 ) -> dict:
     if current_membership(creator_id):
         raise HTTPException(status_code=409, detail="Leave your current group first")
@@ -145,6 +147,29 @@ def create_group(
         "role": "leader",
     }).execute()
     _link_plans_to_group(creator_id, group["id"])
+
+    # Seed pot conditions. The current week is a no-stakes "practice" week: only
+    # the days remaining after today are pledgeable (sessions = remaining days),
+    # the stake is 0, and the rules are frozen. Next week starts as normal with
+    # the leader's chosen rules. After the practice week it continues as usual.
+    from app.services import pot as pot_svc
+    from app.core.time_utils import current_day_of_week, current_week_start, next_week_start
+
+    remaining_days = max(0, 6 - current_day_of_week())  # days strictly after today
+    pot_svc.seed_conditions(
+        group["id"], current_week_start(),
+        setter_user_id=creator_id,
+        required_pledges=max(1, remaining_days),
+        stake_per_miss=0,
+        is_finalized=True,
+        is_practice=True,
+    )
+    pot_svc.seed_conditions(
+        group["id"], next_week_start(),
+        setter_user_id=creator_id,
+        required_pledges=required_pledges,
+        stake_per_miss=stake_per_miss,
+    )
     return group
 
 

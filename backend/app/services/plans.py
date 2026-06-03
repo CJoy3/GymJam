@@ -81,14 +81,28 @@ def _mark_missed_for_past_days(plan_row: dict) -> None:
     ).lt("day_of_week", today_dow).in_("state", ["planned", "locked"]).execute()
 
 
+def _is_practice_week(group_id: str | None, week: str) -> bool:
+    if not group_id:
+        return False
+    try:
+        return bool(pot_svc.get_conditions(group_id, week).get("is_practice"))
+    except Exception:
+        return False
+
+
 def get_two_week_view(user_id: str) -> dict:
     this_row = _ensure_plan(user_id, current_week_start())
     _mark_missed_for_past_days(this_row)
     next_row = _ensure_plan(user_id, next_week_start())
     streak_svc.compute_and_store_streak(user_id)
+    this_week = _load_plan_with_days(this_row)
+    next_week = _load_plan_with_days(next_row)
+    this_week["is_practice"] = _is_practice_week(this_row.get("group_id"), "current")
+    next_week["is_practice"] = _is_practice_week(next_row.get("group_id"), "next")
     return {
-        "this_week": _load_plan_with_days(this_row),
-        "next_week": _load_plan_with_days(next_row),
+        "this_week": this_week,
+        "next_week": next_week,
+        "today_dow": current_day_of_week(),
     }
 
 
@@ -152,6 +166,44 @@ def set_planned_days(user_id: str, dows: list[int]) -> dict:
 
     _recompute_stake(plan_row["id"])
     return _load_plan_with_days(_ensure_plan(user_id, next_week_start()))
+
+
+def set_current_week_days(user_id: str, dows: list[int]) -> dict:
+    """Pledge days for the *current* week. Only allowed during a group's
+    practice week, and only for days strictly after today (past/today days are
+    locked). Each listed future day becomes 'planned'; other untouched future
+    days become 'unselected'."""
+    for dow in dows:
+        if not 0 <= dow <= 6:
+            raise HTTPException(status_code=400, detail=f"Invalid day_of_week {dow}")
+
+    plan_row = _ensure_plan(user_id, current_week_start())
+    group_id = plan_row.get("group_id")
+    if not _is_practice_week(group_id, "current"):
+        raise HTTPException(status_code=409, detail="This week's pledges are locked")
+
+    today_dow = current_day_of_week()
+    selected = {d for d in dows if d > today_dow}
+    _enforce_cap_against_pot(group_id, current_week_start(), len(selected))
+
+    sb = get_supabase()
+    future = [d for d in range(7) if d > today_dow]
+    if selected:
+        sb.table("plan_days").update({"state": "planned"}).eq(
+            "plan_id", plan_row["id"]
+        ).in_("day_of_week", list(selected)).in_("state", ["planned", "unselected"]).execute()
+
+    to_clear = [d for d in future if d not in selected]
+    if to_clear:
+        sb.table("plan_days").update({"state": "unselected"}).eq(
+            "plan_id", plan_row["id"]
+        ).in_("day_of_week", to_clear).in_("state", ["planned", "unselected"]).execute()
+
+    # Practice week carries no stake.
+    sb.table("weekly_plans").update({"stake_elo": 0}).eq("id", plan_row["id"]).execute()
+    result = _load_plan_with_days(_ensure_plan(user_id, current_week_start()))
+    result["is_practice"] = True
+    return result
 
 
 def toggle_next_week_day(user_id: str, dow: int) -> dict:

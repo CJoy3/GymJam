@@ -1,153 +1,272 @@
-import React from 'react';
-import { View, Text, Pressable, StyleSheet, ViewStyle, TextStyle } from 'react-native';
+import React, { useEffect } from 'react';
+import {
+  View, Text, Pressable, StyleSheet, ViewStyle, TextStyle, ActivityIndicator,
+} from 'react-native';
+import Animated, {
+  Easing, FadeIn, useAnimatedStyle, useSharedValue, withTiming,
+} from 'react-native-reanimated';
 import { MaterialIcons } from '@expo/vector-icons';
-import { C, RADIUS, SPACE } from '../theme/tokens';
+import { C, FONT, RADIUS, SPACE } from '../theme/tokens';
 
-/* ---------- Card: soft elevated surface ---------- */
-export function Card({
-  children, style, onPress, padding,
-}: {
-  children: React.ReactNode;
-  style?: ViewStyle | ViewStyle[];
-  onPress?: () => void;
-  padding?: number;
-}) {
-  const content = (
-    <View style={[styles.card, padding !== undefined && { padding }, style]}>{children}</View>
-  );
-  if (onPress) {
-    return (
-      <Pressable
-        onPress={onPress}
-        style={({ pressed }) => [pressed && { opacity: 0.85, transform: [{ scale: 0.998 }] }]}
-      >
-        {content}
-      </Pressable>
-    );
-  }
-  return content;
+// Shared motion language — short, cubic ease-out, zero spring overshoot.
+const EASE_OUT = Easing.out(Easing.cubic);
+const EASE_OUT_QUAD = Easing.out(Easing.quad);
+
+/* ──────────────────────────  Typography  ────────────────────────── */
+
+export function Eyebrow({ children, style }: { children: React.ReactNode; style?: TextStyle }) {
+  return <Text style={[styles.eyebrow, style]}>{children}</Text>;
 }
-
-/* ---------- Btn: pill-shaped, three variants ---------- */
-export function Btn({
-  label, onPress, variant = 'primary', disabled, icon, style,
-}: {
-  label: string;
-  onPress?: () => void;
-  variant?: 'primary' | 'secondary' | 'tertiary' | 'danger';
-  disabled?: boolean;
-  icon?: keyof typeof MaterialIcons.glyphMap;
-  style?: ViewStyle;
-}) {
-  const v = {
-    primary:   { bg: C.primary, fg: C.primaryFg, border: 'transparent' },
-    secondary: { bg: 'transparent', fg: C.ink,    border: C.border },
-    tertiary:  { bg: 'transparent', fg: C.ink,    border: 'transparent' },
-    danger:    { bg: 'transparent', fg: C.danger, border: C.danger },
-  }[variant];
-  return (
-    <Pressable
-      onPress={onPress}
-      disabled={disabled}
-      style={({ pressed }) => [
-        styles.btn,
-        {
-          backgroundColor: v.bg,
-          borderColor: v.border,
-          borderWidth: variant === 'secondary' || variant === 'danger' ? 1 : 0,
-        },
-        disabled && { opacity: 0.45 },
-        pressed && !disabled && { opacity: 0.82, transform: [{ scale: 0.99 }] },
-        style,
-      ]}
-    >
-      {icon && <MaterialIcons name={icon} size={18} color={v.fg} style={{ marginRight: 8 }} />}
-      <Text style={[styles.btnText, { color: v.fg }]}>{label}</Text>
-    </Pressable>
-  );
-}
-
-/* ---------- Chip: soft pill ---------- */
-export function Chip({ text, tone = 'muted' }: { text: string; tone?: 'muted' | 'primary' | 'accent' }) {
-  const map = {
-    muted:   { bg: C.muted,                  fg: C.inkSoft },
-    primary: { bg: 'rgba(138,177,125,0.15)', fg: '#A8C99B' },
-    accent:  { bg: 'rgba(208,135,112,0.15)', fg: C.accent },
-  }[tone];
-  return (
-    <View style={[styles.chip, { backgroundColor: map.bg }]}>
-      <Text style={[styles.chipText, { color: map.fg }]}>{text}</Text>
-    </View>
-  );
-}
-
 export function H1({ children, style }: { children: React.ReactNode; style?: TextStyle }) {
   return <Text style={[styles.h1, style]}>{children}</Text>;
 }
 export function H2({ children, style }: { children: React.ReactNode; style?: TextStyle }) {
   return <Text style={[styles.h2, style]}>{children}</Text>;
 }
+export function H3({ children, style }: { children: React.ReactNode; style?: TextStyle }) {
+  return <Text style={[styles.h3, style]}>{children}</Text>;
+}
+export function Body({ children, style }: { children: React.ReactNode; style?: TextStyle }) {
+  return <Text style={[styles.body, style]}>{children}</Text>;
+}
 export function Sub({ children, style }: { children: React.ReactNode; style?: TextStyle }) {
   return <Text style={[styles.sub, style]}>{children}</Text>;
 }
+export function Num({ children, style }: { children: React.ReactNode; style?: TextStyle }) {
+  return <Text style={[styles.num, style]}>{children}</Text>;
+}
 
-/* ---------- Ring: progress indicator ---------- */
-export function Ring({
-  progress, size = 80, label, sublabel,
-}: { progress: number; size?: number; label?: string; sublabel?: string }) {
-  const clamped = Math.max(0, Math.min(100, progress));
-  const deg = (clamped / 100) * 360;
-  const ringColor = C.primary;
-  const track = C.muted;
-  const thickness = Math.max(6, size * 0.085);
+/* ────────────────────────────  Card  ─────────────────────────────── */
 
-  const Half = ({ rotate, color }: { rotate: number; color: string }) => (
-    <View style={[StyleSheet.absoluteFill, { transform: [{ rotate: `${rotate}deg` }] }]}>
-      <View style={{
-        width: size, height: size, borderRadius: size / 2,
-        borderWidth: thickness, borderColor: 'transparent',
-        borderTopColor: color, borderRightColor: color,
-      }} />
+export function Card({
+  children, style, onPress, padding = SPACE.xl, tone = 'default',
+}: {
+  children: React.ReactNode;
+  style?: ViewStyle | ViewStyle[];
+  onPress?: () => void;
+  padding?: number;
+  tone?: 'default' | 'cream' | 'peach' | 'sage';
+}) {
+  const bg = tone === 'cream' ? C.primary
+    : tone === 'peach' ? C.accentSoft
+    : tone === 'sage'  ? C.successSoft
+    : C.card;
+  const border = tone === 'cream' ? 'transparent' : C.border;
+  const content = (
+    <View style={[styles.card, { padding, backgroundColor: bg, borderColor: border }, style]}>{children}</View>
+  );
+  if (!onPress) return content;
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [pressed && { opacity: 0.85 }]}
+    >
+      {content}
+    </Pressable>
+  );
+}
+
+/* ────────────────────────────  Button  ───────────────────────────── */
+
+type BtnVariant = 'primary' | 'ghost' | 'danger' | 'inverse';
+
+export function Btn({
+  label, onPress, variant = 'primary', disabled, loading, icon, style, size = 'lg',
+}: {
+  label: string;
+  onPress?: () => void;
+  variant?: BtnVariant;
+  disabled?: boolean;
+  loading?: boolean;
+  icon?: keyof typeof MaterialIcons.glyphMap;
+  style?: ViewStyle;
+  size?: 'md' | 'lg';
+}) {
+  const v =
+    variant === 'primary' ? { bg: C.primary, fg: C.primaryFg, border: 'transparent' }
+    : variant === 'inverse' ? { bg: C.card, fg: C.ink, border: C.borderHi }
+    : variant === 'danger' ? { bg: 'transparent', fg: C.danger, border: C.danger }
+    : { bg: 'transparent', fg: C.ink, border: C.borderHi };
+
+  const scale = useSharedValue(1);
+  const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+
+  return (
+    <Animated.View style={animStyle}>
+      <Pressable
+        onPress={onPress}
+        disabled={disabled || loading}
+        onPressIn={() => { scale.value = withTiming(0.97, { duration: 90, easing: EASE_OUT_QUAD }); }}
+        onPressOut={() => { scale.value = withTiming(1, { duration: 140, easing: EASE_OUT_QUAD }); }}
+        style={({ pressed }) => [
+          styles.btn,
+          {
+            height: size === 'md' ? 48 : 56,
+            backgroundColor: v.bg,
+            borderColor: v.border,
+            borderWidth: variant === 'ghost' || variant === 'inverse' || variant === 'danger' ? 1 : 0,
+          },
+          disabled && { opacity: 0.4 },
+          pressed && !disabled && { opacity: 0.92 },
+          style,
+        ]}
+      >
+        {loading ? (
+          <ActivityIndicator color={v.fg} />
+        ) : (
+          <>
+            {icon && <MaterialIcons name={icon} size={20} color={v.fg} style={{ marginRight: 8 }} />}
+            <Text style={[styles.btnText, { color: v.fg }]}>{label}</Text>
+          </>
+        )}
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+/* ────────────────────────────  Chip  ─────────────────────────────── */
+
+export function Chip({
+  text, tone = 'neutral', icon, compact,
+}: {
+  text: string;
+  tone?: 'neutral' | 'success' | 'accent' | 'danger' | 'cream';
+  icon?: keyof typeof MaterialIcons.glyphMap;
+  compact?: boolean;
+}) {
+  const tones = {
+    neutral: { bg: C.muted,            fg: C.inkSoft },
+    success: { bg: C.successSoft,      fg: C.success },
+    accent:  { bg: C.accentSoft,       fg: C.accent  },
+    danger:  { bg: C.dangerSoft,       fg: C.danger  },
+    cream:   { bg: C.primary,          fg: C.primaryFg },
+  }[tone];
+  return (
+    <View style={[styles.chip, {
+      backgroundColor: tones.bg,
+      paddingHorizontal: compact ? 8 : 11,
+      paddingVertical: compact ? 3 : 5,
+    }]}>
+      {icon && <MaterialIcons name={icon} size={compact ? 11 : 13} color={tones.fg} style={{ marginRight: 4 }} />}
+      <Text style={[styles.chipText, { color: tones.fg, fontSize: compact ? 11 : 12 }]}>{text}</Text>
     </View>
   );
+}
+
+/* ────────────────────────────  Stat  ─────────────────────────────── */
+
+export function Stat({
+  label, value, sub, accent,
+}: {
+  label: string;
+  value: string | number;
+  sub?: string;
+  accent?: boolean;
+}) {
+  return (
+    <View>
+      <Text style={styles.eyebrow}>{label}</Text>
+      <Text style={[styles.statValue, accent && { color: C.accent }]}>{value}</Text>
+      {sub && <Text style={styles.sub}>{sub}</Text>}
+    </View>
+  );
+}
+
+/* ────────────────────────────  Ring  ─────────────────────────────── */
+
+export function Ring({
+  progress, size = 96, label, sublabel, color = C.success, track = C.muted, thickness,
+}: {
+  progress: number;
+  size?: number;
+  label?: string | number;
+  sublabel?: string;
+  color?: string;
+  track?: string;
+  thickness?: number;
+}) {
+  const stroke = thickness ?? Math.max(6, size * 0.085);
+  const clamped = Math.max(0, Math.min(100, progress));
+  const animated = useSharedValue(0);
+
+  useEffect(() => {
+    animated.value = withTiming(clamped, { duration: 460, easing: EASE_OUT });
+  }, [animated, clamped]);
+
+  const firstHalf = useAnimatedStyle(() => {
+    const deg = Math.min(animated.value, 50) * 3.6;
+    return { transform: [{ rotate: `${-135 + deg}deg` }] };
+  });
+  const secondHalf = useAnimatedStyle(() => {
+    const v = Math.max(0, animated.value - 50);
+    const deg = v * 3.6;
+    return {
+      transform: [{ rotate: `${-135 + deg}deg` }],
+      opacity: animated.value > 50 ? 1 : 0,
+    };
+  });
 
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      <View style={{ position: 'absolute', width: size, height: size, borderRadius: size / 2, borderWidth: thickness, borderColor: track }} />
-      <Half rotate={-135} color={ringColor} />
-      {deg > 180 && <Half rotate={Math.min(deg, 360) - 135 - 180} color={ringColor} />}
+      <View style={{ position: 'absolute', width: size, height: size, borderRadius: size / 2, borderWidth: stroke, borderColor: track }} />
+      <Animated.View style={[StyleSheet.absoluteFill, firstHalf]}>
+        <View style={{ width: size, height: size, borderRadius: size / 2, borderWidth: stroke, borderColor: 'transparent', borderTopColor: color, borderRightColor: color }} />
+      </Animated.View>
+      <Animated.View style={[StyleSheet.absoluteFill, secondHalf]}>
+        <View style={{ width: size, height: size, borderRadius: size / 2, borderWidth: stroke, borderColor: 'transparent', borderTopColor: color, borderRightColor: color }} />
+      </Animated.View>
       <View style={{ alignItems: 'center' }}>
-        {label != null && <Text style={{ fontSize: size * 0.26, fontWeight: '700', color: C.ink }}>{label}</Text>}
-        {sublabel != null && <Text style={{ fontSize: size * 0.12, color: C.mutedFg }}>{sublabel}</Text>}
+        {label != null && <Text style={[styles.ringLabel, { fontSize: size * 0.28 }]}>{label}</Text>}
+        {sublabel != null && <Text style={[styles.ringSub, { fontSize: size * 0.13 }]}>{sublabel}</Text>}
       </View>
     </View>
   );
 }
 
+/* ──────────────────────  Animated entrance  ──────────────────────── */
+
+/**
+ * Calm opacity fade with cubic ease-out. No translation, no spring — premium feel.
+ */
+export function FadeInItem({
+  children, delay = 0, style,
+}: { children: React.ReactNode; delay?: number; style?: ViewStyle }) {
+  return (
+    <Animated.View
+      entering={FadeIn.duration(320).delay(delay).easing(EASE_OUT)}
+      style={style}
+    >
+      {children}
+    </Animated.View>
+  );
+}
+
+/* ─────────────────────────────  Styles  ──────────────────────────── */
+
 const styles = StyleSheet.create({
-  card: {
-    backgroundColor: C.card,
-    borderRadius: RADIUS.lg,
-    padding: SPACE.xl - 4,
-    borderWidth: 1,
-    borderColor: C.border,
-  },
+  eyebrow: { fontFamily: FONT.medium, fontSize: 12, color: C.mutedFg, letterSpacing: 0.6, textTransform: 'uppercase' },
+  h1: { fontFamily: FONT.extra, fontSize: 32, color: C.ink, letterSpacing: -0.6, lineHeight: 38 },
+  h2: { fontFamily: FONT.bold,  fontSize: 22, color: C.ink, letterSpacing: -0.3, lineHeight: 28 },
+  h3: { fontFamily: FONT.semibold, fontSize: 17, color: C.ink, letterSpacing: -0.1, lineHeight: 22 },
+  body: { fontFamily: FONT.regular, fontSize: 15, color: C.ink, lineHeight: 21 },
+  sub: { fontFamily: FONT.regular, fontSize: 13, color: C.mutedFg, lineHeight: 18 },
+  num: { fontFamily: FONT.bold, fontSize: 24, color: C.ink, letterSpacing: -0.4 },
+  statValue: { fontFamily: FONT.bold, fontSize: 28, color: C.ink, letterSpacing: -0.4, marginTop: 4 },
+
+  card: { borderRadius: RADIUS.xl, borderWidth: 1 },
+
   btn: {
-    height: 52,
     borderRadius: RADIUS.pill,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
     paddingHorizontal: SPACE.xl,
   },
-  btnText: { fontSize: 16, fontWeight: '600', letterSpacing: 0.2 },
-  chip: {
-    paddingHorizontal: 11,
-    paddingVertical: 4,
-    borderRadius: RADIUS.pill,
-  },
-  chipText: { fontSize: 12, fontWeight: '600', letterSpacing: 0.2 },
-  h1: { fontSize: 30, fontWeight: '700', color: C.ink, letterSpacing: -0.4 },
-  h2: { fontSize: 18, fontWeight: '600', color: C.ink, letterSpacing: -0.1 },
-  sub: { fontSize: 14, color: C.mutedFg, lineHeight: 19 },
+  btnText: { fontFamily: FONT.semibold, fontSize: 16, letterSpacing: 0.1 },
+
+  chip: { flexDirection: 'row', alignItems: 'center', borderRadius: RADIUS.pill, alignSelf: 'flex-start' },
+  chipText: { fontFamily: FONT.semibold, letterSpacing: 0.2 },
+
+  ringLabel: { fontFamily: FONT.bold, color: C.ink, letterSpacing: -0.4 },
+  ringSub:   { fontFamily: FONT.regular, color: C.mutedFg, marginTop: 2 },
 });
