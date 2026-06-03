@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, View, Text, ScrollView, Pressable, TextInput, StyleSheet } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import Animated, { FadeIn } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn } from 'react-native-reanimated';
+
+const EASE_OUT = Easing.out(Easing.cubic);
 
 import { C, FONT, RADIUS, SPACE, tierForElo } from '../theme/tokens';
 import {
@@ -196,7 +198,7 @@ export function CheckIn({ onClose }: { onClose: () => void }) {
     <View style={[styles.screen, { backgroundColor: C.bg }]}>
       <BlobBackground variant="celebrate" />
       <View style={{ flex: 1, padding: SPACE.xl, paddingTop: 80, alignItems: 'center', justifyContent: 'center' }}>
-        <Animated.View entering={FadeIn.duration(360)} style={styles.bigCheck}>
+        <Animated.View entering={FadeIn.duration(320).easing(EASE_OUT)} style={styles.bigCheck}>
           <MaterialIcons name="check" size={56} color={C.success} />
         </Animated.View>
         <FadeInItem delay={120} style={{ alignItems: 'center', marginTop: 28 }}>

@@ -2,9 +2,13 @@ import React, { useEffect } from 'react';
 import {
   View, Text, Pressable, StyleSheet, ViewStyle, TextStyle, ActivityIndicator,
 } from 'react-native';
-import Animated, { FadeInDown, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { MaterialIcons } from '@expo/vector-icons';
 import { C, FONT, RADIUS, SPACE } from '../theme/tokens';
+
+// Shared motion language: ease-out cubic, short and confident.
+const EASE_OUT = Easing.out(Easing.cubic);
+const EASE_OUT_QUAD = Easing.out(Easing.quad);
 
 /* ──────────────────────────  Typography  ────────────────────────── */
 
@@ -90,8 +94,8 @@ export function Btn({
       <Pressable
         onPress={onPress}
         disabled={disabled || loading}
-        onPressIn={() => { scale.value = withSpring(0.97, { damping: 14, stiffness: 280 }); }}
-        onPressOut={() => { scale.value = withSpring(1, { damping: 14, stiffness: 280 }); }}
+        onPressIn={() => { scale.value = withTiming(0.97, { duration: 90, easing: EASE_OUT_QUAD }); }}
+        onPressOut={() => { scale.value = withTiming(1, { duration: 140, easing: EASE_OUT_QUAD }); }}
         style={({ pressed }) => [
           styles.btn,
           {
@@ -187,7 +191,7 @@ export function Ring({
   const animated = useSharedValue(0);
 
   useEffect(() => {
-    animated.value = withTiming(clamped, { duration: 700 });
+    animated.value = withTiming(clamped, { duration: 460, easing: EASE_OUT });
   }, [animated, clamped]);
 
   const firstHalf = useAnimatedStyle(() => {
@@ -222,12 +226,16 @@ export function Ring({
 
 /* ──────────────────────  Animated entrance  ──────────────────────── */
 
+/**
+ * Entrance animation: pure opacity fade with a small, deliberate translate-up.
+ * Cubic ease-out, no spring overshoot — calm and premium.
+ */
 export function FadeInItem({
   children, delay = 0, style,
 }: { children: React.ReactNode; delay?: number; style?: ViewStyle }) {
   return (
     <Animated.View
-      entering={FadeInDown.duration(420).delay(delay).springify().damping(16)}
+      entering={FadeIn.duration(320).delay(delay).easing(EASE_OUT)}
       style={style}
     >
       {children}

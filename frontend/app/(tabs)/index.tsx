@@ -2,7 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
-import Animated, { FadeIn } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn } from 'react-native-reanimated';
+
+const EASE_OUT = Easing.out(Easing.cubic);
+
 
 import {
   Onboarding, Home, CheckIn, PlanWeek, GroupView, NoGroup,
@@ -33,7 +36,7 @@ export default function GymJamApp() {
     return (
       <View style={styles.splash}>
         <BlobBackground variant="celebrate" />
-        <Animated.View entering={FadeIn.duration(500)} style={styles.splashCenter}>
+        <Animated.View entering={FadeIn.duration(420).easing(EASE_OUT)} style={styles.splashCenter}>
           <Text style={styles.splashBrand}>GymJam</Text>
           <ActivityIndicator color={C.ink} style={{ marginTop: 22 }} />
         </Animated.View>
@@ -63,9 +66,7 @@ export default function GymJamApp() {
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
-      <Animated.View key={screen} entering={FadeIn.duration(220)} style={{ flex: 1 }}>
-        {render()}
-      </Animated.View>
+      <View style={{ flex: 1 }}>{render()}</View>
       {showTabs && (
         <View style={styles.tabBar}>
           <Tab label="Home"     icon="home"          active={screen === 'home'} onPress={() => setScreen('home')} />
