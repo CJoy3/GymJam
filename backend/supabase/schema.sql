@@ -82,6 +82,18 @@ create table if not exists plan_days (
     unique (plan_id, day_of_week)
 );
 
+-- Decorative gym-space items placed by users into a 3x3 grid (slots 0..8).
+create table if not exists user_room_items (
+    user_id uuid not null references users(id) on delete cascade,
+    item_id text not null,
+    slot smallint not null check (slot between 0 and 8),
+    primary key (user_id, item_id)
+);
+
+-- A slot can only hold one item per user.
+create unique index if not exists user_room_items_unique_slot
+    on user_room_items(user_id, slot);
+
 ------------------------------------------------------------
 -- Indexes
 ------------------------------------------------------------
@@ -145,3 +157,4 @@ alter table group_memberships   disable row level security;
 alter table join_requests       disable row level security;
 alter table weekly_plans        disable row level security;
 alter table plan_days           disable row level security;
+alter table user_room_items     disable row level security;

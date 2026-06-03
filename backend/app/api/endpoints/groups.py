@@ -4,6 +4,7 @@ from app.api.deps import get_current_user
 from app.schemas.group import (
     Group,
     GroupCreate,
+    GroupMemberDetail,
     GroupSummary,
     JoinRequestOut,
 )
@@ -36,8 +37,7 @@ def join_group(group_id: str, current: dict = Depends(get_current_user)) -> dict
 
 @router.post("/{group_id}/leave")
 def leave_group(group_id: str, current: dict = Depends(get_current_user)) -> dict:
-    groups_svc.leave_group(group_id, current["id"])
-    return {"ok": True}
+    return {"ok": True, **groups_svc.leave_group(group_id, current["id"])}
 
 
 @router.get("/{group_id}/requests", response_model=list[JoinRequestOut])
@@ -58,3 +58,8 @@ def reject_request(request_id: str, current: dict = Depends(get_current_user)) -
 @router.get("/{group_id}/pot")
 def get_pot(group_id: str, week: str = "current") -> dict:
     return pot_svc.group_pot(group_id, week=week)
+
+
+@router.get("/{group_id}/members", response_model=list[GroupMemberDetail])
+def list_group_members(group_id: str) -> list[dict]:
+    return groups_svc.list_members(group_id)

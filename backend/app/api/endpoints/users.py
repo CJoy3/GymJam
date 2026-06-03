@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends
 
 from app.api.deps import get_current_user
+from app.schemas.badge import Badges
 from app.schemas.user import User, UserRegister, UserUpdate
+from app.services import badges as badges_svc
 from app.services import users as users_svc
 
 router = APIRouter()
@@ -25,3 +27,8 @@ def update_me(
 ) -> dict:
     fields = patch.model_dump(exclude_none=True)
     return users_svc.update_profile(current["id"], fields)
+
+
+@router.get("/me/badges", response_model=Badges)
+def my_badges(current: dict = Depends(get_current_user)) -> dict:
+    return badges_svc.compute(current["id"])

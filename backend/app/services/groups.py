@@ -3,11 +3,36 @@ from datetime import datetime, timezone
 from fastapi import HTTPException
 
 from app.core.supabase_client import get_supabase
+from app.core.time_utils import current_week_start, next_week_start
 from app.schemas.group import JoinType
 
 
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _empty_week() -> list[dict]:
+    return [
+        {"day_of_week": dow, "state": "unselected", "checked_in_at": None}
+        for dow in range(7)
+    ]
+
+
+def _fill_week(days: list[dict] | None) -> list[dict]:
+    """Pad to all 7 days, sorted by day_of_week; missing days default to 'unselected'."""
+    by_dow = {d["day_of_week"]: d for d in (days or [])}
+    out = []
+    for dow in range(7):
+        if dow in by_dow:
+            d = by_dow[dow]
+            out.append({
+                "day_of_week": dow,
+                "state": d["state"],
+                "checked_in_at": d.get("checked_in_at"),
+            })
+        else:
+            out.append({"day_of_week": dow, "state": "unselected", "checked_in_at": None})
+    return out
 
 
 def list_at_gym(gym_id: str, current_user_id: str) -> list[dict]:
@@ -145,13 +170,88 @@ def join_or_request(group_id: str, user_id: str) -> dict:
     return {"action": "requested", "group": group}
 
 
-def leave_group(group_id: str, user_id: str) -> None:
+def leave_group(group_id: str, user_id: str) -> dict:
+    """Leave a group. Returns metadata about the side effects.
+
+    Cases:
+      - non-leader leaves → membership removed; group unchanged.
+      - leader leaves AND is the only member → group is deleted entirely.
+      - leader leaves AND others remain → oldest remaining member is auto-promoted.
+    """
     sb = get_supabase()
-    sb.table("group_memberships").delete().eq("group_id", group_id).eq("user_id", user_id).execute()
-    # If the leader leaves, clear leader_id (next leader assignment is a future feature).
     grp = get_group(group_id)
-    if grp.get("leader_id") == user_id:
-        sb.table("groups").update({"leader_id": None}).eq("id", group_id).execute()
+    is_leader = grp.get("leader_id") == user_id
+
+    # Snapshot members (id + joined_at), ordered oldest first.
+    members = (
+        sb.table("group_memberships")
+        .select("user_id, joined_at")
+        .eq("group_id", group_id)
+        .order("joined_at", desc=False)
+        .execute()
+    ).data or []
+
+    others = [m for m in members if m["user_id"] != user_id]
+
+    # Case: leader leaving as the only member → delete the group.
+    if is_leader and not others:
+        sb.table("groups").delete().eq("id", group_id).execute()
+        return {"deleted": True, "promoted_user_id": None}
+
+    promoted_user_id: str | None = None
+    if is_leader and others:
+        promoted_user_id = others[0]["user_id"]
+        sb.table("groups").update({"leader_id": promoted_user_id}).eq("id", group_id).execute()
+        sb.table("group_memberships").update({"role": "leader"}).eq(
+            "group_id", group_id
+        ).eq("user_id", promoted_user_id).execute()
+
+    sb.table("group_memberships").delete().eq("group_id", group_id).eq("user_id", user_id).execute()
+    return {"deleted": False, "promoted_user_id": promoted_user_id}
+
+
+def list_members(group_id: str) -> list[dict]:
+    """List all members of a group with their this-week and next-week pledge state."""
+    sb = get_supabase()
+    memberships = (
+        sb.table("group_memberships")
+        .select("user_id, role, joined_at, users(display_name, elo)")
+        .eq("group_id", group_id)
+        .order("joined_at", desc=False)
+        .execute()
+    ).data or []
+    if not memberships:
+        return []
+
+    user_ids = [m["user_id"] for m in memberships]
+    this_start = current_week_start().isoformat()
+    next_start = next_week_start().isoformat()
+
+    plans = (
+        sb.table("weekly_plans")
+        .select("user_id, week_start, plan_days(day_of_week, state, checked_in_at)")
+        .in_("user_id", user_ids)
+        .in_("week_start", [this_start, next_start])
+        .execute()
+    ).data or []
+
+    plan_by_user_week: dict[tuple[str, str], list[dict]] = {}
+    for p in plans:
+        plan_by_user_week[(p["user_id"], p["week_start"])] = p.get("plan_days") or []
+
+    out: list[dict] = []
+    for m in memberships:
+        u = m.get("users") or {}
+        out.append({
+            "user_id": m["user_id"],
+            "display_name": u.get("display_name") or "Anonymous",
+            "elo": u.get("elo") or 0,
+            "role": m["role"],
+            "joined_at": m["joined_at"],
+            "this_week_days": _fill_week(plan_by_user_week.get((m["user_id"], this_start))),
+            "next_week_days": _fill_week(plan_by_user_week.get((m["user_id"], next_start))),
+        })
+    return out
 
 
 def list_pending_requests(group_id: str, leader_id: str) -> list[dict]:

@@ -49,8 +49,14 @@ export const createGroup = (payload: {
 export const joinGroup = (group_id: string) =>
   apiPost<{ action: 'joined' | 'requested' }>(`/groups/${group_id}/join`);
 
+export interface LeaveGroupResult {
+  ok: boolean;
+  deleted: boolean;
+  promoted_user_id: string | null;
+}
+
 export const leaveGroup = (group_id: string) =>
-  apiPost<{ ok: boolean }>(`/groups/${group_id}/leave`);
+  apiPost<LeaveGroupResult>(`/groups/${group_id}/leave`);
 
 export const listJoinRequests = (group_id: string) =>
   apiGet<JoinRequest[]>(`/groups/${group_id}/requests`);

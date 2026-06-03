@@ -2,6 +2,8 @@ from datetime import datetime
 from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
+from app.schemas.plan import PlanDay
+
 JoinType = Literal["open", "request"]
 Role = Literal["member", "leader"]
 RequestStatus = Literal["pending", "approved", "rejected"]
@@ -47,3 +49,14 @@ class JoinRequestOut(BaseModel):
     display_name: str
     status: RequestStatus
     created_at: datetime
+
+
+class GroupMemberDetail(BaseModel):
+    """A group member with their week-by-week pledge state."""
+    user_id: str
+    display_name: str
+    elo: int
+    role: Role
+    joined_at: datetime
+    this_week_days: list[PlanDay]
+    next_week_days: list[PlanDay]
