@@ -172,10 +172,14 @@ export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: (
     if (!saving) setLocal(nextWeek.map((d) => d.state));
   }, [nextWeek, saving]);
 
-  const required = potNext?.required_pledges ?? 7;
+  // The backend defaults missing/old conditions to 0 in our normalizer; treat
+  // anything <=0 as "no cap configured" so the screen stays usable.
+  const required = potNext && potNext.required_pledges > 0 ? potNext.required_pledges : 7;
   const stakePerMiss = potNext?.stake_per_miss ?? 0;
   const sel = local.filter((s) => s === 'planned').length;
   const atCap = sel >= required;
+  const overCap = sel > required;
+  const overBy = Math.max(0, sel - required);
   const editableDays: DayStatus[] = local.map((state, i) => ({ day: LABELS[i], state }));
 
   const toggleLocal = (i: number) => {
@@ -188,6 +192,10 @@ export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: (
   };
 
   const commitAndLock = async () => {
+    if (overCap) {
+      showToast(`Remove ${overBy} ${overBy === 1 ? 'day' : 'days'} — pot only allows ${required}`, 'info');
+      return;
+    }
     setSaving(true);
     try {
       const days = local
@@ -215,9 +223,14 @@ export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: (
         <Card style={{ marginBottom: 16 }}>
           <View style={[styles.rowBetween, { marginBottom: 10 }]}>
             <Text style={styles.label}>Choose your days</Text>
-            <Text style={{ color: C.primary, fontWeight: '600' }}>{sel} / {required}</Text>
+            <Text style={{ color: overCap ? C.accent : C.primary, fontWeight: '600' }}>{sel} / {required}</Text>
           </View>
           <DayPicker days={editableDays} editable onToggle={toggleLocal} />
+          {overCap && (
+            <Sub style={{ marginTop: 12, color: C.accent }}>
+              You've pledged {overBy} more than this week's cap. Remove {overBy} to lock in.
+            </Sub>
+          )}
           <View style={{ borderTopWidth: 1, borderTopColor: C.border, marginTop: 16, paddingTop: 16 }}>
             <Sub>Your stake</Sub>
             <Text style={styles.big}>{(required * stakePerMiss).toLocaleString()} ELO</Text>
@@ -236,7 +249,11 @@ export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: (
         </Card>
       </ScrollView>
       <View style={styles.footer}>
-        <Btn label={saving ? 'Saving…' : 'Lock in my week'} disabled={sel === 0 || saving} onPress={commitAndLock} />
+        <Btn
+          label={saving ? 'Saving…' : overCap ? `Remove ${overBy} to lock in` : 'Lock in my week'}
+          disabled={sel === 0 || saving || overCap}
+          onPress={commitAndLock}
+        />
       </View>
     </View>
   );

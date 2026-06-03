@@ -36,9 +36,22 @@ async function request<T>(
   });
   const text = await res.text();
   if (!res.ok) {
-    throw new ApiError(`${res.status} ${res.statusText}: ${text || path}`, res.status);
+    throw new ApiError(extractDetail(text) || `HTTP ${res.status}`, res.status);
   }
   return (text ? JSON.parse(text) : undefined) as T;
+}
+
+/** Pull the human-readable `detail` field out of FastAPI's error body. */
+function extractDetail(text: string): string {
+  if (!text) return '';
+  try {
+    const parsed = JSON.parse(text);
+    if (typeof parsed?.detail === 'string') return parsed.detail;
+    if (Array.isArray(parsed?.detail) && parsed.detail[0]?.msg) return parsed.detail[0].msg;
+  } catch {
+    // Not JSON; fall through.
+  }
+  return text;
 }
 
 export const apiGet = <T>(path: string, opts?: RequestOptions) =>
