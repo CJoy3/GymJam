@@ -52,7 +52,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
 
 /* ---------------- Home ---------------- */
 export function Home({ onCheckIn, onPlan, onPot }: { onCheckIn: () => void; onPlan: () => void; onPot: () => void }) {
-  const { thisWeek, elo, streak, pot, checkInToday, todayIndex, displayName } = useAppState();
+  const { thisWeek, elo, streak, pot, potCurrent, checkInToday, todayIndex, displayName } = useAppState();
   const refresh = useRefreshControl();
   const done = thisWeek.filter((d) => d.state === 'checked-in').length;
   const pledged = thisWeek.filter((d) => d.state === 'checked-in' || d.state === 'planned').length;
@@ -91,7 +91,7 @@ export function Home({ onCheckIn, onPlan, onPot }: { onCheckIn: () => void; onPl
       </Card>
 
       <Card onPress={onPot} style={{ marginBottom: 16 }}>
-        <LivePot amount={pot} />
+        <LivePot pot={pot} detail={potCurrent} />
         <Sub style={{ marginTop: 8 }}>Tap to see the live breakdown</Sub>
       </Card>
 
@@ -118,13 +118,33 @@ export function Home({ onCheckIn, onPlan, onPot }: { onCheckIn: () => void; onPl
   );
 }
 
-function LivePot({ amount }: { amount: number }) {
+function LivePot({
+  pot, detail,
+}: {
+  pot: number;
+  detail: import('../../lib/api/pot').PotDetail | null;
+}) {
+  const totalAtStake = detail ? detail.members.reduce((s, m) => s + m.elo_at_risk, 0) : 0;
+  const onTrack = detail ? detail.members.filter((m) => m.is_on_track).length : 0;
+  const memberCount = detail?.members.length ?? 0;
+  const fillPct = totalAtStake > 0 ? Math.min(100, Math.round((pot / totalAtStake) * 100)) : 0;
+
   return (
     <View>
-      <Sub style={{ fontWeight: '600' }}>Group Pot</Sub>
-      <Text style={{ fontSize: 40, fontWeight: '700', color: C.accent, marginTop: 4 }}>{amount.toLocaleString()} ELO</Text>
-      <View style={{ height: 8, backgroundColor: C.muted, borderRadius: 4, marginTop: 8, overflow: 'hidden' }}>
-        <View style={{ height: 8, width: '70%', backgroundColor: C.primary, borderRadius: 4 }} />
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Sub style={{ fontWeight: '600' }}>Group pot</Sub>
+        {detail && memberCount > 0 && (
+          <Sub style={{ color: C.primary }}>{onTrack}/{memberCount} on track</Sub>
+        )}
+      </View>
+      <Text style={{ fontSize: 40, fontWeight: '700', color: C.accent, marginTop: 4 }}>
+        {pot.toLocaleString()} <Text style={{ fontSize: 18, color: C.mutedFg }}>ELO</Text>
+      </Text>
+      {totalAtStake > 0 && (
+        <Sub style={{ marginTop: 2 }}>of {totalAtStake.toLocaleString()} at stake</Sub>
+      )}
+      <View style={{ height: 8, backgroundColor: C.muted, borderRadius: 4, marginTop: 10, overflow: 'hidden' }}>
+        <View style={{ height: 8, width: `${fillPct}%`, backgroundColor: C.accent, borderRadius: 4 }} />
       </View>
     </View>
   );
