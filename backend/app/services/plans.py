@@ -109,16 +109,31 @@ def _recompute_stake(plan_id: str) -> int:
     return stake
 
 
+def _soft_unlock_next_week(plan_row: dict) -> None:
+    """Reset a next-week plan to editable state. Days previously 'locked' become 'planned'
+    again so the user keeps their selection. Used to support re-editing before the week
+    actually starts — once Monday rolls around the plan becomes 'this-week' and is fixed."""
+    if not plan_row.get("is_locked"):
+        return
+    sb = get_supabase()
+    sb.table("plan_days").update({"state": "planned"}).eq(
+        "plan_id", plan_row["id"]
+    ).eq("state", "locked").execute()
+    sb.table("weekly_plans").update({"is_locked": False, "locked_at": None}).eq(
+        "id", plan_row["id"]
+    ).execute()
+
+
 def set_planned_days(user_id: str, dows: list[int]) -> dict:
     """Replace next-week selection in one shot: each listed dow becomes 'planned',
-    every other day becomes 'unselected'. Rejects if the plan is already locked."""
+    every other day becomes 'unselected'. If the plan was previously locked we
+    soft-unlock it first so the user can re-edit before the week starts."""
     for dow in dows:
         if not 0 <= dow <= 6:
             raise HTTPException(status_code=400, detail=f"Invalid day_of_week {dow}")
 
     plan_row = _ensure_plan(user_id, next_week_start())
-    if plan_row["is_locked"]:
-        raise HTTPException(status_code=409, detail="Next week is locked")
+    _soft_unlock_next_week(plan_row)
 
     _enforce_cap_against_pot(plan_row.get("group_id"), next_week_start(), len(set(dows)))
 
@@ -143,8 +158,7 @@ def toggle_next_week_day(user_id: str, dow: int) -> dict:
     if not 0 <= dow <= 6:
         raise HTTPException(status_code=400, detail="day_of_week must be 0..6")
     plan_row = _ensure_plan(user_id, next_week_start())
-    if plan_row["is_locked"]:
-        raise HTTPException(status_code=409, detail="Next week is locked")
+    _soft_unlock_next_week(plan_row)
 
     sb = get_supabase()
     day = (
@@ -158,12 +172,12 @@ def toggle_next_week_day(user_id: str, dow: int) -> dict:
     if not day:
         raise HTTPException(status_code=500, detail="Plan day missing")
     current = day[0]["state"]
+    # After _soft_unlock_next_week, anything that was 'locked' is now 'planned'.
     new_state = "unselected" if current == "planned" else "planned"
     if current not in ("planned", "unselected"):
         raise HTTPException(status_code=409, detail=f"Cannot toggle a {current} day")
 
     if new_state == "planned":
-        # Count current 'planned' days for this plan (excluding the toggling day itself).
         already_planned = (
             sb.table("plan_days")
             .select("day_of_week", count="exact")
