@@ -1,23 +1,19 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { C, RADIUS, SPACE } from '../theme/tokens';
+import { MaterialIcons } from '@expo/vector-icons';
+import { C, FONT, RADIUS, SPACE } from '../theme/tokens';
 
 export type ToastVariant = 'success' | 'error' | 'info';
 type Toast = { id: number; message: string; variant: ToastVariant };
 
-/**
- * Imperative toast queue. The provider mounts once at app root and registers
- * a setter that {@link showToast} calls from anywhere — including non-component
- * code (AppState callbacks, API error handlers).
- */
 let push: ((t: Omit<Toast, 'id'>) => void) | null = null;
 
 export function showToast(message: string, variant: ToastVariant = 'info') {
   push?.({ message, variant });
 }
 
-const VISIBLE_MS = 2200;
+const VISIBLE_MS = 2400;
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<Toast[]>([]);
@@ -27,9 +23,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     push = (t) => {
       const id = ++seq.current;
       setItems((cur) => [...cur, { id, ...t }]);
-      setTimeout(() => {
-        setItems((cur) => cur.filter((x) => x.id !== id));
-      }, VISIBLE_MS);
+      setTimeout(() => setItems((cur) => cur.filter((x) => x.id !== id)), VISIBLE_MS);
     };
     return () => { push = null; };
   }, []);
@@ -52,26 +46,26 @@ function ToastBubble({ toast }: { toast: Toast }) {
 
   useEffect(() => {
     Animated.parallel([
-      Animated.timing(slide, { toValue: 0, duration: 220, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
+      Animated.timing(slide, { toValue: 0, duration: 260, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
       Animated.timing(fade,  { toValue: 1, duration: 220, useNativeDriver: true }),
     ]).start();
     const t = setTimeout(() => {
       Animated.parallel([
-        Animated.timing(slide, { toValue: 20, duration: 180, useNativeDriver: true }),
-        Animated.timing(fade,  { toValue: 0, duration: 180, useNativeDriver: true }),
+        Animated.timing(slide, { toValue: 20, duration: 200, useNativeDriver: true }),
+        Animated.timing(fade,  { toValue: 0, duration: 200, useNativeDriver: true }),
       ]).start();
-    }, VISIBLE_MS - 220);
+    }, VISIBLE_MS - 260);
     return () => clearTimeout(t);
   }, [fade, slide]);
 
-  const accent =
-    toast.variant === 'error' ? C.danger :
-    toast.variant === 'success' ? C.primary :
-    C.inkSoft;
+  const palette =
+    toast.variant === 'error' ? { fg: C.danger, icon: 'error-outline' as const }
+    : toast.variant === 'success' ? { fg: C.success, icon: 'check-circle' as const }
+    : { fg: C.ink, icon: 'info-outline' as const };
 
   return (
     <Animated.View style={[styles.bubble, { opacity: fade, transform: [{ translateY: slide }] }]}>
-      <View style={[styles.dot, { backgroundColor: accent }]} />
+      <MaterialIcons name={palette.icon} size={18} color={palette.fg} />
       <Text style={styles.text}>{toast.message}</Text>
     </Animated.View>
   );
@@ -79,16 +73,15 @@ function ToastBubble({ toast }: { toast: Toast }) {
 
 const styles = StyleSheet.create({
   layer: { position: 'absolute', left: 0, right: 0, bottom: 0, alignItems: 'center' },
-  stack: { gap: 8, marginBottom: 90, alignItems: 'center' },
+  stack: { gap: 8, marginBottom: 96, alignItems: 'center' },
   bubble: {
     flexDirection: 'row', alignItems: 'center', gap: 10,
     paddingHorizontal: SPACE.lg, paddingVertical: 12,
     borderRadius: RADIUS.pill,
     backgroundColor: C.card,
-    borderWidth: 1, borderColor: C.border,
-    shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 16, shadowOffset: { width: 0, height: 6 },
+    borderWidth: 1, borderColor: C.borderHi,
+    shadowColor: '#000', shadowOpacity: 0.45, shadowRadius: 18, shadowOffset: { width: 0, height: 8 },
     maxWidth: '92%',
   },
-  dot: { width: 8, height: 8, borderRadius: 4 },
-  text: { color: C.ink, fontSize: 14, fontWeight: '500' },
+  text: { color: C.ink, fontFamily: FONT.medium, fontSize: 13.5 },
 });
