@@ -4,8 +4,9 @@ import { useAppState } from '../state/AppState';
 import { C } from '../theme/tokens';
 
 /**
- * Drop-in pull-to-refresh control for any ScrollView. Re-runs the full bootstrap
- * (user, gyms, groups, plans, members, badges, room) so the screen sees fresh state.
+ * Pull-to-refresh control with theme-correct contrast colors so it never blends
+ * into the dark background. iOS uses `tintColor`; Android uses `colors` plus
+ * `progressBackgroundColor`.
  */
 export function useRefreshControl() {
   const { refreshAll } = useAppState();
@@ -14,5 +15,13 @@ export function useRefreshControl() {
     setRefreshing(true);
     try { await refreshAll(); } finally { setRefreshing(false); }
   }, [refreshAll]);
-  return <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={C.primary} />;
+  return (
+    <RefreshControl
+      refreshing={refreshing}
+      onRefresh={onRefresh}
+      tintColor={C.ink}
+      colors={[C.accent, C.primary]}
+      progressBackgroundColor={C.card}
+    />
+  );
 }

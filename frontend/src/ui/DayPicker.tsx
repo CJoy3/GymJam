@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, Pressable } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import { C, RADIUS } from '../theme/tokens';
+import { C, FONT, RADIUS } from '../theme/tokens';
 import type { DayStatus } from '../state/AppState';
 
 const LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
@@ -10,25 +10,27 @@ export function DayPicker({
   days, editable = false, onToggle,
 }: { days: DayStatus[]; editable?: boolean; onToggle?: (i: number) => void }) {
   return (
-    <View style={{ flexDirection: 'row', gap: 8 }}>
+    <View style={{ flexDirection: 'row', gap: 6 }}>
       {days.map((d, i) => {
-        const disabled = !editable || d.state === 'locked';
-        const sStyle = stateStyle(d.state);
+        const disabled = !editable || d.state === 'locked' || d.state === 'checked-in' || d.state === 'missed';
+        const s = stateStyle(d.state);
         return (
           <Pressable
             key={i}
             disabled={disabled}
             onPress={() => onToggle?.(i)}
             style={({ pressed }) => [{
-              flex: 1, minWidth: 36, height: 54, borderRadius: RADIUS.md,
+              flex: 1, minWidth: 38, height: 60, borderRadius: RADIUS.md,
               alignItems: 'center', justifyContent: 'center',
-              borderWidth: sStyle.borderWidth, borderColor: sStyle.border, backgroundColor: sStyle.bg,
+              borderWidth: s.borderWidth, borderColor: s.border, backgroundColor: s.bg,
+              gap: 3,
             }, pressed && !disabled && { opacity: 0.78 }]}
           >
-            <Text style={{ fontSize: 11, fontWeight: '700', color: sStyle.fg, letterSpacing: 0.5 }}>{LABELS[i]}</Text>
-            {d.state === 'checked-in' && <MaterialIcons name="check" size={16} color={sStyle.fg} style={{ marginTop: 2 }} />}
-            {d.state === 'missed' && <MaterialIcons name="close" size={16} color={sStyle.fg} style={{ marginTop: 2 }} />}
-            {d.state === 'planned' && <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: sStyle.fg, marginTop: 4 }} />}
+            <Text style={{ fontFamily: FONT.bold, fontSize: 11, color: s.fg, letterSpacing: 0.6 }}>{LABELS[i]}</Text>
+            {d.state === 'checked-in' && <MaterialIcons name="check" size={16} color={s.fg} />}
+            {d.state === 'missed' && <MaterialIcons name="close" size={16} color={s.fg} />}
+            {d.state === 'planned' && <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: s.fg }} />}
+            {d.state === 'locked' && <MaterialIcons name="lock" size={12} color={s.fg} />}
           </Pressable>
         );
       })}
@@ -36,32 +38,31 @@ export function DayPicker({
   );
 }
 
-/** Per-day joinable row: each planned day is an individually tappable chip. */
 export function JoinableDayRow({
   days, joinedKeys, memberName, onJoin,
 }: { days: DayStatus[]; joinedKeys: string[]; memberName: string; onJoin: (i: number) => void }) {
   return (
-    <View style={{ flexDirection: 'row', gap: 8 }}>
+    <View style={{ flexDirection: 'row', gap: 6 }}>
       {days.map((d, i) => {
-        const planned = d.state === 'planned';
+        const planned = d.state === 'planned' || d.state === 'locked';
         const joined = joinedKeys.includes(`${memberName}-${i}`);
-        const bg = !planned ? 'transparent' : joined ? C.primary : 'transparent';
-        const fg = !planned ? C.mutedFg : joined ? C.primaryFg : C.primary;
+        const bg = planned ? (joined ? C.primary : 'transparent') : C.muted;
+        const fg = planned ? (joined ? C.primaryFg : C.ink) : C.mutedFg;
+        const border = planned ? C.primary : C.border;
         return (
           <Pressable
             key={i}
             disabled={!planned || joined}
             onPress={() => onJoin(i)}
             style={({ pressed }) => [{
-              flex: 1, minWidth: 36, height: 58, borderRadius: RADIUS.md,
+              flex: 1, minWidth: 38, height: 64, borderRadius: RADIUS.md,
               alignItems: 'center', justifyContent: 'center',
-              borderWidth: planned && !joined ? 2 : 1,
-              borderColor: planned ? C.primary : C.border,
-              backgroundColor: bg, opacity: planned ? 1 : 0.45,
+              borderWidth: planned && !joined ? 2 : 1, borderColor: border, backgroundColor: bg,
+              opacity: planned ? 1 : 0.5, gap: 3,
             }, pressed && planned && !joined && { opacity: 0.78 }]}
           >
-            <Text style={{ fontSize: 11, fontWeight: '700', color: fg, letterSpacing: 0.5 }}>{LABELS[i]}</Text>
-            {planned && <MaterialIcons name={joined ? 'check' : 'add'} size={16} color={fg} style={{ marginTop: 2 }} />}
+            <Text style={{ fontFamily: FONT.bold, fontSize: 11, color: fg, letterSpacing: 0.6 }}>{LABELS[i]}</Text>
+            {planned && <MaterialIcons name={joined ? 'check' : 'add'} size={16} color={fg} />}
           </Pressable>
         );
       })}
@@ -71,10 +72,10 @@ export function JoinableDayRow({
 
 function stateStyle(state: DayStatus['state']) {
   switch (state) {
-    case 'checked-in': return { bg: C.primary,  fg: C.primaryFg, border: C.primary, borderWidth: 1 };
-    case 'planned':    return { bg: 'transparent', fg: C.primary, border: C.primary, borderWidth: 2 };
-    case 'missed':     return { bg: C.muted,    fg: C.accent,    border: C.muted,   borderWidth: 1 };
-    case 'locked':     return { bg: C.muted,    fg: C.mutedFg,   border: C.muted,   borderWidth: 1 };
-    default:           return { bg: 'transparent', fg: C.mutedFg, border: C.border, borderWidth: 1 };
+    case 'checked-in': return { bg: C.success,     fg: C.primaryFg, border: C.success, borderWidth: 1 };
+    case 'planned':    return { bg: 'transparent', fg: C.success,   border: C.success, borderWidth: 2 };
+    case 'missed':     return { bg: C.dangerSoft,  fg: C.danger,    border: C.dangerSoft, borderWidth: 1 };
+    case 'locked':     return { bg: C.muted,       fg: C.mutedFg,   border: C.muted, borderWidth: 1 };
+    default:           return { bg: 'transparent', fg: C.mutedFg,   border: C.border, borderWidth: 1 };
   }
 }
