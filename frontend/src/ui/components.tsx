@@ -2,13 +2,9 @@ import React, { useEffect } from 'react';
 import {
   View, Text, Pressable, StyleSheet, ViewStyle, TextStyle, ActivityIndicator,
 } from 'react-native';
-import Animated, { Easing, FadeIn, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { FadeInDown, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { MaterialIcons } from '@expo/vector-icons';
 import { C, FONT, RADIUS, SPACE } from '../theme/tokens';
-
-// Shared motion language: ease-out cubic, short and confident.
-const EASE_OUT = Easing.out(Easing.cubic);
-const EASE_OUT_QUAD = Easing.out(Easing.quad);
 
 /* ──────────────────────────  Typography  ────────────────────────── */
 
@@ -47,8 +43,8 @@ export function Card({
 }) {
   const bg = tone === 'cream' ? C.primary
     : tone === 'peach' ? C.accentSoft
-    : tone === 'sage'  ? C.successSoft
-    : C.card;
+      : tone === 'sage' ? C.successSoft
+        : C.card;
   const border = tone === 'cream' ? 'transparent' : C.border;
   const content = (
     <View style={[styles.card, { padding, backgroundColor: bg, borderColor: border }, style]}>{children}</View>
@@ -82,9 +78,9 @@ export function Btn({
 }) {
   const v =
     variant === 'primary' ? { bg: C.primary, fg: C.primaryFg, border: 'transparent' }
-    : variant === 'inverse' ? { bg: C.card, fg: C.ink, border: C.borderHi }
-    : variant === 'danger' ? { bg: 'transparent', fg: C.danger, border: C.danger }
-    : { bg: 'transparent', fg: C.ink, border: C.borderHi };
+      : variant === 'inverse' ? { bg: C.card, fg: C.ink, border: C.borderHi }
+        : variant === 'danger' ? { bg: 'transparent', fg: C.danger, border: C.danger }
+          : { bg: 'transparent', fg: C.ink, border: C.borderHi };
 
   const scale = useSharedValue(1);
   const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
@@ -94,8 +90,8 @@ export function Btn({
       <Pressable
         onPress={onPress}
         disabled={disabled || loading}
-        onPressIn={() => { scale.value = withTiming(0.97, { duration: 90, easing: EASE_OUT_QUAD }); }}
-        onPressOut={() => { scale.value = withTiming(1, { duration: 140, easing: EASE_OUT_QUAD }); }}
+        onPressIn={() => { scale.value = withSpring(0.97, { mass: 0.3, stiffness: 80, damping: 5 }); }}
+        onPressOut={() => { scale.value = withSpring(1, { mass: 0.3, stiffness: 80, damping: 5 }); }}
         style={({ pressed }) => [
           styles.btn,
           {
@@ -133,11 +129,11 @@ export function Chip({
   compact?: boolean;
 }) {
   const tones = {
-    neutral: { bg: C.muted,            fg: C.inkSoft },
-    success: { bg: C.successSoft,      fg: C.success },
-    accent:  { bg: C.accentSoft,       fg: C.accent  },
-    danger:  { bg: C.dangerSoft,       fg: C.danger  },
-    cream:   { bg: C.primary,          fg: C.primaryFg },
+    neutral: { bg: C.muted, fg: C.inkSoft },
+    success: { bg: C.successSoft, fg: C.success },
+    accent: { bg: C.accentSoft, fg: C.accent },
+    danger: { bg: C.dangerSoft, fg: C.danger },
+    cream: { bg: C.primary, fg: C.primaryFg },
   }[tone];
   return (
     <View style={[styles.chip, {
@@ -191,7 +187,7 @@ export function Ring({
   const animated = useSharedValue(0);
 
   useEffect(() => {
-    animated.value = withTiming(clamped, { duration: 460, easing: EASE_OUT });
+    animated.value = withTiming(clamped, { duration: 700 });
   }, [animated, clamped]);
 
   const firstHalf = useAnimatedStyle(() => {
@@ -226,16 +222,19 @@ export function Ring({
 
 /* ──────────────────────  Animated entrance  ──────────────────────── */
 
-/**
- * Entrance animation: pure opacity fade with a small, deliberate translate-up.
- * Cubic ease-out, no spring overshoot — calm and premium.
- */
 export function FadeInItem({
   children, delay = 0, style,
 }: { children: React.ReactNode; delay?: number; style?: ViewStyle }) {
+  const entering = FadeInDown
+    .duration(140)
+    .delay(Math.round(delay * 0.75))
+    .springify()
+    .stiffness(190)
+    .damping(20);
+
   return (
     <Animated.View
-      entering={FadeIn.duration(320).delay(delay).easing(EASE_OUT)}
+      entering={entering}
       style={style}
     >
       {children}
@@ -248,7 +247,7 @@ export function FadeInItem({
 const styles = StyleSheet.create({
   eyebrow: { fontFamily: FONT.medium, fontSize: 12, color: C.mutedFg, letterSpacing: 0.6, textTransform: 'uppercase' },
   h1: { fontFamily: FONT.extra, fontSize: 32, color: C.ink, letterSpacing: -0.6, lineHeight: 38 },
-  h2: { fontFamily: FONT.bold,  fontSize: 22, color: C.ink, letterSpacing: -0.3, lineHeight: 28 },
+  h2: { fontFamily: FONT.bold, fontSize: 22, color: C.ink, letterSpacing: -0.3, lineHeight: 28 },
   h3: { fontFamily: FONT.semibold, fontSize: 17, color: C.ink, letterSpacing: -0.1, lineHeight: 22 },
   body: { fontFamily: FONT.regular, fontSize: 15, color: C.ink, lineHeight: 21 },
   sub: { fontFamily: FONT.regular, fontSize: 13, color: C.mutedFg, lineHeight: 18 },
@@ -278,5 +277,5 @@ const styles = StyleSheet.create({
   chipText: { fontFamily: FONT.semibold, letterSpacing: 0.2 },
 
   ringLabel: { fontFamily: FONT.bold, color: C.ink, letterSpacing: -0.4 },
-  ringSub:   { fontFamily: FONT.regular, color: C.mutedFg, marginTop: 2 },
+  ringSub: { fontFamily: FONT.regular, color: C.mutedFg, marginTop: 2 },
 });
