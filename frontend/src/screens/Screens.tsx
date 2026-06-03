@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, View, Text, ScrollView, Pressable, TextInput, StyleSheet } from 'react-native';
+import { Alert, Platform, View, Text, ScrollView, Pressable, TextInput, StyleSheet } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import Animated, { Easing, FadeIn } from 'react-native-reanimated';
 
@@ -661,6 +661,12 @@ export function GymBrowser({ onBack, onJoined, onCreated }: { onBack: () => void
   const onLeave = (g: Group) => {
     const sole = g.isLeader === true && g.members <= 1;
     if (sole) {
+      if (Platform.OS === 'web') {
+        const confirmed = window.confirm('Delete group? You are the only member, so leaving will delete the group.');
+        if (confirmed) void leaveGroup();
+        return;
+      }
+
       Alert.alert('Delete group?', 'You are the only member, so leaving will delete the group.', [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Delete', style: 'destructive', onPress: () => leaveGroup() },
