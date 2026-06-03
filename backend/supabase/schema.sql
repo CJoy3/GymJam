@@ -82,6 +82,29 @@ create table if not exists plan_days (
     unique (plan_id, day_of_week)
 );
 
+-- Weekly pot conditions for a group. Each week, one member (the "setter",
+-- rotated by joined_at order) decides required_pledges + stake_per_miss.
+-- Frozen once is_finalized = true (when the setter locks their own plan or
+-- the week starts).
+create table if not exists pot_conditions (
+    group_id uuid not null references groups(id) on delete cascade,
+    week_start date not null,
+    setter_user_id uuid references users(id) on delete set null,
+    required_pledges smallint not null default 3
+        check (required_pledges between 1 and 7),
+    stake_per_miss integer not null default 100
+        check (stake_per_miss >= 0),
+    is_finalized boolean not null default false,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
+    primary key (group_id, week_start)
+);
+
+drop trigger if exists pot_conditions_updated_at on pot_conditions;
+create trigger pot_conditions_updated_at
+    before update on pot_conditions
+    for each row execute function set_updated_at();
+
 -- Decorative gym-space items placed by users into a 3x3 grid (slots 0..8).
 create table if not exists user_room_items (
     user_id uuid not null references users(id) on delete cascade,
@@ -157,4 +180,5 @@ alter table group_memberships   disable row level security;
 alter table join_requests       disable row level security;
 alter table weekly_plans        disable row level security;
 alter table plan_days           disable row level security;
+alter table pot_conditions      disable row level security;
 alter table user_room_items     disable row level security;

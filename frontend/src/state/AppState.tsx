@@ -7,6 +7,7 @@ import * as badgesApi from '../../lib/api/badges';
 import * as gymsApi from '../../lib/api/gyms';
 import * as groupsApi from '../../lib/api/groups';
 import * as plansApi from '../../lib/api/plans';
+import * as potApi from '../../lib/api/pot';
 import * as roomApi from '../../lib/api/room';
 import * as usersApi from '../../lib/api/users';
 import { getOrCreateUserId } from '../../lib/userId';
@@ -58,6 +59,7 @@ interface AppStateShape {
   reloading: boolean;
 
   // Profile
+  userId: string | null;
   displayName: string;
   elo: number;
   streak: number;
@@ -94,8 +96,15 @@ interface AppStateShape {
   // Refresh on demand (used by screens that come back into focus)
   refreshGroupsAtGym: () => Promise<void>;
 
-  // Pot
-  pot: number;
+  // Pot — full breakdown for the current week + simpler aggregate
+  pot: number;                              // total_pot_elo for current week (alias)
+  potCurrent: potApi.PotDetail | null;      // current week's conditions + member rows
+  potNext: potApi.PotDetail | null;         // next week's pending conditions
+  updatePotConditions: (
+    week: 'current' | 'next',
+    required: number,
+    stake: number,
+  ) => Promise<void>;
 
   // Group members (this & next week pledges per person)
   groupMembers: GroupMember[];
@@ -179,6 +188,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [thisWeek, setThisWeek] = useState<DayStatus[]>(DAYS.map((d) => ({ day: d, state: 'unselected' })));
   const [nextWeek, setNextWeek] = useState<DayStatus[]>(DAYS.map((d) => ({ day: d, state: 'unselected' })));
   const [pot, setPot] = useState(0);
+  const [potCurrent, setPotCurrent] = useState<potApi.PotDetail | null>(null);
+  const [potNext, setPotNext] = useState<potApi.PotDetail | null>(null);
   const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
   const [groupMembers, setGroupMembers] = useState<GroupMember[]>([]);
   const [badges, setBadges] = useState<badgesApi.Badges>({
@@ -216,12 +227,21 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const loadPot = useCallback(async (groupId: string | null) => {
     if (!groupId) {
       setPot(0);
+      setPotCurrent(null);
+      setPotNext(null);
       return;
     }
     try {
-      const p = await groupsApi.getGroupPot(groupId, 'current');
-      setPot(p.total_elo);
+      const [cur, nxt] = await Promise.all([
+        potApi.getPotDetail(groupId, 'current'),
+        potApi.getPotDetail(groupId, 'next'),
+      ]);
+      setPotCurrent(cur);
+      setPotNext(nxt);
+      setPot(cur.total_pot_elo);
     } catch {
+      setPotCurrent(null);
+      setPotNext(null);
       setPot(0);
     }
   }, []);
@@ -534,6 +554,25 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }
   }, [loadMembers, myGroupSummary]);
 
+  const updatePotConditions = useCallback(
+    async (week: 'current' | 'next', required: number, stake: number) => {
+      if (!myGroupSummary?.id) return;
+      try {
+        const detail = await potApi.updatePotConditions(myGroupSummary.id, week, required, stake);
+        if (week === 'current') {
+          setPotCurrent(detail);
+          setPot(detail.total_pot_elo);
+        } else {
+          setPotNext(detail);
+        }
+        showToast('Pot conditions updated', 'success');
+      } catch (e) {
+        reportError('Could not update pot', e);
+      }
+    },
+    [myGroupSummary],
+  );
+
   const placeRoomItem = useCallback(async (itemId: string, slot: number | null) => {
     try {
       const items = await roomApi.setItemPlacement(itemId, slot);
@@ -549,6 +588,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       ready,
       reloading,
 
+      userId: me?.id ?? null,
       displayName: me?.display_name ?? 'You',
       elo: me?.elo ?? 0,
       streak: me?.streak ?? 0,
@@ -581,6 +621,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       refreshGroupsAtGym,
 
       pot,
+      potCurrent,
+      potNext,
+      updatePotConditions,
 
       groupMembers,
       refreshMembers: () => loadMembers(myGroupSummary?.id ?? null),
@@ -598,9 +641,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   }, [
     addGroup, addNextWeekDay, approveRequest, badges, bootstrap, checkInToday, groupMembers,
     groupsAtGym, gyms, joinGroup, joinRequests, leaveGroup, loadBadges, loadMembers,
-    lockNextWeek, me, myGroupSummary, nextWeek, placeRoomItem, pot, ready, refreshGroupsAtGym,
-    rejectRequest, reloading, roomItems, setGym, setPlannedDays, thisWeek, toggleNextWeekDay,
-    updateDisplayName,
+    lockNextWeek, me, myGroupSummary, nextWeek, placeRoomItem, pot, potCurrent, potNext,
+    ready, refreshGroupsAtGym, rejectRequest, reloading, roomItems, setGym, setPlannedDays,
+    thisWeek, toggleNextWeekDay, updateDisplayName, updatePotConditions,
   ]);
 
   // tier is purely a function of elo; expose for callers that want it

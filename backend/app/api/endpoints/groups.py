@@ -8,6 +8,7 @@ from app.schemas.group import (
     GroupSummary,
     JoinRequestOut,
 )
+from app.schemas.pot import PotConditionsUpdate, PotDetail
 from app.services import groups as groups_svc
 from app.services import pot as pot_svc
 
@@ -55,9 +56,26 @@ def reject_request(request_id: str, current: dict = Depends(get_current_user)) -
     return groups_svc.reject_request(request_id, current["id"])
 
 
-@router.get("/{group_id}/pot")
+@router.get("/{group_id}/pot", response_model=PotDetail)
 def get_pot(group_id: str, week: str = "current") -> dict:
-    return pot_svc.group_pot(group_id, week=week)
+    return pot_svc.pot_detail(group_id, week=week)
+
+
+@router.put("/{group_id}/pot/conditions", response_model=PotDetail)
+def update_pot_conditions(
+    group_id: str,
+    body: PotConditionsUpdate,
+    week: str = "current",
+    current: dict = Depends(get_current_user),
+) -> dict:
+    pot_svc.update_conditions(
+        group_id=group_id,
+        week=week,
+        user_id=current["id"],
+        required_pledges=body.required_pledges,
+        stake_per_miss=body.stake_per_miss,
+    )
+    return pot_svc.pot_detail(group_id, week=week)
 
 
 @router.get("/{group_id}/members", response_model=list[GroupMemberDetail])
