@@ -10,6 +10,7 @@ import * as plansApi from '../../lib/api/plans';
 import * as roomApi from '../../lib/api/room';
 import * as usersApi from '../../lib/api/users';
 import { getOrCreateUserId } from '../../lib/userId';
+import { showToast } from '../ui/toast';
 
 export type DayState = 'planned' | 'checked-in' | 'missed' | 'locked' | 'unselected';
 export interface DayStatus { day: string; state: DayState; }
@@ -164,7 +165,7 @@ function summaryToGroup(s: groupsApi.GroupSummary): Group {
 
 function reportError(action: string, e: unknown): void {
   const msg = e instanceof Error ? e.message : 'Unknown error';
-  Alert.alert(action, msg);
+  showToast(`${action}: ${msg}`, 'error');
 }
 
 export function AppStateProvider({ children }: { children: ReactNode }) {
@@ -334,35 +335,67 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   const joinGroup = useCallback(async (groupId: string) => {
     if (!me?.gym_id) return;
+    const snapshot = groupsAtGym;
+    const prevMine = myGroupSummary;
+    const target = snapshot.find((g) => g.id === groupId);
+    if (!target) return;
+    const isOpen = target.joinType === 'open';
+
+    // Optimistic local mutation — UI updates before the network call returns.
+    const optimistic = snapshot.map((g) => {
+      if (g.id !== groupId) return g;
+      return isOpen
+        ? { ...g, isMember: true, members: g.members + 1 }
+        : { ...g, requested: true };
+    });
+    setGroupsAtGym(optimistic);
+    if (isOpen) setMyGroupSummary({ ...target, isMember: true, members: target.members + 1 });
+
     try {
-      const res = await groupsApi.joinGroup(groupId);
+      await groupsApi.joinGroup(groupId);
+      showToast(isOpen ? `Joined ${target.name}` : 'Request sent', 'success');
       const mine = await loadGroupsForGym(me.gym_id, me.id);
       await refreshGroupContext(mine?.id ?? null, mine?.isLeader);
       await loadPlans();
-      if (res.action === 'requested') {
-        Alert.alert('Request sent', 'The group leader will review your request.');
-      }
     } catch (e) {
+      // Roll back to the snapshot taken before the optimistic mutation.
+      setGroupsAtGym(snapshot);
+      setMyGroupSummary(prevMine);
       reportError('Could not join group', e);
     }
-  }, [loadGroupsForGym, loadPlans, refreshGroupContext, me]);
+  }, [groupsAtGym, loadGroupsForGym, loadPlans, refreshGroupContext, me, myGroupSummary]);
 
   const leaveGroup = useCallback(async () => {
     if (!myGroupSummary || !me?.gym_id) return;
+    const snapshotGroups = groupsAtGym;
+    const snapshotMine = myGroupSummary;
+    const willDelete = myGroupSummary.isLeader === true && myGroupSummary.members <= 1;
+
+    // Optimistic: drop my membership immediately so the UI feels instant.
+    if (willDelete) {
+      setGroupsAtGym(snapshotGroups.filter((g) => g.id !== snapshotMine.id));
+    } else {
+      setGroupsAtGym(
+        snapshotGroups.map((g) =>
+          g.id === snapshotMine.id ? { ...g, isMember: false, isLeader: false, members: Math.max(0, g.members - 1) } : g,
+        ),
+      );
+    }
+    setMyGroupSummary(null);
+    setGroupMembers([]);
+
     try {
-      const res = await groupsApi.leaveGroup(myGroupSummary.id);
+      const res = await groupsApi.leaveGroup(snapshotMine.id);
+      showToast(res.deleted ? `Deleted ${snapshotMine.name}` : `Left ${snapshotMine.name}`, 'success');
       const mine = await loadGroupsForGym(me.gym_id, me.id);
       await refreshGroupContext(mine?.id ?? null, mine?.isLeader);
       await loadPlans();
-      if (res.deleted) {
-        Alert.alert('Group deleted', 'You were the last member, so the group was deleted.');
-      } else if (res.promoted_user_id) {
-        Alert.alert('You left the group', 'A new leader has been assigned.');
-      }
     } catch (e) {
+      setGroupsAtGym(snapshotGroups);
+      setMyGroupSummary(snapshotMine);
       reportError('Could not leave group', e);
     }
-  }, [loadGroupsForGym, loadPlans, refreshGroupContext, me, myGroupSummary]);
+  }, [groupsAtGym, loadGroupsForGym, loadPlans, refreshGroupContext, me, myGroupSummary]);
 
   const refreshGroupsAtGym = useCallback(async () => {
     if (!me?.gym_id) return;
@@ -396,25 +429,33 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   }, [loadGroupsForGym, loadPlans, refreshGroupContext, me]);
 
   const approveRequest = useCallback(async (id: string) => {
+    const snapshot = joinRequests;
+    const target = snapshot.find((r) => r.id === id);
+    setJoinRequests((prev) => prev.filter((r) => r.id !== id));
     try {
       await groupsApi.approveRequest(id);
-      // Approved request → a new member joined; refresh members/pot too.
+      if (target) showToast(`Approved ${target.userName}`, 'success');
       await refreshGroupContext(myGroupSummary?.id ?? null, myGroupSummary?.isLeader);
     } catch (e) {
+      setJoinRequests(snapshot);
       reportError('Could not approve request', e);
     }
-  }, [refreshGroupContext, myGroupSummary]);
+  }, [joinRequests, refreshGroupContext, myGroupSummary]);
 
   const rejectRequest = useCallback(async (id: string) => {
+    const snapshot = joinRequests;
+    setJoinRequests((prev) => prev.filter((r) => r.id !== id));
     try {
       await groupsApi.rejectRequest(id);
+      showToast('Request declined', 'info');
       if (myGroupSummary?.id) {
         await loadInbox(myGroupSummary.id, myGroupSummary.isLeader);
       }
     } catch (e) {
+      setJoinRequests(snapshot);
       reportError('Could not reject request', e);
     }
-  }, [loadInbox, myGroupSummary]);
+  }, [joinRequests, loadInbox, myGroupSummary]);
 
   const toggleNextWeekDay = useCallback(async (i: number) => {
     try {
@@ -454,18 +495,31 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   }, [refreshGroupContext, myGroupSummary]);
 
   const checkInToday = useCallback(async () => {
+    const snapshotWeek = thisWeek;
+    const snapshotMe = me;
+    // Optimistic: flip today's planned/locked day to checked-in, bump ELO by 10.
+    const todayDow = new Date().getDay() === 0 ? 6 : new Date().getDay() - 1;
+    const todayState = thisWeek[todayDow]?.state;
+    if (todayState === 'planned' || todayState === 'locked') {
+      setThisWeek((week) => week.map((d, i) => (i === todayDow ? { ...d, state: 'checked-in' } : d)));
+      setMe((prev) => (prev ? { ...prev, elo: prev.elo + 10 } : prev));
+    }
+
     try {
       const res = await plansApi.checkInToday();
       setThisWeek(planToWeek(res.plan));
       setMe((prev) => (prev ? { ...prev, elo: res.new_elo } : prev));
+      showToast('Session counted · +10 ELO', 'success');
       await Promise.all([
         refreshGroupContext(myGroupSummary?.id ?? null, myGroupSummary?.isLeader),
         loadBadges(),
       ]);
     } catch (e) {
+      setThisWeek(snapshotWeek);
+      setMe(snapshotMe);
       reportError('Could not check in', e);
     }
-  }, [refreshGroupContext, myGroupSummary, loadBadges]);
+  }, [thisWeek, me, refreshGroupContext, myGroupSummary, loadBadges]);
 
   const updateDisplayName = useCallback(async (name: string) => {
     const trimmed = name.trim();

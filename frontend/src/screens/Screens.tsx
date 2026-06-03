@@ -4,6 +4,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { C, RADIUS, SPACE, tierForElo } from '../theme/tokens';
 import { Card, Btn, Chip, H1, Sub, Ring } from '../ui/components';
 import { DayPicker, JoinableDayRow } from '../ui/DayPicker';
+import { useRefreshControl } from '../ui/useRefresh';
 import { useAppState, DayStatus, Group } from '../state/AppState';
 
 const wrap = { padding: SPACE.lg, paddingTop: 56, paddingBottom: 40 } as const;
@@ -50,18 +51,28 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
 
 /* ---------------- Home ---------------- */
 export function Home({ onCheckIn, onPlan, onPot }: { onCheckIn: () => void; onPlan: () => void; onPot: () => void }) {
-  const { thisWeek, elo, streak, pot, checkInToday, todayIndex } = useAppState();
+  const { thisWeek, elo, streak, pot, checkInToday, todayIndex, displayName } = useAppState();
+  const refresh = useRefreshControl();
   const done = thisWeek.filter((d) => d.state === 'checked-in').length;
   const pledged = thisWeek.filter((d) => d.state === 'checked-in' || d.state === 'planned').length;
   const pct = pledged ? (done / pledged) * 100 : 0;
   const canCheck = todayIndex !== -1;
+  const firstName = displayName.split(' ')[0];
   return (
-    <ScrollView style={{ backgroundColor: C.bg }} contentContainerStyle={wrap}>
-      <View style={[styles.rowBetween, { marginBottom: 8 }]}>
-        <H1>This Week</H1>
-        <View style={styles.streakPill}><MaterialIcons name="local-fire-department" size={16} color={C.accent} /><Text style={styles.streakTxt}>{streak}</Text></View>
+    <ScrollView refreshControl={refresh} style={{ backgroundColor: C.bg }} contentContainerStyle={wrap}>
+      <View style={[styles.rowBetween, { marginBottom: 6 }]}>
+        <View style={{ flex: 1 }}>
+          <Sub style={{ marginBottom: 4 }}>Hi {firstName}</Sub>
+          <H1>This week</H1>
+        </View>
+        {streak > 0 && (
+          <View style={styles.streakPill}>
+            <MaterialIcons name="local-fire-department" size={16} color={C.accent} />
+            <Text style={styles.streakTxt}>{streak} wk</Text>
+          </View>
+        )}
       </View>
-      <Sub style={{ marginBottom: 16 }}>Monday, June 1 – Sunday, June 7</Sub>
+      <Sub style={{ marginBottom: 18 }}>Stay consistent. Your group is counting on you.</Sub>
 
       <Card style={{ marginBottom: 16 }}>
         <Text style={styles.label}>Your pledge</Text>
@@ -194,7 +205,7 @@ export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: (
           <Pressable onPress={onCancel}><MaterialIcons name="close" size={22} color={C.mutedFg} /></Pressable>
         </View>
         <Sub style={{ marginBottom: 16 }}>Pick the days you'll hit the gym. Your group is counting on you!</Sub>
-        <Card style={{ marginBottom: 16, backgroundColor: 'rgba(255,107,74,0.05)', borderColor: 'rgba(255,107,74,0.2)' }}>
+        <Card style={{ marginBottom: 16, backgroundColor: 'rgba(208,135,112,0.07)', borderColor: 'rgba(208,135,112,0.22)' }}>
           <View style={{ flexDirection: 'row', gap: 12 }}>
             <MaterialIcons name="schedule" size={20} color={C.accent} />
             <View style={{ flex: 1 }}><Text style={styles.cardTitle}>Locks Sunday 11:59pm</Text><Sub>Change your pledge until then. After that, it's locked in.</Sub></View>
@@ -231,6 +242,7 @@ export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: (
 /* ---------------- Group (with per-day join) ---------------- */
 export function GroupView({ onBrowse }: { onBrowse: () => void }) {
   const { groupName, nextWeek, addNextWeekDay, groupMembers, refreshGroupsAtGym } = useAppState();
+  const refresh = useRefreshControl();
   const [tab, setTab] = useState<'this' | 'next'>('this');
   const [joined, setJoined] = useState<string[]>([]);
   // Refetch each time this screen comes into view so other members' day-by-day
@@ -242,7 +254,7 @@ export function GroupView({ onBrowse }: { onBrowse: () => void }) {
     setJoined((j) => [...j, key]); addNextWeekDay(i);
   };
   return (
-    <ScrollView style={{ backgroundColor: C.bg }} contentContainerStyle={wrap}>
+    <ScrollView refreshControl={refresh} style={{ backgroundColor: C.bg }} contentContainerStyle={wrap}>
       <View style={[styles.rowBetween, { marginBottom: 16 }]}>
         <View><H1>{groupName}</H1>
           <View style={[styles.rowGap, { marginTop: 4 }]}><MaterialIcons name="group" size={16} color={C.mutedFg} /><Sub>{groupMembers.length} {groupMembers.length === 1 ? 'member' : 'members'}</Sub></View>
@@ -287,7 +299,7 @@ export function GroupView({ onBrowse }: { onBrowse: () => void }) {
       )}
 
       {tab === 'next' && (
-        <Card style={{ marginTop: 16, backgroundColor: 'rgba(255,107,74,0.05)', borderColor: 'rgba(255,107,74,0.2)' }}>
+        <Card style={{ marginTop: 16, backgroundColor: 'rgba(208,135,112,0.07)', borderColor: 'rgba(208,135,112,0.22)' }}>
           <Text style={styles.cardTitle}>Your next-week pledge so far</Text>
           <Sub style={{ marginBottom: 12 }}>{nextWeek.filter((d) => d.state === 'planned' || d.state === 'locked').length} sessions planned</Sub>
           <DayPicker days={nextWeek} />
@@ -312,6 +324,7 @@ export function NoGroup({ onBrowse }: { onBrowse: () => void }) {
 /* ---------------- Gym browser (open/private + leader inbox + create) ---------------- */
 export function GymBrowser({ onBack, onJoined }: { onBack: () => void; onJoined: () => void }) {
   const { gymName, groupId, groups, addGroup, joinGroup, leaveGroup, joinRequests, approveRequest, rejectRequest, refreshGroupsAtGym } = useAppState();
+  const refresh = useRefreshControl();
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState(''); const [stake, setStake] = useState('500');
   const [jt, setJt] = useState<'open' | 'request'>('open');
@@ -359,7 +372,7 @@ export function GymBrowser({ onBack, onJoined }: { onBack: () => void; onJoined:
   void aloneAndLeader; // available for future header hint
 
   return (
-    <ScrollView style={{ backgroundColor: C.bg }} contentContainerStyle={wrap}>
+    <ScrollView refreshControl={refresh} style={{ backgroundColor: C.bg }} contentContainerStyle={wrap}>
       <View style={[styles.rowBetween, { marginBottom: 16 }]}>
         <Pressable onPress={onBack} style={styles.rowGap}><MaterialIcons name="arrow-back" size={18} color={C.mutedFg} /><Sub>Back</Sub></Pressable>
         {joinRequests.length > 0 && (
@@ -393,7 +406,7 @@ export function GymBrowser({ onBack, onJoined }: { onBack: () => void; onJoined:
         </Card>
       )}
 
-      <Card style={{ marginBottom: 16, backgroundColor: 'rgba(168,225,12,0.05)', borderColor: 'rgba(168,225,12,0.2)' }}>
+      <Card style={{ marginBottom: 16, backgroundColor: 'rgba(138,177,125,0.07)', borderColor: 'rgba(138,177,125,0.22)' }}>
         <View style={{ flexDirection: 'row', gap: 12 }}>
           <MaterialIcons name="group" size={20} color={C.primary} />
           <View style={{ flex: 1 }}><Text style={styles.cardTitle}>One group per gym</Text><Sub>Leave your current group to join a different one.</Sub></View>
@@ -414,7 +427,7 @@ export function GymBrowser({ onBack, onJoined }: { onBack: () => void; onJoined:
           <Text style={[styles.label, { marginTop: 10, marginBottom: 6 }]}>Who can join?</Text>
           <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
             {(['open', 'request'] as const).map((opt) => (
-              <Pressable key={opt} onPress={() => setJt(opt)} style={[styles.jtOpt, jt === opt && { borderColor: C.primary, backgroundColor: 'rgba(168,225,12,0.05)' }]}>
+              <Pressable key={opt} onPress={() => setJt(opt)} style={[styles.jtOpt, jt === opt && { borderColor: C.primary, backgroundColor: 'rgba(138,177,125,0.07)' }]}>
                 <View style={styles.rowGap}><MaterialIcons name={opt === 'open' ? 'person-add' : 'lock'} size={16} color={C.ink} /><Text style={{ fontWeight: '600' }}>{opt === 'open' ? 'Open' : 'Private'}</Text></View>
                 <Sub>{opt === 'open' ? 'Anyone joins instantly' : 'You approve each request'}</Sub>
               </Pressable>
@@ -468,6 +481,7 @@ export function GymBrowser({ onBack, onJoined }: { onBack: () => void; onJoined:
 /* ---------------- Pot tracker ---------------- */
 export function PotTracker({ onBack }: { onBack: () => void }) {
   const { pot, groupMembers } = useAppState();
+  const refresh = useRefreshControl();
   const breakdown = groupMembers.map((m) => {
     const done = m.thisWeek.filter((d) => d.state === 'checked-in').length;
     const pledged = m.thisWeek.filter((d) =>
@@ -477,12 +491,12 @@ export function PotTracker({ onBack }: { onBack: () => void }) {
     return { name: m.name, done, pledged, risk };
   });
   return (
-    <ScrollView style={{ backgroundColor: C.bg }} contentContainerStyle={wrap}>
+    <ScrollView refreshControl={refresh} style={{ backgroundColor: C.bg }} contentContainerStyle={wrap}>
       <Pressable onPress={onBack} style={[styles.rowGap, { marginBottom: 16 }]}><MaterialIcons name="arrow-back" size={18} color={C.mutedFg} /><Sub>Back</Sub></Pressable>
       <H1 style={{ marginBottom: 4 }}>Weekly Pot</H1>
       <Sub style={{ marginBottom: 16 }}>Track the pot as it grows through the week</Sub>
       <Card style={{ marginBottom: 16 }}><LivePot amount={pot} /></Card>
-      <Card style={{ marginBottom: 16, backgroundColor: 'rgba(168,225,12,0.05)', borderColor: 'rgba(168,225,12,0.2)' }}>
+      <Card style={{ marginBottom: 16, backgroundColor: 'rgba(138,177,125,0.07)', borderColor: 'rgba(138,177,125,0.22)' }}>
         <View style={{ flexDirection: 'row', gap: 12 }}>
           <MaterialIcons name="info" size={20} color={C.primary} />
           <View style={{ flex: 1 }}><Text style={styles.cardTitle}>How it works</Text><Sub>You only lose stake for sessions you miss. At week's end the pot is shared among everyone who hit their pledge.</Sub></View>
@@ -521,6 +535,7 @@ const BADGE_CATALOG: { key: BadgeKey; name: string; icon: string }[] = [
 
 export function Progress({ onGymSpace }: { onGymSpace: () => void }) {
   const { elo, badges: badgeFlags } = useAppState();
+  const refresh = useRefreshControl();
   const tiers = [
     { name: 'Beginner', min: 0, max: 500 }, { name: 'Rookie', min: 500, max: 1000 },
     { name: 'Regular', min: 1000, max: 2000 }, { name: 'Mogger', min: 2000, max: Infinity },
@@ -530,7 +545,7 @@ export function Progress({ onGymSpace }: { onGymSpace: () => void }) {
   const pct = next ? ((elo - cur.min) / (next.min - cur.min)) * 100 : 100;
   const badges = BADGE_CATALOG.map((b) => ({ ...b, on: badgeFlags[b.key] }));
   return (
-    <ScrollView style={{ backgroundColor: C.bg }} contentContainerStyle={wrap}>
+    <ScrollView refreshControl={refresh} style={{ backgroundColor: C.bg }} contentContainerStyle={wrap}>
       <H1 style={{ marginBottom: 4 }}>Progress</H1>
       <Sub style={{ marginBottom: 16 }}>Track your growth and unlock rewards</Sub>
       <Card style={{ marginBottom: 16 }}>
@@ -551,7 +566,7 @@ export function Progress({ onGymSpace }: { onGymSpace: () => void }) {
           const current = i === ti;
           const icon = ['fitness-center', 'directions-run', 'sports-martial-arts', 'military-tech'][i];
           return (
-            <View key={t.name} style={[styles.ladderRow, i < tiers.length - 1 && { borderBottomWidth: 1, borderBottomColor: C.border }, current && { backgroundColor: 'rgba(168,225,12,0.08)' }]}>
+            <View key={t.name} style={[styles.ladderRow, i < tiers.length - 1 && { borderBottomWidth: 1, borderBottomColor: C.border }, current && { backgroundColor: 'rgba(138,177,125,0.10)' }]}>
               <View style={[styles.ladderIcon, { backgroundColor: reached ? C.primary : C.muted }]}>
                 <MaterialIcons name={icon as any} size={20} color={reached ? C.primaryFg : C.mutedFg} />
               </View>
@@ -577,7 +592,7 @@ export function Progress({ onGymSpace }: { onGymSpace: () => void }) {
           </Card>
         ))}
       </View>
-      <Card onPress={onGymSpace} style={{ backgroundColor: 'rgba(168,225,12,0.08)', borderColor: 'rgba(168,225,12,0.2)' }}>
+      <Card onPress={onGymSpace} style={{ backgroundColor: 'rgba(138,177,125,0.10)', borderColor: 'rgba(138,177,125,0.22)' }}>
         <View style={{ flexDirection: 'row', gap: 12 }}>
           <MaterialIcons name="grid-view" size={20} color={C.primary} />
           <View style={{ flex: 1 }}><Text style={styles.cardTitle}>Your Gym Space</Text><Sub>Tap to decorate your space with rewards you've unlocked</Sub></View>
@@ -673,10 +688,10 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 15, fontWeight: '600', color: C.ink },
   label: { fontSize: 13, fontWeight: '600', color: C.mutedFg },
   big: { fontSize: 22, fontWeight: '700', color: C.ink },
-  iconCircle: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(168,225,12,0.15)', alignItems: 'center', justifyContent: 'center' },
-  bigCircle: { width: 96, height: 96, borderRadius: 48, backgroundColor: 'rgba(168,225,12,0.15)', alignItems: 'center', justifyContent: 'center' },
+  iconCircle: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(138,177,125,0.16)', alignItems: 'center', justifyContent: 'center' },
+  bigCircle: { width: 96, height: 96, borderRadius: 48, backgroundColor: 'rgba(138,177,125,0.16)', alignItems: 'center', justifyContent: 'center' },
   footer: { padding: SPACE.lg, paddingBottom: 32, backgroundColor: C.bg, borderTopWidth: 1, borderTopColor: C.border },
-  streakPill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: 'rgba(255,107,74,0.1)', borderRadius: RADIUS.pill },
+  streakPill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: 'rgba(208,135,112,0.13)', borderRadius: RADIUS.pill },
   streakTxt: { fontWeight: '700', color: C.accent },
   tabBar: { flexDirection: 'row', gap: 8, backgroundColor: C.muted, borderRadius: RADIUS.md, padding: 4, marginBottom: 16 },
   tab: { flex: 1, paddingVertical: 8, borderRadius: RADIUS.sm, alignItems: 'center' },
