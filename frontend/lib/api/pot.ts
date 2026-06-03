@@ -25,16 +25,59 @@ export interface PotDetail {
   members: PotMember[];
 }
 
-export const getPotDetail = (group_id: string, week: 'current' | 'next' = 'current') =>
-  apiGet<PotDetail>(`/groups/${group_id}/pot?week=${week}`);
+/**
+ * Normalize whatever the server returns so older deployments (which serve the
+ * pre-conditions shape `{ total_elo, contributor_count }`) don't crash the UI.
+ * Every numeric field falls back to 0, every array to [], every flag to false.
+ */
+function normalizeMember(raw: any): PotMember {
+  return {
+    user_id: raw?.user_id ?? '',
+    display_name: raw?.display_name ?? 'Anonymous',
+    role: raw?.role === 'leader' ? 'leader' : 'member',
+    pledged_count: typeof raw?.pledged_count === 'number' ? raw.pledged_count : 0,
+    completed_count: typeof raw?.completed_count === 'number' ? raw.completed_count : 0,
+    missed_count: typeof raw?.missed_count === 'number' ? raw.missed_count : 0,
+    elo_at_risk: typeof raw?.elo_at_risk === 'number' ? raw.elo_at_risk : 0,
+    elo_lost_so_far: typeof raw?.elo_lost_so_far === 'number' ? raw.elo_lost_so_far : 0,
+    is_setter: !!raw?.is_setter,
+    is_on_track: !!raw?.is_on_track,
+  };
+}
 
-export const updatePotConditions = (
+function normalizeDetail(raw: any): PotDetail {
+  return {
+    group_id: raw?.group_id ?? '',
+    week_start: raw?.week_start ?? '',
+    setter_user_id: raw?.setter_user_id ?? null,
+    setter_display_name: raw?.setter_display_name ?? null,
+    required_pledges: typeof raw?.required_pledges === 'number' ? raw.required_pledges : 0,
+    stake_per_miss: typeof raw?.stake_per_miss === 'number' ? raw.stake_per_miss : 0,
+    is_finalized: !!raw?.is_finalized,
+    total_pot_elo:
+      typeof raw?.total_pot_elo === 'number'
+        ? raw.total_pot_elo
+        : typeof raw?.total_elo === 'number'
+          ? raw.total_elo
+          : 0,
+    members: Array.isArray(raw?.members) ? raw.members.map(normalizeMember) : [],
+  };
+}
+
+export const getPotDetail = async (group_id: string, week: 'current' | 'next' = 'current') => {
+  const raw = await apiGet<unknown>(`/groups/${group_id}/pot?week=${week}`);
+  return normalizeDetail(raw);
+};
+
+export const updatePotConditions = async (
   group_id: string,
   week: 'current' | 'next',
   required_pledges: number,
   stake_per_miss: number,
-) =>
-  apiPut<PotDetail>(
+) => {
+  const raw = await apiPut<unknown>(
     `/groups/${group_id}/pot/conditions?week=${week}`,
     { required_pledges, stake_per_miss },
   );
+  return normalizeDetail(raw);
+};

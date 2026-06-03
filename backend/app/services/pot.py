@@ -140,13 +140,13 @@ def pot_detail(group_id: str, week: str = "current") -> dict:
     # All plans for this week for those members (with embedded day states).
     plans = (
         sb.table("weekly_plans")
-        .select("user_id, plan_days(state)")
+        .select("user_id, is_locked, plan_days(state)")
         .eq("group_id", group_id)
         .eq("week_start", week_start.isoformat())
         .in_("user_id", user_ids if user_ids else [""])
         .execute()
     ).data or []
-    plan_by_user: dict[str, list[dict]] = {p["user_id"]: (p.get("plan_days") or []) for p in plans}
+    plan_by_user: dict[str, dict] = {p["user_id"]: p for p in plans}
 
     # Setter name for display.
     setter_name = None
@@ -160,14 +160,17 @@ def pot_detail(group_id: str, week: str = "current") -> dict:
     member_rows: list[dict] = []
     pot_total = 0
     for m in memberships:
-        days = plan_by_user.get(m["user_id"], [])
+        plan = plan_by_user.get(m["user_id"])
+        days = (plan or {}).get("plan_days") or []
+        is_locked = bool(plan and plan.get("is_locked"))
         pledged_count = sum(
             1 for d in days if d["state"] in ("planned", "locked", "checked-in", "missed")
         )
         completed_count = sum(1 for d in days if d["state"] == "checked-in")
         missed_count = sum(1 for d in days if d["state"] == "missed")
-        # Below-quota days count as auto-misses against the required total.
-        shortfall = max(0, required - pledged_count)
+        # Under-quota pledges only count as missed once the plan is locked —
+        # otherwise a fresh user (no plan yet) would show as "fully at risk".
+        shortfall = max(0, required - pledged_count) if is_locked else 0
         effective_missed = missed_count + shortfall
         elo_at_risk = required * stake
         elo_lost = effective_missed * stake
