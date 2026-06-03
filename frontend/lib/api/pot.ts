@@ -21,6 +21,7 @@ export interface PotDetail {
   required_pledges: number;
   stake_per_miss: number;
   is_finalized: boolean;
+  is_practice: boolean;
   total_pot_elo: number;
   members: PotMember[];
 }
@@ -54,6 +55,7 @@ function normalizeDetail(raw: any): PotDetail {
     required_pledges: typeof raw?.required_pledges === 'number' ? raw.required_pledges : 0,
     stake_per_miss: typeof raw?.stake_per_miss === 'number' ? raw.stake_per_miss : 0,
     is_finalized: !!raw?.is_finalized,
+    is_practice: !!raw?.is_practice,
     total_pot_elo:
       typeof raw?.total_pot_elo === 'number'
         ? raw.total_pot_elo

@@ -81,13 +81,36 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
    ╰─────────────────────────────────────────────────────────╯ */
 
 export function Home({ onCheckIn, onPlan, onPot }: { onCheckIn: () => void; onPlan: () => void; onPot: () => void }) {
-  const { thisWeek, elo, streak, pot, potCurrent, checkInToday, todayIndex, displayName } = useAppState();
+  const {
+    thisWeek, elo, streak, pot, potCurrent, checkInToday, displayName,
+    todayDow, thisWeekIsPractice, setThisWeekDays, advanceWeek, groupId,
+  } = useAppState();
   const refresh = useRefreshControl();
+  const [advancing, setAdvancing] = useState(false);
   const done = thisWeek.filter((d) => d.state === 'checked-in').length;
   const pledged = thisWeek.filter((d) => d.state === 'checked-in' || d.state === 'planned' || d.state === 'locked').length;
   const pct = pledged ? (done / pledged) * 100 : 0;
-  const canCheck = todayIndex !== -1;
+  const todayState = thisWeek[todayDow]?.state;
+  const canCheck = todayState === 'planned' || todayState === 'locked';
   const firstName = displayName.split(' ')[0];
+
+  // Practice (first) week: members pledge the days left after today, no stakes.
+  const practiceRemaining = Math.max(0, 6 - todayDow);
+  const practiceEditable = thisWeekIsPractice && practiceRemaining > 0;
+  const dulledDows = Array.from({ length: todayDow + 1 }, (_, i) => i); // today + past
+  const togglePractice = (i: number) => {
+    if (i <= todayDow) return;
+    const planned = new Set(
+      thisWeek.map((d, idx) => ((d.state === 'planned' || d.state === 'locked') ? idx : -1)).filter((x) => x !== -1),
+    );
+    if (planned.has(i)) planned.delete(i); else planned.add(i);
+    setThisWeekDays([...planned]);
+  };
+
+  const onAdvance = async () => {
+    setAdvancing(true);
+    try { await advanceWeek(); } finally { setAdvancing(false); }
+  };
 
   const totalAtStake = potCurrent ? potCurrent.members.reduce((s, m) => s + m.elo_at_risk, 0) : 0;
   const onTrack = potCurrent ? potCurrent.members.filter((m) => m.is_on_track).length : 0;
@@ -114,16 +137,28 @@ export function Home({ onCheckIn, onPlan, onPot }: { onCheckIn: () => void; onPl
           <Card padding={SPACE.xl}>
             <View style={[styles.rowBetween, { marginBottom: 16 }]}>
               <View>
-                <Eyebrow>This week</Eyebrow>
-                <Text style={styles.h2}>Your pledge</Text>
+                <View style={styles.rowGap}>
+                  <Eyebrow>This week</Eyebrow>
+                  {thisWeekIsPractice && <Chip text="Practice" tone="accent" compact />}
+                </View>
+                <Text style={styles.h2}>{thisWeekIsPractice ? 'Practice pledge' : 'Your pledge'}</Text>
               </View>
               <Ring progress={pct} size={68} thickness={6} label={done} sublabel={`/${pledged || 0}`} />
             </View>
-            <DayPicker days={thisWeek} />
+            <DayPicker
+              days={thisWeek}
+              editable={practiceEditable}
+              dulledDows={thisWeekIsPractice ? dulledDows : undefined}
+              onToggle={practiceEditable ? togglePractice : undefined}
+            />
             <Sub style={{ marginTop: 14 }}>
-              {pledged === 0 ? "No sessions pledged yet — plan next week." :
-               pledged - done > 0 ? `${pledged - done} more session${pledged - done === 1 ? '' : 's'} to go.` :
-               'All sessions done. Strong week.'}
+              {thisWeekIsPractice
+                ? (practiceRemaining > 0
+                    ? `Practice week — no ELO at stake. Tap the ${practiceRemaining} day${practiceRemaining === 1 ? '' : 's'} left to pledge. Plan next week as normal.`
+                    : 'Practice week — the real challenge starts next week. Plan it below.')
+                : pledged === 0 ? 'No sessions pledged yet — plan next week.'
+                : pledged - done > 0 ? `${pledged - done} more session${pledged - done === 1 ? '' : 's'} to go.`
+                : 'All sessions done. Strong week.'}
             </Sub>
           </Card>
         </FadeInItem>
@@ -174,6 +209,13 @@ export function Home({ onCheckIn, onPlan, onPot }: { onCheckIn: () => void; onPl
           <Btn label="Plan next week" variant="ghost" icon="event" onPress={onPlan} />
         </View>
       </View>
+
+      {groupId && (
+        <Pressable onPress={onAdvance} disabled={advancing} style={styles.devFab}>
+          <MaterialIcons name={advancing ? 'hourglass-empty' : 'fast-forward'} size={16} color={C.primaryFg} />
+          <Text style={styles.devFabText}>{advancing ? 'Jumping…' : 'Next week'}</Text>
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -311,7 +353,7 @@ export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: (
                 <View style={{ flex: 1 }}>
                   <H3>Next week's pot rules</H3>
                   <Sub style={{ marginTop: 2 }}>
-                    {potNext.required_pledges} {potNext.required_pledges === 1 ? 'pledge' : 'pledges'} · {potNext.stake_per_miss} ELO per miss · set by {potNext.setter_display_name || 'leader'}
+                    The group leader{potNext.setter_display_name ? ` (${potNext.setter_display_name})` : ''} set the conditions: {potNext.required_pledges} {potNext.required_pledges === 1 ? 'pledge' : 'pledges'} · {potNext.stake_per_miss} ELO per miss.
                   </Sub>
                 </View>
               </View>
@@ -464,9 +506,10 @@ function PotConditionsEditor({
   return (
     <Card padding={SPACE.xl} tone="sage">
       <View style={[styles.rowBetween, { marginBottom: 16 }]}>
-        <View>
+        <View style={{ flex: 1 }}>
           <Eyebrow>You're the leader</Eyebrow>
           <H3 style={{ marginTop: 4 }}>Next week's pot rules</H3>
+          <Sub style={{ marginTop: 4 }}>Only the group leader can set the conditions.</Sub>
         </View>
         <Chip text="Leader" tone="success" icon="auto-awesome" compact />
       </View>
@@ -584,7 +627,7 @@ export function NoGroup({ onBrowse }: { onBrowse: () => void }) {
    │ Gym browser — list + create + leader inbox               │
    ╰─────────────────────────────────────────────────────────╯ */
 
-export function GymBrowser({ onBack, onJoined }: { onBack: () => void; onJoined: () => void }) {
+export function GymBrowser({ onBack, onJoined, onCreated }: { onBack: () => void; onJoined: () => void; onCreated: () => void }) {
   const { gymName, groupId, groups, addGroup, joinGroup, leaveGroup, joinRequests, approveRequest, rejectRequest, refreshGroupsAtGym } = useAppState();
   const refresh = useRefreshControl();
   const [creating, setCreating] = useState(false);
@@ -613,7 +656,7 @@ export function GymBrowser({ onBack, onJoined }: { onBack: () => void; onJoined:
       stake_per_miss: stakeMiss,
     });
     setCreating(false); setName('');
-    onJoined();
+    onCreated();
   };
   const onLeave = (g: Group) => {
     const sole = g.isLeader === true && g.members <= 1;
@@ -847,18 +890,20 @@ export function PotTracker({ onBack }: { onBack: () => void }) {
           <Card padding={SPACE.xl}>
             <View style={styles.rowBetween}>
               <H3>This week's rules</H3>
-              {potCurrent.is_finalized && <Chip text="Frozen" tone="neutral" compact />}
+              {potCurrent.is_practice
+                ? <Chip text="Practice" tone="accent" compact />
+                : potCurrent.is_finalized && <Chip text="Frozen" tone="neutral" compact />}
             </View>
             <View style={{ marginTop: 18, gap: 14 }}>
               <RuleRow label="Required pledges" value={String(potCurrent.required_pledges)} />
               <RuleRow label="Stake per miss" value={`${potCurrent.stake_per_miss} ELO`} />
               <RuleRow label="Total at risk / person" value={`${(potCurrent.required_pledges * potCurrent.stake_per_miss).toLocaleString()} ELO`} accent />
             </View>
-            {potCurrent.setter_display_name && (
-              <Sub style={{ marginTop: 18 }}>
-                Set by {potCurrent.setter_display_name} (leader)
-              </Sub>
-            )}
+            <Sub style={{ marginTop: 18 }}>
+              {potCurrent.is_practice
+                ? 'Practice week — no ELO at stake. The real pot starts next week.'
+                : `The group leader${potCurrent.setter_display_name ? ` (${potCurrent.setter_display_name})` : ''} set these conditions.`}
+            </Sub>
           </Card>
         </FadeInItem>
 
@@ -1180,6 +1225,14 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(27,23,20,0.08)',
     alignItems: 'center', justifyContent: 'center',
   },
+
+  devFab: {
+    position: 'absolute', top: 52, right: SPACE.xl,
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: 12, height: 34, borderRadius: RADIUS.pill,
+    backgroundColor: C.ink, opacity: 0.9,
+  },
+  devFabText: { fontFamily: FONT.semibold, fontSize: 12, color: C.primaryFg, letterSpacing: 0.2 },
 
   iconChip: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   closeBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: C.card, borderWidth: 1, borderColor: C.borderHi, alignItems: 'center', justifyContent: 'center' },

@@ -51,7 +51,7 @@ export default function GymJamApp() {
       case 'group':        return groupId
                               ? <GroupView onBrowse={() => setScreen('gym-browser')} />
                               : <NoGroup onBrowse={() => setScreen('gym-browser')} />;
-      case 'gym-browser':  return <GymBrowser onBack={() => setScreen(groupId ? 'group' : 'home')} onJoined={() => setScreen('home')} />;
+      case 'gym-browser':  return <GymBrowser onBack={() => setScreen(groupId ? 'group' : 'home')} onJoined={() => setScreen('home')} onCreated={() => setScreen('group')} />;
       case 'pot-tracker':  return <PotTracker onBack={() => setScreen('home')} />;
       case 'progress':     return <Progress onGymSpace={() => setScreen('gym-space')} />;
       case 'gym-space':    return <GymSpace onBack={() => setScreen('progress')} />;

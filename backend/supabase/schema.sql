@@ -95,10 +95,17 @@ create table if not exists pot_conditions (
     stake_per_miss integer not null default 100
         check (stake_per_miss >= 0),
     is_finalized boolean not null default false,
+    -- The first week after a group is created is a no-stakes "practice" week.
+    is_practice boolean not null default false,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now(),
     primary key (group_id, week_start)
 );
+
+-- Backfill for existing deployments (the create-table above is skipped if the
+-- table already exists, so add the column explicitly).
+alter table pot_conditions
+    add column if not exists is_practice boolean not null default false;
 
 drop trigger if exists pot_conditions_updated_at on pot_conditions;
 create trigger pot_conditions_updated_at
@@ -116,6 +123,15 @@ create table if not exists user_room_items (
 -- A slot can only hold one item per user.
 create unique index if not exists user_room_items_unique_slot
     on user_room_items(user_id, slot);
+
+-- Single-row development clock. `offset_days` shifts the app's notion of "today"
+-- forward (in whole weeks) so the week-by-week flow can be demoed on demand.
+create table if not exists dev_clock (
+    id boolean primary key default true check (id),
+    offset_days integer not null default 0
+);
+insert into dev_clock (id, offset_days) values (true, 0)
+    on conflict (id) do nothing;
 
 ------------------------------------------------------------
 -- Indexes
@@ -182,3 +198,4 @@ alter table weekly_plans        disable row level security;
 alter table plan_days           disable row level security;
 alter table pot_conditions      disable row level security;
 alter table user_room_items     disable row level security;
+alter table dev_clock           disable row level security;

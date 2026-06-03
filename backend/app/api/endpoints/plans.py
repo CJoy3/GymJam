@@ -29,6 +29,13 @@ def set_next_week_days(
     return plans_svc.set_planned_days(current["id"], body.planned_days)
 
 
+@router.post("/me/current/set", response_model=WeeklyPlan)
+def set_current_week_days(
+    body: SetPlannedDaysBody, current: dict = Depends(get_current_user)
+) -> dict:
+    return plans_svc.set_current_week_days(current["id"], body.planned_days)
+
+
 @router.post("/me/next/lock", response_model=WeeklyPlan)
 def lock_next_week(current: dict = Depends(get_current_user)) -> dict:
     return plans_svc.lock_next_week(current["id"])

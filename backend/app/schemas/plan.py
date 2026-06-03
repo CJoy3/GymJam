@@ -18,12 +18,14 @@ class WeeklyPlan(BaseModel):
     week_start: date
     is_locked: bool
     stake_elo: int
+    is_practice: bool = False
     days: list[PlanDay]
 
 
 class TwoWeekView(BaseModel):
     this_week: WeeklyPlan
     next_week: WeeklyPlan
+    today_dow: int = Field(ge=0, le=6)
 
 
 class CheckInResult(BaseModel):

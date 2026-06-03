@@ -37,6 +37,7 @@ def _defaults_for(group_id: str, week_start: date, setter: str | None = None) ->
         "required_pledges": 3,
         "stake_per_miss": 100,
         "is_finalized": False,
+        "is_practice": False,
     }
 
 
@@ -101,6 +102,8 @@ def seed_conditions(
     setter_user_id: str,
     required_pledges: int,
     stake_per_miss: int,
+    is_finalized: bool = False,
+    is_practice: bool = False,
 ) -> None:
     """Called by group creation to seed initial pot conditions for a week.
     Idempotent — won't overwrite an existing row."""
@@ -114,16 +117,20 @@ def seed_conditions(
     )
     if existing and existing.data:
         return
-    _safe_exec(
-        sb.table("pot_conditions").insert({
-            "group_id": group_id,
-            "week_start": week_start.isoformat(),
-            "setter_user_id": setter_user_id,
-            "required_pledges": required_pledges,
-            "stake_per_miss": stake_per_miss,
-            "is_finalized": False,
-        })
-    )
+    payload = {
+        "group_id": group_id,
+        "week_start": week_start.isoformat(),
+        "setter_user_id": setter_user_id,
+        "required_pledges": required_pledges,
+        "stake_per_miss": stake_per_miss,
+        "is_finalized": is_finalized,
+        "is_practice": is_practice,
+    }
+    inserted = _safe_exec(sb.table("pot_conditions").insert(payload))
+    if not inserted:
+        # `is_practice` column may not exist yet on older schemas — retry without it.
+        payload.pop("is_practice", None)
+        _safe_exec(sb.table("pot_conditions").insert(payload))
 
 
 def update_conditions(
@@ -185,6 +192,7 @@ def pot_detail(group_id: str, week: str = "current") -> dict:
     cond = _ensure_conditions(group_id, week_start)
     required = cond.get("required_pledges", 3)
     stake = cond.get("stake_per_miss", 100)
+    is_practice = bool(cond.get("is_practice"))
 
     sb = get_supabase()
 
@@ -256,6 +264,7 @@ def pot_detail(group_id: str, week: str = "current") -> dict:
         "required_pledges": required,
         "stake_per_miss": stake,
         "is_finalized": bool(cond.get("is_finalized")),
+        "is_practice": is_practice,
         "total_pot_elo": pot_total,
         "members": member_rows,
     }

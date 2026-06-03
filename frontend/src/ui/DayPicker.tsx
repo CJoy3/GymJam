@@ -7,12 +7,20 @@ import type { DayStatus } from '../state/AppState';
 const LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
 export function DayPicker({
-  days, editable = false, onToggle,
-}: { days: DayStatus[]; editable?: boolean; onToggle?: (i: number) => void }) {
+  days, editable = false, onToggle, dulledDows,
+}: {
+  days: DayStatus[];
+  editable?: boolean;
+  onToggle?: (i: number) => void;
+  dulledDows?: number[];
+}) {
+  const dulled = new Set(dulledDows ?? []);
   return (
     <View style={{ flexDirection: 'row', gap: 6 }}>
       {days.map((d, i) => {
-        const disabled = !editable || d.state === 'locked' || d.state === 'checked-in' || d.state === 'missed';
+        const isDulled = dulled.has(i);
+        const disabled = isDulled || !editable
+          || d.state === 'locked' || d.state === 'checked-in' || d.state === 'missed';
         const s = stateStyle(d.state);
         return (
           <Pressable
@@ -24,7 +32,7 @@ export function DayPicker({
               alignItems: 'center', justifyContent: 'center',
               borderWidth: s.borderWidth, borderColor: s.border, backgroundColor: s.bg,
               gap: 3,
-            }, pressed && !disabled && { opacity: 0.78 }]}
+            }, isDulled && { opacity: 0.35 }, pressed && !disabled && { opacity: 0.78 }]}
           >
             <Text style={{ fontFamily: FONT.bold, fontSize: 11, color: s.fg, letterSpacing: 0.6 }}>{LABELS[i]}</Text>
             {d.state === 'checked-in' && <MaterialIcons name="check" size={16} color={s.fg} />}
