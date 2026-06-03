@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, Pressable, TextInput, StyleSheet } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Alert, View, Text, ScrollView, Pressable, TextInput, StyleSheet } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { C, RADIUS, SPACE, tierForElo } from '../theme/tokens';
 import { Card, Btn, Chip, H1, Sub, Ring } from '../ui/components';
@@ -150,8 +150,42 @@ function Stat({ n, l, color = C.ink }: { n: string; l: string; color?: string })
 
 /* ---------------- Plan next week ---------------- */
 export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: () => void }) {
-  const { nextWeek, toggleNextWeekDay, lockNextWeek, groupName } = useAppState();
-  const sel = nextWeek.filter((d) => d.state === 'planned').length;
+  const { nextWeek, setPlannedDays, lockNextWeek, groupName } = useAppState();
+
+  // Local selection seeded from the persisted plan. Mutating this is free
+  // (no network); we only commit when the user taps "Lock in my week".
+  const [local, setLocal] = useState<DayStatus['state'][]>(() => nextWeek.map((d) => d.state));
+  const [saving, setSaving] = useState(false);
+  // Re-seed if the server-side plan changes underneath us (e.g. another device).
+  useEffect(() => {
+    if (!saving) setLocal(nextWeek.map((d) => d.state));
+  }, [nextWeek, saving]);
+
+  const sel = local.filter((s) => s === 'planned').length;
+  const editableDays: DayStatus[] = local.map((state, i) => ({ day: LABELS[i], state }));
+
+  const toggleLocal = (i: number) => {
+    setLocal((arr) => arr.map((s, idx) => {
+      if (idx !== i) return s;
+      if (s === 'locked' || s === 'checked-in' || s === 'missed') return s;
+      return s === 'planned' ? 'unselected' : 'planned';
+    }));
+  };
+
+  const commitAndLock = async () => {
+    setSaving(true);
+    try {
+      const days = local
+        .map((s, i) => (s === 'planned' ? i : -1))
+        .filter((i): i is number => i !== -1);
+      await setPlannedDays(days);
+      await lockNextWeek();
+      onDone();
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <View style={{ flex: 1, backgroundColor: C.bg }}>
       <ScrollView contentContainerStyle={[wrap, { paddingBottom: 140 }]}>
@@ -171,7 +205,7 @@ export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: (
             <Text style={styles.label}>Choose your days</Text>
             <Text style={{ color: C.primary, fontWeight: '600' }}>{sel} {sel === 1 ? 'day' : 'days'}</Text>
           </View>
-          <DayPicker days={nextWeek} editable onToggle={toggleNextWeekDay} />
+          <DayPicker days={editableDays} editable onToggle={toggleLocal} />
           {sel > 0 && (
             <View style={{ borderTopWidth: 1, borderTopColor: C.border, marginTop: 16, paddingTop: 16 }}>
               <Sub>Your stake this week</Sub>
@@ -188,7 +222,7 @@ export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: (
         </Card>
       </ScrollView>
       <View style={styles.footer}>
-        <Btn label="Lock in my week" disabled={sel === 0} onPress={() => { lockNextWeek(); onDone(); }} />
+        <Btn label={saving ? 'Saving…' : 'Lock in my week'} disabled={sel === 0 || saving} onPress={commitAndLock} />
       </View>
     </View>
   );
@@ -196,9 +230,12 @@ export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: (
 
 /* ---------------- Group (with per-day join) ---------------- */
 export function GroupView({ onBrowse }: { onBrowse: () => void }) {
-  const { groupName, nextWeek, addNextWeekDay, groupMembers } = useAppState();
+  const { groupName, nextWeek, addNextWeekDay, groupMembers, refreshGroupsAtGym } = useAppState();
   const [tab, setTab] = useState<'this' | 'next'>('this');
   const [joined, setJoined] = useState<string[]>([]);
+  // Refetch each time this screen comes into view so other members' day-by-day
+  // pledges show up without an app restart.
+  useEffect(() => { refreshGroupsAtGym(); }, [refreshGroupsAtGym]);
   const joinDay = (member: string, i: number) => {
     const key = `${member}-${i}`;
     if (joined.includes(key)) return;
@@ -272,14 +309,22 @@ export function NoGroup({ onBrowse }: { onBrowse: () => void }) {
   );
 }
 
-/* ---------------- Gym browser (open/request + leader inbox + create) ---------------- */
+/* ---------------- Gym browser (open/private + leader inbox + create) ---------------- */
 export function GymBrowser({ onBack, onJoined }: { onBack: () => void; onJoined: () => void }) {
-  const { gymName, groupId, groups, addGroup, joinGroup, leaveGroup, joinRequests, approveRequest, rejectRequest } = useAppState();
+  const { gymName, groupId, groups, addGroup, joinGroup, leaveGroup, joinRequests, approveRequest, rejectRequest, refreshGroupsAtGym } = useAppState();
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState(''); const [stake, setStake] = useState('500');
   const [jt, setJt] = useState<'open' | 'request'>('open');
   const [inbox, setInbox] = useState(false);
   const inGroup = groupId !== null;
+  // Refresh whenever the browser is opened so new groups, member counts,
+  // and join requests show up live.
+  useEffect(() => { refreshGroupsAtGym(); }, [refreshGroupsAtGym]);
+
+  // The current group we're a member of (only one allowed), used to
+  // decide whether "Leave" should warn about deleting the group.
+  const myGroup = groups.find((g) => g.isMember);
+  const aloneAndLeader = !!myGroup && myGroup.isLeader === true && myGroup.members <= 1;
 
   const join = async (g: Group) => {
     if (inGroup) return;
@@ -296,6 +341,22 @@ export function GymBrowser({ onBack, onJoined }: { onBack: () => void; onJoined:
     setCreating(false); setName('');
     onJoined();
   };
+  const onLeavePress = (g: Group) => {
+    const sole = g.isLeader === true && g.members <= 1;
+    if (sole) {
+      Alert.alert(
+        'Delete group?',
+        'You are the only member, so leaving will delete the group. Are you sure?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Delete', style: 'destructive', onPress: () => leaveGroup() },
+        ],
+      );
+    } else {
+      leaveGroup();
+    }
+  };
+  void aloneAndLeader; // available for future header hint
 
   return (
     <ScrollView style={{ backgroundColor: C.bg }} contentContainerStyle={wrap}>
@@ -354,7 +415,7 @@ export function GymBrowser({ onBack, onJoined }: { onBack: () => void; onJoined:
           <View style={{ flexDirection: 'row', gap: 8, marginBottom: 14 }}>
             {(['open', 'request'] as const).map((opt) => (
               <Pressable key={opt} onPress={() => setJt(opt)} style={[styles.jtOpt, jt === opt && { borderColor: C.primary, backgroundColor: 'rgba(168,225,12,0.05)' }]}>
-                <View style={styles.rowGap}><MaterialIcons name={opt === 'open' ? 'person-add' : 'lock'} size={16} color={C.ink} /><Text style={{ fontWeight: '600' }}>{opt === 'open' ? 'Open' : 'Request'}</Text></View>
+                <View style={styles.rowGap}><MaterialIcons name={opt === 'open' ? 'person-add' : 'lock'} size={16} color={C.ink} /><Text style={{ fontWeight: '600' }}>{opt === 'open' ? 'Open' : 'Private'}</Text></View>
                 <Sub>{opt === 'open' ? 'Anyone joins instantly' : 'You approve each request'}</Sub>
               </Pressable>
             ))}
@@ -380,7 +441,7 @@ export function GymBrowser({ onBack, onJoined }: { onBack: () => void; onJoined:
                     <Text style={styles.cardTitle}>{g.name}</Text>
                     {isJoined && <Chip text="Joined" tone="primary" />}
                     {g.isLeader && <Chip text="Leader" tone="accent" />}
-                    <Chip text={g.joinType === 'open' ? 'Open' : 'Request'} />
+                    <Chip text={g.joinType === 'open' ? 'Open' : 'Private'} />
                   </View>
                   <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
                     <Chip text={`${g.members} members`} /><Chip text={g.tier} tone="primary" />
@@ -388,8 +449,13 @@ export function GymBrowser({ onBack, onJoined }: { onBack: () => void; onJoined:
                   </View>
                 </View>
               </View>
-              {isJoined ? <Btn label="Leave Group" variant="secondary" onPress={leaveGroup} />
-                : pending ? <Btn label="Request pending" variant="secondary" disabled />
+              {isJoined ? (
+                <Btn
+                  label={g.isLeader && g.members <= 1 ? 'Delete Group' : 'Leave Group'}
+                  variant="secondary"
+                  onPress={() => onLeavePress(g)}
+                />
+              ) : pending ? <Btn label="Request pending" variant="secondary" disabled />
                   : <Btn label={!canAct ? 'Already in a group' : g.joinType === 'open' ? 'Join Group' : 'Request to join'} variant={canAct ? 'primary' : 'secondary'} disabled={!canAct} onPress={() => join(g)} />}
             </Card>
           );

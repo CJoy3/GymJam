@@ -85,9 +85,13 @@ interface AppStateShape {
   nextWeek: DayStatus[];
   todayIndex: number;
   toggleNextWeekDay: (i: number) => Promise<void>;
+  setPlannedDays: (days: number[]) => Promise<void>;
   lockNextWeek: () => Promise<void>;
   addNextWeekDay: (i: number) => Promise<void>;
   checkInToday: () => Promise<void>;
+
+  // Refresh on demand (used by screens that come back into focus)
+  refreshGroupsAtGym: () => Promise<void>;
 
   // Pot
   pot: number;
@@ -346,14 +350,29 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const leaveGroup = useCallback(async () => {
     if (!myGroupSummary || !me?.gym_id) return;
     try {
-      await groupsApi.leaveGroup(myGroupSummary.id);
+      const res = await groupsApi.leaveGroup(myGroupSummary.id);
       const mine = await loadGroupsForGym(me.gym_id, me.id);
       await refreshGroupContext(mine?.id ?? null, mine?.isLeader);
       await loadPlans();
+      if (res.deleted) {
+        Alert.alert('Group deleted', 'You were the last member, so the group was deleted.');
+      } else if (res.promoted_user_id) {
+        Alert.alert('You left the group', 'A new leader has been assigned.');
+      }
     } catch (e) {
       reportError('Could not leave group', e);
     }
   }, [loadGroupsForGym, loadPlans, refreshGroupContext, me, myGroupSummary]);
+
+  const refreshGroupsAtGym = useCallback(async () => {
+    if (!me?.gym_id) return;
+    try {
+      const mine = await loadGroupsForGym(me.gym_id, me.id);
+      await refreshGroupContext(mine?.id ?? null, mine?.isLeader);
+    } catch {
+      // best-effort refresh
+    }
+  }, [loadGroupsForGym, refreshGroupContext, me]);
 
   const addGroup = useCallback(async (g: {
     name: string;
@@ -404,6 +423,16 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       await refreshGroupContext(myGroupSummary?.id ?? null, myGroupSummary?.isLeader);
     } catch (e) {
       reportError('Could not update plan', e);
+    }
+  }, [refreshGroupContext, myGroupSummary]);
+
+  const setPlannedDays = useCallback(async (days: number[]) => {
+    try {
+      const plan = await plansApi.setPlannedDays(days);
+      setNextWeek(planToWeek(plan));
+      await refreshGroupContext(myGroupSummary?.id ?? null, myGroupSummary?.isLeader);
+    } catch (e) {
+      reportError('Could not save plan', e);
     }
   }, [refreshGroupContext, myGroupSummary]);
 
@@ -490,9 +519,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       nextWeek,
       todayIndex: todayIndexForWeek(thisWeek),
       toggleNextWeekDay,
+      setPlannedDays,
       addNextWeekDay,
       lockNextWeek,
       checkInToday,
+
+      refreshGroupsAtGym,
 
       pot,
 
@@ -512,8 +544,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   }, [
     addGroup, addNextWeekDay, approveRequest, badges, bootstrap, checkInToday, groupMembers,
     groupsAtGym, gyms, joinGroup, joinRequests, leaveGroup, loadBadges, loadMembers,
-    lockNextWeek, me, myGroupSummary, nextWeek, placeRoomItem, pot, ready, rejectRequest,
-    reloading, roomItems, setGym, thisWeek, toggleNextWeekDay, updateDisplayName,
+    lockNextWeek, me, myGroupSummary, nextWeek, placeRoomItem, pot, ready, refreshGroupsAtGym,
+    rejectRequest, reloading, roomItems, setGym, setPlannedDays, thisWeek, toggleNextWeekDay,
+    updateDisplayName,
   ]);
 
   // tier is purely a function of elo; expose for callers that want it

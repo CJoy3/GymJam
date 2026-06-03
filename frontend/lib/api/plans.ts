@@ -34,6 +34,9 @@ export const getMyPlans = () => apiGet<TwoWeekView>('/plans/me');
 export const toggleNextDay = (dow: number) =>
   apiPost<WeeklyPlan>(`/plans/me/next/days/${dow}/toggle`);
 
+export const setPlannedDays = (planned_days: number[]) =>
+  apiPost<WeeklyPlan>('/plans/me/next/set', { planned_days });
+
 export const lockNextWeek = () =>
   apiPost<WeeklyPlan>('/plans/me/next/lock');
 
