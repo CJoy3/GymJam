@@ -126,18 +126,33 @@ def create_group(
 ) -> dict:
     if current_membership(creator_id):
         raise HTTPException(status_code=409, detail="Leave your current group first")
+    # Validate caller-supplied pot defaults so we fail loud, not via DB-side check.
+    required_pledges = max(1, min(7, int(required_pledges or 3)))
+    stake_per_miss = max(0, int(stake_per_miss or 100))
+
     sb = get_supabase()
-    grp = (
-        sb.table("groups")
-        .insert({
-            "gym_id": gym_id,
-            "name": name,
-            "weekly_stake_elo": weekly_stake_elo,
-            "join_type": join_type,
-            "leader_id": creator_id,
-        })
-        .execute()
-    )
+    # Try inserting WITH the new columns first; if the schema is old, retry
+    # without them so creation still works (the values live in pot_conditions
+    # as a backup in that case).
+    base_payload = {
+        "gym_id": gym_id,
+        "name": name,
+        "weekly_stake_elo": weekly_stake_elo,
+        "join_type": join_type,
+        "leader_id": creator_id,
+    }
+    full_payload = {
+        **base_payload,
+        "default_required_pledges": required_pledges,
+        "default_stake_per_miss": stake_per_miss,
+    }
+    grp = None
+    try:
+        grp = sb.table("groups").insert(full_payload).execute()
+    except Exception:
+        grp = None
+    if not grp or not grp.data:
+        grp = sb.table("groups").insert(base_payload).execute()
     if not grp.data:
         raise HTTPException(status_code=500, detail="Failed to create group")
     group = grp.data[0]
