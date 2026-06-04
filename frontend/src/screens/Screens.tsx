@@ -83,7 +83,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
 export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => void; onPlan: () => void; onPot: () => void; onGroup: () => void }) {
   const {
     thisWeek, elo, streak, pot, potCurrent, checkInToday, displayName,
-    todayDow, thisWeekIsPractice, setThisWeekDays, advanceWeek, groupId,
+    todayDow, thisWeekIsPractice, setThisWeekDays, toggleWeek, weekSimulated, groupId,
   } = useAppState();
   const refresh = useRefreshControl();
   const [advancing, setAdvancing] = useState(false);
@@ -109,7 +109,7 @@ export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => v
 
   const onAdvance = async () => {
     setAdvancing(true);
-    try { await advanceWeek(); } finally { setAdvancing(false); }
+    try { await toggleWeek(); } finally { setAdvancing(false); }
   };
 
   const totalAtStake = potCurrent ? potCurrent.members.reduce((s, m) => s + m.elo_at_risk, 0) : 0;
@@ -212,8 +212,14 @@ export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => v
 
       {groupId && (
         <Pressable onPress={onAdvance} disabled={advancing} style={styles.devFab}>
-          <MaterialIcons name={advancing ? 'hourglass-empty' : 'fast-forward'} size={16} color={C.primaryFg} />
-          <Text style={styles.devFabText}>{advancing ? 'Jumping…' : 'Next week'}</Text>
+          <MaterialIcons
+            name={advancing ? 'hourglass-empty' : weekSimulated ? 'fast-rewind' : 'fast-forward'}
+            size={16}
+            color={C.primaryFg}
+          />
+          <Text style={styles.devFabText}>
+            {advancing ? 'Jumping…' : weekSimulated ? 'Previous week' : 'Next week'}
+          </Text>
         </Pressable>
       )}
     </View>
@@ -277,8 +283,10 @@ function SimpleStat({ label, value, color = C.ink }: { label: string; value: str
 export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: () => void }) {
   const {
     nextWeek, setPlannedDays, groupName, potNext, updatePotConditions,
-    isLeader, userId, groupMembers,
+    userId, groupMembers,
   } = useAppState();
+  // The rule setter rotates weekly — only the setter for next week may edit it.
+  const isNextSetter = !!potNext && potNext.setter_user_id != null && potNext.setter_user_id === userId;
   const [local, setLocal] = useState<DayStatus['state'][]>(() => nextWeek.map((d) => d.state));
   const [saving, setSaving] = useState(false);
   useEffect(() => { if (!saving) setLocal(nextWeek.map((d) => d.state)); }, [nextWeek, saving]);
@@ -338,12 +346,12 @@ export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: (
           </Sub>
         </FadeInItem>
 
-        {isLeader && (
+        {isNextSetter && (
           <FadeInItem delay={80} style={{ marginTop: 24 }}>
             <PotConditionsEditor potNext={potNext} onSave={updatePotConditions} />
           </FadeInItem>
         )}
-        {!isLeader && potNext && (
+        {!isNextSetter && potNext && (
           <FadeInItem delay={80} style={{ marginTop: 24 }}>
             <Card padding={SPACE.lg} tone="default">
               <View style={styles.rowGap}>
@@ -353,7 +361,7 @@ export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: (
                 <View style={{ flex: 1 }}>
                   <H3>Next week's pot rules</H3>
                   <Sub style={{ marginTop: 2 }}>
-                    The group leader{potNext.setter_display_name ? ` (${potNext.setter_display_name})` : ''} set the conditions: {potNext.required_pledges} {potNext.required_pledges === 1 ? 'pledge' : 'pledges'} · {(potNext.required_pledges * potNext.stake_per_miss).toLocaleString()} ELO at stake ({potNext.stake_per_miss} per miss).
+                    {potNext.setter_display_name || 'A group member'} is this week's rule setter (the role rotates weekly): {potNext.required_pledges} {potNext.required_pledges === 1 ? 'pledge' : 'pledges'} · {(potNext.required_pledges * potNext.stake_per_miss).toLocaleString()} ELO at stake ({potNext.stake_per_miss} per miss).
                   </Sub>
                 </View>
               </View>
@@ -479,8 +487,9 @@ function MemberPlanRow({ days, highlightDows }: { days: DayStatus[]; highlightDo
 }
 
 /**
- * Leader-only editor for next-week pot rules. Visibility is controlled by the
- * caller (PlanWeek only renders this when isLeader=true).
+ * Editor for next-week pot rules, shown only to the current rotational rule
+ * setter. Visibility is controlled by the caller (PlanWeek renders this only
+ * when the logged-in user is next week's setter).
  */
 function PotConditionsEditor({
   potNext, onSave,
@@ -511,11 +520,11 @@ function PotConditionsEditor({
     <Card padding={SPACE.xl} tone="sage">
       <View style={[styles.rowBetween, { marginBottom: 16 }]}>
         <View style={{ flex: 1 }}>
-          <Eyebrow>You're the leader</Eyebrow>
+          <Eyebrow>Your turn this week</Eyebrow>
           <H3 style={{ marginTop: 4 }}>Next week's pot rules</H3>
-          <Sub style={{ marginTop: 4 }}>Only the group leader can set the conditions.</Sub>
+          <Sub style={{ marginTop: 4 }}>The rule setter rotates weekly — it's your turn to set next week's conditions.</Sub>
         </View>
-        <Chip text="Leader" tone="success" icon="auto-awesome" compact />
+        <Chip text="Rule setter" tone="success" icon="autorenew" compact />
       </View>
       <View style={{ flexDirection: 'row', gap: 12 }}>
         <View style={{ flex: 1 }}>
@@ -539,9 +548,10 @@ function PotConditionsEditor({
    ╰─────────────────────────────────────────────────────────╯ */
 
 export function GroupView({ onBrowse }: { onBrowse: () => void }) {
-  const { groupName, groupMembers, refreshGroupsAtGym } = useAppState();
+  const { groupName, groupMembers, refreshGroupsAtGym, potNext, userId } = useAppState();
   const refresh = useRefreshControl();
   useEffect(() => { refreshGroupsAtGym(); }, [refreshGroupsAtGym]);
+  const setterName = potNext?.setter_user_id === userId ? 'You' : potNext?.setter_display_name;
 
   return (
     <View style={styles.screen}>
@@ -561,6 +571,24 @@ export function GroupView({ onBrowse }: { onBrowse: () => void }) {
             </Pressable>
           </View>
         </FadeInItem>
+
+        {setterName && (
+          <FadeInItem delay={80} style={{ marginTop: 18 }}>
+            <Card padding={SPACE.lg} tone="sage">
+              <View style={styles.rowGap}>
+                <View style={[styles.iconChip, { backgroundColor: C.successSoft }]}>
+                  <MaterialIcons name="autorenew" size={18} color={C.success} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Eyebrow>Rule setter · rotates weekly</Eyebrow>
+                  <H3 style={{ marginTop: 2 }}>
+                    {setterName === 'You' ? "It's your turn to set next week's rules" : `${setterName} sets next week's rules`}
+                  </H3>
+                </View>
+              </View>
+            </Card>
+          </FadeInItem>
+        )}
 
         {groupMembers.length === 0 ? (
           <FadeInItem delay={140} style={{ marginTop: 18 }}>
@@ -916,7 +944,7 @@ export function PotTracker({ onBack }: { onBack: () => void }) {
             <Sub style={{ marginTop: 18 }}>
               {potCurrent.is_practice
                 ? 'Practice week — no ELO at stake. The real pot starts next week.'
-                : `The group leader${potCurrent.setter_display_name ? ` (${potCurrent.setter_display_name})` : ''} set these conditions.`}
+                : `${potCurrent.setter_display_name || 'A member'} set these conditions as this week's rule setter (the role rotates weekly).`}
             </Sub>
           </Card>
         </FadeInItem>

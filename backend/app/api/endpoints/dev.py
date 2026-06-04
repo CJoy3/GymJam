@@ -33,6 +33,14 @@ def advance_week() -> dict:
     return _clock_payload()
 
 
+@router.post("/previous-week")
+def previous_week() -> dict:
+    """Step the simulated clock back one week, clamped at the real current week
+    (never goes earlier than offset 0)."""
+    time_utils.set_offset_days(max(0, time_utils.get_offset_days() - 7))
+    return _clock_payload()
+
+
 @router.post("/reset-clock")
 def reset_clock() -> dict:
     time_utils.reset_clock()

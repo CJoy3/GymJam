@@ -37,6 +37,10 @@ create table if not exists groups (
         check (default_required_pledges between 1 and 7),
     default_stake_per_miss integer not null default 100
         check (default_stake_per_miss >= 0),
+    -- The member whose turn it currently is to set the upcoming week's pot
+    -- rules. The role rotates weekly through the membership; this column mirrors
+    -- the computed rotation so it is directly queryable.
+    current_rule_setter_id uuid references users(id) on delete set null,
     created_at timestamptz not null default now()
 );
 
@@ -45,6 +49,8 @@ alter table groups add column if not exists default_required_pledges smallint
     not null default 3 check (default_required_pledges between 1 and 7);
 alter table groups add column if not exists default_stake_per_miss integer
     not null default 100 check (default_stake_per_miss >= 0);
+alter table groups add column if not exists current_rule_setter_id uuid
+    references users(id) on delete set null;
 
 create table if not exists group_memberships (
     id uuid primary key default gen_random_uuid(),
