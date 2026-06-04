@@ -390,39 +390,51 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   /* ----- bootstrap ----- */
 
+  const loadClock = useCallback(async () => {
+    try {
+      const clock = await devApi.getClock();
+      setWeekOffsetDays(clock.offset_days);
+      setTodayDow(clock.today_dow);
+    } catch {
+      // dev clock is optional; ignore if unavailable
+    }
+  }, []);
+
   const bootstrap = useCallback(async () => {
     setReloading(true);
     try {
       const deviceId = await getOrCreateUserId();
       const user = await usersApi.registerUser(deviceId);
       setMe(user);
-      await loadGyms();
-      if (user.gym_id) {
-        const mine = await loadGroupsForGym(user.gym_id, user.id);
-        await refreshGroupContext(mine?.id ?? null, mine?.isLeader);
-      } else {
+      // Fire every independent fetch in parallel instead of one-by-one — this
+      // is the single biggest startup latency win against the serverless API.
+      const groupsPromise = user.gym_id
+        ? loadGroupsForGym()
+        : Promise.resolve(null);
+      if (!user.gym_id) {
         setGroupsAtGym([]);
         setMyGroupSummary(null);
         setPot(0);
         setJoinRequests([]);
         setGroupMembers([]);
       }
-      await loadPlans();
-      try {
-        const clock = await devApi.getClock();
-        setWeekOffsetDays(clock.offset_days);
-        setTodayDow(clock.today_dow);
-      } catch {
-        // dev clock is optional; ignore if unavailable
-      }
-      await Promise.all([loadBadges(), loadRoom()]);
+      const [mine] = await Promise.all([
+        groupsPromise,
+        loadGyms(),
+        loadPlans(),
+        loadClock(),
+        loadBadges(),
+        loadRoom(),
+      ]);
+      // Only this depends on the resolved group id, so it runs after the batch.
+      if (mine) await refreshGroupContext(mine.id, mine.isLeader);
     } catch (e) {
       reportError('Failed to start GymJam', e);
     } finally {
       setReady(true);
       setReloading(false);
     }
-  }, [loadGyms, loadGroupsForGym, loadPlans, refreshGroupContext, loadBadges, loadRoom]);
+  }, [loadGyms, loadGroupsForGym, loadPlans, loadClock, refreshGroupContext, loadBadges, loadRoom]);
 
   useEffect(() => {
     bootstrap();
@@ -575,7 +587,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     try {
       const plan = await plansApi.toggleNextDay(i);
       setNextWeek(planToWeek(plan));
-      await refreshGroupContext(myGroupSummary?.id ?? null, myGroupSummary?.isLeader);
+      // Refresh pot/members in the background — don't block the interaction.
+      void refreshGroupContext(myGroupSummary?.id ?? null, myGroupSummary?.isLeader);
     } catch (e) {
       setNextWeek(snapshotNextWeek);
       reportError('Could not update plan', e);
@@ -589,7 +602,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     try {
       const plan = await plansApi.setPlannedDays(days);
       setNextWeek(planToWeek(plan));
-      await refreshGroupContext(myGroupSummary?.id ?? null, myGroupSummary?.isLeader);
+      void refreshGroupContext(myGroupSummary?.id ?? null, myGroupSummary?.isLeader);
     } catch (e) {
       setNextWeek(snapshotNextWeek);
       reportError('Could not save plan', e);
@@ -604,7 +617,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       const plan = await plansApi.setCurrentWeekDays(days);
       setThisWeek(planToWeek(plan));
       setThisWeekIsPractice(!!plan.is_practice);
-      await refreshGroupContext(myGroupSummary?.id ?? null, myGroupSummary?.isLeader);
+      void refreshGroupContext(myGroupSummary?.id ?? null, myGroupSummary?.isLeader);
     } catch (e) {
       setThisWeek(snapshotThisWeek);
       reportError('Could not save pledges', e);
@@ -635,8 +648,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const checkInToday = useCallback(async () => {
     const snapshotWeek = thisWeek;
     const snapshotMe = me;
-    // Optimistic: flip today's planned/locked day to checked-in, bump ELO by 10.
-    const todayDow = new Date().getDay() === 0 ? 6 : new Date().getDay() - 1;
+    // Optimistic: flip *today's* (simulated-clock) planned/locked day to
+    // checked-in and bump ELO. Use the server-provided todayDow, not the real
+    // weekday, so it stays correct when the dev clock is shifted.
     const todayState = thisWeek[todayDow]?.state;
     if (todayState === 'planned' || todayState === 'locked') {
       setThisWeek((week) => week.map((d, i) => (i === todayDow ? { ...d, state: 'checked-in' } : d)));
@@ -648,16 +662,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       setThisWeek(planToWeek(res.plan));
       setMe((prev) => (prev ? { ...prev, elo: res.new_elo } : prev));
       showToast('Session counted · +10 ELO', 'success');
-      await Promise.all([
-        refreshGroupContext(myGroupSummary?.id ?? null, myGroupSummary?.isLeader),
-        loadBadges(),
-      ]);
+      void refreshGroupContext(myGroupSummary?.id ?? null, myGroupSummary?.isLeader);
+      void loadBadges();
     } catch (e) {
       setThisWeek(snapshotWeek);
       setMe(snapshotMe);
       reportError('Could not check in', e);
     }
-  }, [thisWeek, me, refreshGroupContext, myGroupSummary, loadBadges]);
+  }, [thisWeek, todayDow, me, refreshGroupContext, myGroupSummary, loadBadges]);
 
   const rescheduleMissedDay = useCallback(async (dow: number) => {
     try {
