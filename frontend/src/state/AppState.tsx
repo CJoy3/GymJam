@@ -1,7 +1,6 @@
 import React, {
   createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode,
 } from 'react';
-import { Alert } from 'react-native';
 
 import * as badgesApi from '../../lib/api/badges';
 import * as devApi from '../../lib/api/dev';
@@ -158,6 +157,61 @@ function daysToWeek(days: plansApi.PlanDay[]): DayStatus[] {
     const found = days.find((d) => d.day_of_week === i);
     return { day, state: (found?.state ?? 'unselected') as DayState };
   });
+}
+
+function blankWeek(): DayStatus[] {
+  return DAYS.map((day) => ({ day, state: 'unselected' as DayState }));
+}
+
+function setSelectedDays(week: DayStatus[], selected: number[]): DayStatus[] {
+  const selectedDays = new Set(selected);
+  return week.map((day, i) => ({
+    ...day,
+    state: selectedDays.has(i) ? 'planned' : 'unselected',
+  }));
+}
+
+function setSelectedFutureDays(week: DayStatus[], selected: number[], todayDow: number): DayStatus[] {
+  const selectedDays = new Set(selected);
+  return week.map((day, i) => {
+    if (i <= todayDow) return day;
+    return { ...day, state: selectedDays.has(i) ? 'planned' : 'unselected' };
+  });
+}
+
+function toggleWeekDay(week: DayStatus[], index: number): DayStatus[] {
+  return week.map((day, i) => {
+    if (i !== index) return day;
+    return {
+      ...day,
+      state: day.state === 'planned' || day.state === 'locked' ? 'unselected' : 'planned',
+    };
+  });
+}
+
+function lockPlannedDays(week: DayStatus[]): DayStatus[] {
+  return week.map((day) => (day.state === 'planned' ? { ...day, state: 'locked' } : day));
+}
+
+function recalcPotDetail(
+  detail: potApi.PotDetail | null,
+  required: number,
+  stake: number,
+): potApi.PotDetail | null {
+  if (!detail) return null;
+  const members = detail.members.map((member) => ({
+    ...member,
+    elo_at_risk: member.pledged_count * stake,
+    elo_lost_so_far: member.missed_count * stake,
+  }));
+
+  return {
+    ...detail,
+    required_pledges: required,
+    stake_per_miss: stake,
+    total_pot_elo: members.reduce((sum, member) => sum + member.elo_lost_so_far, 0),
+    members,
+  };
 }
 
 function initialsOf(name: string): string {
@@ -503,35 +557,47 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   }, [joinRequests, loadInbox, myGroupSummary]);
 
   const toggleNextWeekDay = useCallback(async (i: number) => {
+    const snapshotNextWeek = nextWeek;
+    const optimisticNextWeek = toggleWeekDay(nextWeek, i);
+    setNextWeek(optimisticNextWeek);
     try {
       const plan = await plansApi.toggleNextDay(i);
       setNextWeek(planToWeek(plan));
       await refreshGroupContext(myGroupSummary?.id ?? null, myGroupSummary?.isLeader);
     } catch (e) {
+      setNextWeek(snapshotNextWeek);
       reportError('Could not update plan', e);
     }
-  }, [refreshGroupContext, myGroupSummary]);
+  }, [myGroupSummary, nextWeek, refreshGroupContext]);
 
   const setPlannedDays = useCallback(async (days: number[]) => {
+    const snapshotNextWeek = nextWeek;
+    const optimisticNextWeek = setSelectedDays(nextWeek, days);
+    setNextWeek(optimisticNextWeek);
     try {
       const plan = await plansApi.setPlannedDays(days);
       setNextWeek(planToWeek(plan));
       await refreshGroupContext(myGroupSummary?.id ?? null, myGroupSummary?.isLeader);
     } catch (e) {
+      setNextWeek(snapshotNextWeek);
       reportError('Could not save plan', e);
     }
-  }, [refreshGroupContext, myGroupSummary]);
+  }, [myGroupSummary, nextWeek, refreshGroupContext]);
 
   const setThisWeekDays = useCallback(async (days: number[]) => {
+    const snapshotThisWeek = thisWeek;
+    const optimisticThisWeek = setSelectedFutureDays(thisWeek, days, todayDow);
+    setThisWeek(optimisticThisWeek);
     try {
       const plan = await plansApi.setCurrentWeekDays(days);
       setThisWeek(planToWeek(plan));
       setThisWeekIsPractice(!!plan.is_practice);
       await refreshGroupContext(myGroupSummary?.id ?? null, myGroupSummary?.isLeader);
     } catch (e) {
+      setThisWeek(snapshotThisWeek);
       reportError('Could not save pledges', e);
     }
-  }, [refreshGroupContext, myGroupSummary]);
+  }, [myGroupSummary, thisWeek, todayDow, refreshGroupContext]);
 
   const addNextWeekDay = useCallback(async (i: number) => {
     // "Join another member's day" is just an additive toggle on our plan.
@@ -541,14 +607,18 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   }, [nextWeek, toggleNextWeekDay]);
 
   const lockNextWeek = useCallback(async () => {
+    const snapshotNextWeek = nextWeek;
+    const optimisticNextWeek = lockPlannedDays(nextWeek);
+    setNextWeek(optimisticNextWeek);
     try {
       const plan = await plansApi.lockNextWeek();
       setNextWeek(planToWeek(plan));
       await refreshGroupContext(myGroupSummary?.id ?? null, myGroupSummary?.isLeader);
     } catch (e) {
+      setNextWeek(snapshotNextWeek);
       reportError('Could not lock the week', e);
     }
-  }, [refreshGroupContext, myGroupSummary]);
+  }, [myGroupSummary, nextWeek, refreshGroupContext]);
 
   const checkInToday = useCallback(async () => {
     const snapshotWeek = thisWeek;
@@ -580,19 +650,31 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const updateDisplayName = useCallback(async (name: string) => {
     const trimmed = name.trim();
     if (!trimmed) return;
+    const snapshotMe = me;
+    setMe((prev) => (prev ? { ...prev, display_name: trimmed } : prev));
     try {
       const u = await usersApi.updateMe({ display_name: trimmed });
       setMe(u);
       // Member list shows display_name, so refresh it.
       if (myGroupSummary?.id) await loadMembers(myGroupSummary.id);
     } catch (e) {
+      setMe(snapshotMe);
       reportError('Could not update name', e);
     }
-  }, [loadMembers, myGroupSummary]);
+  }, [loadMembers, me, myGroupSummary]);
 
   const updatePotConditions = useCallback(
     async (week: 'current' | 'next', required: number, stake: number) => {
       if (!myGroupSummary?.id) return;
+      const snapshotCurrent = potCurrent;
+      const snapshotNext = potNext;
+      if (week === 'current') {
+        const optimisticCurrent = recalcPotDetail(potCurrent, required, stake);
+        setPotCurrent(optimisticCurrent);
+        setPot(optimisticCurrent?.total_pot_elo ?? 0);
+      } else {
+        setPotNext(recalcPotDetail(potNext, required, stake));
+      }
       try {
         const detail = await potApi.updatePotConditions(myGroupSummary.id, week, required, stake);
         if (week === 'current') {
@@ -602,22 +684,48 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           setPotNext(detail);
         }
         showToast('Pot conditions updated', 'success');
+        void refreshGroupContext(myGroupSummary.id, myGroupSummary.isLeader).catch(() => { });
       } catch (e) {
+        setPotCurrent(snapshotCurrent);
+        setPotNext(snapshotNext);
+        if (week === 'current') setPot(snapshotCurrent?.total_pot_elo ?? 0);
         reportError('Could not update pot', e);
       }
     },
-    [myGroupSummary],
+    [myGroupSummary, potCurrent, potNext, refreshGroupContext],
   );
 
   const advanceWeek = useCallback(async () => {
+    const snapshot = {
+      thisWeek,
+      nextWeek,
+      thisWeekIsPractice,
+      pot,
+      potCurrent,
+      potNext,
+    };
+    const optimisticCurrent = potNext;
+    setThisWeek(nextWeek);
+    setNextWeek(blankWeek());
+    setThisWeekIsPractice(!!potNext?.is_practice);
+    setPotCurrent(optimisticCurrent);
+    setPot(optimisticCurrent?.total_pot_elo ?? 0);
+    setPotNext(null);
     try {
-      await devApi.advanceWeek();
-      await bootstrap();
+      const clock = await devApi.advanceWeek();
+      setTodayDow(clock.today_dow);
+      void bootstrap();
       showToast('Jumped to next week', 'success');
     } catch (e) {
+      setThisWeek(snapshot.thisWeek);
+      setNextWeek(snapshot.nextWeek);
+      setThisWeekIsPractice(snapshot.thisWeekIsPractice);
+      setPot(snapshot.pot);
+      setPotCurrent(snapshot.potCurrent);
+      setPotNext(snapshot.potNext);
       reportError('Could not advance week', e);
     }
-  }, [bootstrap]);
+  }, [bootstrap, nextWeek, pot, potCurrent, potNext, thisWeek, thisWeekIsPractice]);
 
   const placeRoomItem = useCallback(async (itemId: string, slot: number | null) => {
     try {
