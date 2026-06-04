@@ -15,9 +15,17 @@ from app.services import pot as pot_svc
 router = APIRouter()
 
 
+@router.get("", response_model=list[GroupSummary])
+def list_all_groups(current: dict = Depends(get_current_user)) -> list[dict]:
+    """All groups on the platform — global, not filtered by the user's home gym."""
+    return groups_svc.list_all(current["id"])
+
+
 @router.get("/by-gym/{gym_id}", response_model=list[GroupSummary])
 def list_groups_at_gym(gym_id: str, current: dict = Depends(get_current_user)) -> list[dict]:
-    return groups_svc.list_at_gym(gym_id, current["id"])
+    # Groups are global now; the gym path param is ignored (kept for backward
+    # compatibility with older clients).
+    return groups_svc.list_all(current["id"])
 
 
 @router.post("", response_model=Group, status_code=201)

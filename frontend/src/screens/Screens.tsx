@@ -693,7 +693,7 @@ export function NoGroup({ onBrowse }: { onBrowse: () => void }) {
    ╰─────────────────────────────────────────────────────────╯ */
 
 export function GymBrowser({ onBack, onJoined, onCreated }: { onBack: () => void; onJoined: () => void; onCreated: () => void }) {
-  const { gymName, groupId, groups, addGroup, joinGroup, leaveGroup, joinRequests, approveRequest, rejectRequest, refreshGroupsAtGym } = useAppState();
+  const { groupId, groups, addGroup, joinGroup, leaveGroup, joinRequests, approveRequest, rejectRequest, refreshGroupsAtGym } = useAppState();
   const refresh = useRefreshControl();
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
@@ -760,8 +760,9 @@ export function GymBrowser({ onBack, onJoined, onCreated }: { onBack: () => void
         </FadeInItem>
 
         <FadeInItem delay={60} style={{ marginTop: 18 }}>
-          <Eyebrow>{gymName}</Eyebrow>
+          <Eyebrow>All groups · any gym</Eyebrow>
           <H1 style={{ marginTop: 6 }}>Browse groups</H1>
+          <Sub style={{ marginTop: 6 }}>Groups are global — join friends from any gym.</Sub>
         </FadeInItem>
 
         {inbox && joinRequests.length > 0 && (

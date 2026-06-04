@@ -26,7 +26,9 @@ create table if not exists users (
 
 create table if not exists groups (
     id uuid primary key default gen_random_uuid(),
-    gym_id uuid not null references gyms(id) on delete cascade,
+    -- Groups are global (decoupled from gyms). gym_id is retained only as an
+    -- optional "origin" hint and no longer gates group visibility.
+    gym_id uuid references gyms(id) on delete set null,
     name text not null,
     weekly_stake_elo integer not null default 500 check (weekly_stake_elo >= 0),
     join_type text not null default 'open' check (join_type in ('open', 'request')),
@@ -43,6 +45,10 @@ create table if not exists groups (
     current_rule_setter_id uuid references users(id) on delete set null,
     created_at timestamptz not null default now()
 );
+
+-- Decouple groups from gyms on existing deployments: gym_id is now optional so
+-- groups are global and a user's home gym no longer gates eligibility.
+alter table groups alter column gym_id drop not null;
 
 -- Idempotent column additions for existing deployments.
 alter table groups add column if not exists default_required_pledges smallint

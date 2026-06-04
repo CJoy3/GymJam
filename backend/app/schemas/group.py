@@ -10,7 +10,8 @@ RequestStatus = Literal["pending", "approved", "rejected"]
 
 
 class GroupCreate(BaseModel):
-    gym_id: str
+    # Optional origin hint only — groups are global and not gated by gym.
+    gym_id: Optional[str] = None
     name: str = Field(min_length=1, max_length=64)
     weekly_stake_elo: int = Field(default=500, ge=0, le=100000)
     join_type: JoinType = "open"
@@ -21,7 +22,7 @@ class GroupCreate(BaseModel):
 
 class Group(BaseModel):
     id: str
-    gym_id: str
+    gym_id: Optional[str] = None
     name: str
     weekly_stake_elo: int
     join_type: JoinType

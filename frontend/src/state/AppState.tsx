@@ -285,8 +285,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     setGyms(list.map((g) => ({ id: g.id, name: g.name })));
   }, []);
 
-  const loadGroupsForGym = useCallback(async (gymId: string, currentUserId: string) => {
-    const list = await groupsApi.listGroupsAtGym(gymId);
+  // Groups are global (decoupled from gyms): always load every group on the
+  // platform, regardless of the user's home gym. (Args kept for call-site
+  // compatibility but no longer used for filtering.)
+  const loadGroupsForGym = useCallback(async (_gymId?: string | null, _currentUserId?: string | null) => {
+    const list = await groupsApi.listAllGroups();
     const mapped = list.map(summaryToGroup);
     setGroupsAtGym(mapped);
     const mine = mapped.find((g) => g.isMember) ?? null;
@@ -519,17 +522,16 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     required_pledges: number;
     stake_per_miss: number;
   }) => {
-    if (!me?.gym_id) return;
+    if (!me) return;  // groups are global — no home gym required to create one
     try {
       await groupsApi.createGroup({
-        gym_id: me.gym_id,
         name: g.name,
         weekly_stake_elo: g.weekly_stake_elo,
         join_type: g.join_type,
         required_pledges: g.required_pledges,
         stake_per_miss: g.stake_per_miss,
       });
-      const mine = await loadGroupsForGym(me.gym_id, me.id);
+      const mine = await loadGroupsForGym();
       await refreshGroupContext(mine?.id ?? null, mine?.isLeader);
       await loadPlans();
     } catch (e) {

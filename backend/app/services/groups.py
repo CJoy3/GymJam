@@ -69,13 +69,13 @@ def _fill_week(days: list[dict] | None) -> list[dict]:
     return out
 
 
-def list_at_gym(gym_id: str, current_user_id: str) -> list[dict]:
-    """Return groups at a gym, enriched with member_count + my membership state."""
+def list_all(current_user_id: str) -> list[dict]:
+    """Return every group on the platform, enriched with member_count + my
+    membership state. Groups are global — they are no longer filtered by gym."""
     sb = get_supabase()
     groups = (
         sb.table("groups")
         .select("*")
-        .eq("gym_id", gym_id)
         .order("created_at", desc=True)
         .execute()
     ).data or []
@@ -139,12 +139,12 @@ def current_membership(user_id: str) -> dict | None:
 
 def create_group(
     creator_id: str,
-    gym_id: str,
     name: str,
     weekly_stake_elo: int,
     join_type: JoinType,
     required_pledges: int,
     stake_per_miss: int,
+    gym_id: str | None = None,
 ) -> dict:
     if current_membership(creator_id):
         raise HTTPException(status_code=409, detail="Leave your current group first")
