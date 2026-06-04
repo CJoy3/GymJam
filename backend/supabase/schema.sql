@@ -221,4 +221,4 @@ alter table weekly_plans        disable row level security;
 alter table plan_days           disable row level security;
 alter table pot_conditions      disable row level security;
 alter table user_room_items     disable row level security;
-alter table dev_clock           disable row level security;
+alter table dev_clock           disable row level security; 
