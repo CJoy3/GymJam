@@ -52,10 +52,18 @@ create table if not exists group_memberships (
     user_id uuid not null references users(id) on delete cascade,
     role text not null default 'member' check (role in ('member', 'leader')),
     joined_at timestamptz not null default now(),
+    -- Dev-clock week the membership began (Monday). Used to treat the current
+    -- week as no-stakes "practice" for mid-week joiners who missed its lock.
+    joined_week_start date,
     unique (group_id, user_id),
     -- A user belongs to at most one group at a time.
     unique (user_id)
-); 
+);
+
+-- Additive migration for existing deployments. NULL on legacy rows means
+-- "established member" — never treated as a mid-week joiner.
+alter table group_memberships
+    add column if not exists joined_week_start date;
 
 create table if not exists join_requests (
     id uuid primary key default gen_random_uuid(),

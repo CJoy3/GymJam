@@ -22,6 +22,17 @@ def _resolve_week(week: str) -> date:
     return next_week_start() if week == "next" else current_week_start()
 
 
+def _joined_in_week(joined_week_raw: Any, week_start: date) -> bool:
+    """Whether a membership began during `week_start` (dev-clock week). Used to
+    treat a mid-week joiner's current week as no-stakes practice."""
+    if not joined_week_raw:
+        return False
+    try:
+        return date.fromisoformat(str(joined_week_raw)[:10]) == week_start
+    except (ValueError, TypeError):
+        return False
+
+
 def _safe_exec(query: Any) -> Any | None:
     try:
         return query.execute()
@@ -305,7 +316,9 @@ def pot_detail(group_id: str, week: str = "current") -> dict:
 
     membership_res = _safe_exec(
         sb.table("group_memberships")
-        .select("user_id, role, joined_at, users(display_name)")
+        # `*` (not an explicit column list) so an un-migrated DB missing
+        # joined_week_start still returns members instead of erroring out.
+        .select("*, users(display_name)")
         .eq("group_id", group_id)
         .order("joined_at", desc=False)
     )
@@ -348,6 +361,18 @@ def pot_detail(group_id: str, week: str = "current") -> dict:
         missed_count = sum(1 for d in days if d["state"] == "missed")
         elo_at_risk = pledged_count * stake
         elo_lost = missed_count * stake
+
+        # Mid-week joiners missed this week's lock, so their current-week pledges
+        # are practice — no stakes on the line and nothing added to the pot.
+        member_is_midweek_practice = (
+            not is_practice
+            and week_start == current_week_start()
+            and _joined_in_week(m.get("joined_week_start"), week_start)
+        )
+        if member_is_midweek_practice:
+            elo_at_risk = 0
+            elo_lost = 0
+
         pot_total += elo_lost
 
         member_rows.append({

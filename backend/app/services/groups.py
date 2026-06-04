@@ -11,6 +11,28 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _insert_membership(group_id: str, user_id: str, role: str) -> None:
+    """Create a membership, stamping the dev-clock week it began so mid-week
+    joiners (who missed this week's lock) can later be granted a no-stakes
+    practice week. Retries without joined_week_start on older schemas missing
+    that column, mirroring the rest of the service's degrade-gracefully style."""
+    sb = get_supabase()
+    payload = {
+        "group_id": group_id,
+        "user_id": user_id,
+        "role": role,
+        "joined_week_start": current_week_start().isoformat(),
+    }
+    try:
+        res = sb.table("group_memberships").insert(payload).execute()
+        if res and res.data:
+            return
+    except Exception:
+        pass
+    fallback = {k: v for k, v in payload.items() if k != "joined_week_start"}
+    sb.table("group_memberships").insert(fallback).execute()
+
+
 def _link_plans_to_group(user_id: str, group_id: str | None) -> None:
     """Re-point the user's existing this-/next-week plans to a new group_id.
     Called on join (group_id set) and leave (None) so the pot view stays accurate."""
@@ -156,11 +178,7 @@ def create_group(
     if not grp.data:
         raise HTTPException(status_code=500, detail="Failed to create group")
     group = grp.data[0]
-    sb.table("group_memberships").insert({
-        "group_id": group["id"],
-        "user_id": creator_id,
-        "role": "leader",
-    }).execute()
+    _insert_membership(group["id"], creator_id, "leader")
     _link_plans_to_group(creator_id, group["id"])
 
     # Seed pot conditions. The current week is a no-stakes "practice" week: only
@@ -206,11 +224,7 @@ def join_or_request(group_id: str, user_id: str) -> dict:
 
     sb = get_supabase()
     if group["join_type"] == "open":
-        sb.table("group_memberships").insert({
-            "group_id": group_id,
-            "user_id": user_id,
-            "role": "member",
-        }).execute()
+        _insert_membership(group_id, user_id, "member")
         _link_plans_to_group(user_id, group_id)
         return {"action": "joined", "group": group}
 
@@ -368,11 +382,7 @@ def approve_request(request_id: str, leader_id: str) -> dict:
     if current_membership(req["user_id"]):
         raise HTTPException(status_code=409, detail="User already in a group")
     sb = get_supabase()
-    sb.table("group_memberships").insert({
-        "group_id": req["group_id"],
-        "user_id": req["user_id"],
-        "role": "member",
-    }).execute()
+    _insert_membership(req["group_id"], req["user_id"], "member")
     _link_plans_to_group(req["user_id"], req["group_id"])
     sb.table("join_requests").update({
         "status": "approved",

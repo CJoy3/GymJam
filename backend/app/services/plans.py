@@ -90,6 +90,30 @@ def _is_practice_week(group_id: str | None, week: str) -> bool:
         return False
 
 
+def _joined_mid_current_week(user_id: str) -> bool:
+    """True if the user joined their group during the current week — i.e. after
+    the Sunday-midnight lock for this week. Such "mid-week joiners" missed the
+    lock, so the current week is a no-stakes practice week for them individually,
+    even when the group is past its own first (practice) week. Anchored to the
+    dev-clock `joined_week_start` so it stays correct as the clock advances;
+    NULL (legacy rows) means an established member."""
+    membership = groups_svc.current_membership(user_id)
+    joined_week = (membership or {}).get("joined_week_start")
+    if not joined_week:
+        return False
+    try:
+        joined_week_date = date.fromisoformat(str(joined_week)[:10])
+    except (ValueError, TypeError):
+        return False
+    return joined_week_date == current_week_start()
+
+
+def _current_week_is_practice_for(user_id: str, group_id: str | None) -> bool:
+    """The current week counts as practice for a user when either the group is in
+    its own first (practice) week, or the user is a mid-week joiner."""
+    return _is_practice_week(group_id, "current") or _joined_mid_current_week(user_id)
+
+
 def get_two_week_view(user_id: str) -> dict:
     this_row = _ensure_plan(user_id, current_week_start())
     _mark_missed_for_past_days(this_row)
@@ -97,7 +121,7 @@ def get_two_week_view(user_id: str) -> dict:
     streak_svc.compute_and_store_streak(user_id)
     this_week = _load_plan_with_days(this_row)
     next_week = _load_plan_with_days(next_row)
-    this_week["is_practice"] = _is_practice_week(this_row.get("group_id"), "current")
+    this_week["is_practice"] = _current_week_is_practice_for(user_id, this_row.get("group_id"))
     next_week["is_practice"] = _is_practice_week(next_row.get("group_id"), "next")
     return {
         "this_week": this_week,
@@ -179,7 +203,7 @@ def set_current_week_days(user_id: str, dows: list[int]) -> dict:
 
     plan_row = _ensure_plan(user_id, current_week_start())
     group_id = plan_row.get("group_id")
-    if not _is_practice_week(group_id, "current"):
+    if not _current_week_is_practice_for(user_id, group_id):
         raise HTTPException(status_code=409, detail="This week's pledges are locked")
 
     today_dow = current_day_of_week()
