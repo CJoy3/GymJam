@@ -22,6 +22,17 @@ def _resolve_week(week: str) -> date:
     return next_week_start() if week == "next" else current_week_start()
 
 
+def _joined_in_week(joined_week_raw: Any, week_start: date) -> bool:
+    """Whether a membership began during `week_start` (dev-clock week). Used to
+    treat a mid-week joiner's current week as no-stakes practice."""
+    if not joined_week_raw:
+        return False
+    try:
+        return date.fromisoformat(str(joined_week_raw)[:10]) == week_start
+    except (ValueError, TypeError):
+        return False
+
+
 def _safe_exec(query: Any) -> Any | None:
     try:
         return query.execute()
@@ -56,12 +67,59 @@ def _insert_conditions(payload: dict) -> Any | None:
 
 
 def _leader_id(group_id: str) -> str | None:
-    """The leader IS the setter — no rotation. Returns None if the group is leaderless."""
+    """The group's leader. Returns None if the group is leaderless."""
     sb = get_supabase()
     res = _safe_exec(sb.table("groups").select("leader_id").eq("id", group_id).limit(1))
     if not res or not res.data:
         return None
     return res.data[0].get("leader_id")
+
+
+# Fixed Monday used as the rotation epoch. Rotating by whole weeks from a fixed
+# anchor makes the setter for any week deterministic and independent of when the
+# group was created — and it advances by exactly one member each time the
+# (dev-clock) week moves forward.
+_ROTATION_EPOCH = date(2024, 1, 1)  # a Monday
+
+
+def _ordered_member_ids(group_id: str) -> list[str]:
+    """Active members of a group in join order (oldest first)."""
+    sb = get_supabase()
+    res = _safe_exec(
+        sb.table("group_memberships")
+        .select("user_id, joined_at")
+        .eq("group_id", group_id)
+        .order("joined_at", desc=False)
+    )
+    rows = (res.data if res else None) or []
+    return [r["user_id"] for r in rows]
+
+
+def rotational_setter_id(group_id: str, week_start: date) -> str | None:
+    """The member whose turn it is to set the pot rules for `week_start`.
+
+    The role rotates through the group's members (join order) one step per week,
+    so a different member is responsible each week and pressing the dev "next
+    week" button advances the rotation. Returns None for an empty/unknown group.
+    """
+    ids = _ordered_member_ids(group_id)
+    if not ids:
+        return None
+    week_index = (week_start - _ROTATION_EPOCH).days // 7
+    return ids[week_index % len(ids)]
+
+
+def _sync_group_rule_setter(group_id: str, setter_id: str | None) -> None:
+    """Best-effort mirror of the upcoming week's rule setter onto the group row,
+    so the value is queryable directly (AC: schema tracks the current setter)."""
+    if not setter_id:
+        return
+    sb = get_supabase()
+    _safe_exec(
+        sb.table("groups")
+        .update({"current_rule_setter_id": setter_id})
+        .eq("id", group_id)
+    )
 
 
 def _group_defaults(group_id: str) -> dict:
@@ -101,7 +159,9 @@ def _ensure_conditions(group_id: str, week_start: date) -> dict:
     """
     sb = get_supabase()
     defaults = _group_defaults(group_id)
-    leader = defaults["leader_id"]
+    # The setter rotates weekly through the membership (falling back to the
+    # leader only if the group somehow has no members).
+    setter = rotational_setter_id(group_id, week_start) or defaults["leader_id"]
 
     res = _safe_exec(
         sb.table("pot_conditions")
@@ -113,20 +173,20 @@ def _ensure_conditions(group_id: str, week_start: date) -> dict:
     rows = (res.data if res else None) or []
     if rows:
         row = rows[0]
-        if leader and row.get("setter_user_id") != leader:
+        if setter and row.get("setter_user_id") != setter:
             _safe_exec(
                 sb.table("pot_conditions")
-                .update({"setter_user_id": leader})
+                .update({"setter_user_id": setter})
                 .eq("group_id", group_id)
                 .eq("week_start", week_start.isoformat())
             )
-            row["setter_user_id"] = leader
+            row["setter_user_id"] = setter
         return row
 
     payload = {
         "group_id": group_id,
         "week_start": week_start.isoformat(),
-        "setter_user_id": leader,
+        "setter_user_id": setter,
         "required_pledges": defaults["required_pledges"],
         "stake_per_miss": defaults["stake_per_miss"],
         "is_finalized": False,
@@ -234,11 +294,16 @@ def update_conditions(
     if stake_per_miss < 0:
         raise HTTPException(status_code=400, detail="stake_per_miss must be >= 0")
 
-    leader = _leader_id(group_id)
-    if leader and leader != user_id:
-        raise HTTPException(status_code=403, detail="Only the group leader can edit pot rules")
-
     week_start = _resolve_week(week)
+    # Authorization rotates weekly: only the member whose turn it is to set the
+    # rules for this week may change them.
+    setter = rotational_setter_id(group_id, week_start)
+    if setter and setter != user_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Only this week's rule setter can edit the pot rules",
+        )
+
     cond = _ensure_conditions(group_id, week_start)
     if cond.get("is_finalized"):
         raise HTTPException(status_code=409, detail="Pot conditions are already finalized")
@@ -264,7 +329,7 @@ def update_conditions(
     payload = {
         "group_id": group_id,
         "week_start": week_start.isoformat(),
-        "setter_user_id": leader or cond.get("setter_user_id"),
+        "setter_user_id": setter or cond.get("setter_user_id"),
         "required_pledges": required_pledges,
         "stake_per_miss": stake_per_miss,
         "updated_at": _utc_now_iso(),
@@ -305,7 +370,9 @@ def pot_detail(group_id: str, week: str = "current") -> dict:
 
     membership_res = _safe_exec(
         sb.table("group_memberships")
-        .select("user_id, role, joined_at, users(display_name)")
+        # `*` (not an explicit column list) so an un-migrated DB missing
+        # joined_week_start still returns members instead of erroring out.
+        .select("*, users(display_name)")
         .eq("group_id", group_id)
         .order("joined_at", desc=False)
     )
@@ -324,13 +391,16 @@ def pot_detail(group_id: str, week: str = "current") -> dict:
         plans = (plans_res.data if plans_res else None) or []
         plan_by_user = {p["user_id"]: p for p in plans}
 
-    setter_id = cond.get("setter_user_id") or _leader_id(group_id)
+    setter_id = rotational_setter_id(group_id, week_start) or cond.get("setter_user_id") or _leader_id(group_id)
     setter_name = None
     if setter_id:
         for m in memberships:
             if m["user_id"] == setter_id:
                 setter_name = (m.get("users") or {}).get("display_name") or "Anonymous"
                 break
+    # Mirror the upcoming week's setter onto the group row so it's queryable.
+    if week == "next":
+        _sync_group_rule_setter(group_id, setter_id)
 
     member_rows: list[dict] = []
     pot_total = 0
@@ -348,6 +418,18 @@ def pot_detail(group_id: str, week: str = "current") -> dict:
         missed_count = sum(1 for d in days if d["state"] == "missed")
         elo_at_risk = pledged_count * stake
         elo_lost = missed_count * stake
+
+        # Mid-week joiners missed this week's lock, so their current-week pledges
+        # are practice — no stakes on the line and nothing added to the pot.
+        member_is_midweek_practice = (
+            not is_practice
+            and week_start == current_week_start()
+            and _joined_in_week(m.get("joined_week_start"), week_start)
+        )
+        if member_is_midweek_practice:
+            elo_at_risk = 0
+            elo_lost = 0
+
         pot_total += elo_lost
 
         member_rows.append({

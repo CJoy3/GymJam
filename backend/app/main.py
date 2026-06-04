@@ -1,6 +1,7 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.router import api_router
+from app.core import time_utils
 from app.core.config import settings
 
 app = FastAPI(
@@ -15,6 +16,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def _sync_dev_clock(request: Request, call_next):
+    """Re-read the dev-clock offset from the shared DB once per request. The
+    backend is serverless (Vercel), so the process that set the offset is not
+    the one that reads it — this keeps every request consistent with the table."""
+    try:
+        time_utils.refresh_offset()
+    except Exception:
+        pass
+    return await call_next(request)
 
 
 @app.get("/")

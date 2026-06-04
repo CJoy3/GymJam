@@ -103,8 +103,9 @@ interface AppStateShape {
   addNextWeekDay: (i: number) => Promise<void>;
   checkInToday: () => Promise<void>;
 
-  // Dev clock — simulate the next week arriving
-  advanceWeek: () => Promise<void>;
+  // Dev clock — toggle between the real week and one week ahead
+  weekSimulated: boolean;        // true when the clock is shifted into next week
+  toggleWeek: () => Promise<void>;
 
   // Refresh on demand (used by screens that come back into focus)
   refreshGroupsAtGym: () => Promise<void>;
@@ -260,6 +261,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     return js === 0 ? 6 : js - 1;
   });
   const [thisWeekIsPractice, setThisWeekIsPractice] = useState(false);
+  const [weekOffsetDays, setWeekOffsetDays] = useState(0);
   const [pot, setPot] = useState(0);
   const [potCurrent, setPotCurrent] = useState<potApi.PotDetail | null>(null);
   const [potNext, setPotNext] = useState<potApi.PotDetail | null>(null);
@@ -402,6 +404,13 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         setGroupMembers([]);
       }
       await loadPlans();
+      try {
+        const clock = await devApi.getClock();
+        setWeekOffsetDays(clock.offset_days);
+        setTodayDow(clock.today_dow);
+      } catch {
+        // dev clock is optional; ignore if unavailable
+      }
       await Promise.all([loadBadges(), loadRoom()]);
     } catch (e) {
       reportError('Failed to start GymJam', e);
@@ -695,37 +704,25 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     [myGroupSummary, potCurrent, potNext, refreshGroupContext],
   );
 
-  const advanceWeek = useCallback(async () => {
-    const snapshot = {
-      thisWeek,
-      nextWeek,
-      thisWeekIsPractice,
-      pot,
-      potCurrent,
-      potNext,
-    };
-    const optimisticCurrent = potNext;
-    setThisWeek(nextWeek);
-    setNextWeek(blankWeek());
-    setThisWeekIsPractice(!!potNext?.is_practice);
-    setPotCurrent(optimisticCurrent);
-    setPot(optimisticCurrent?.total_pot_elo ?? 0);
-    setPotNext(null);
+  const toggleWeek = useCallback(async () => {
+    // Two-state dev toggle: real week (offset 0) ⇄ one week ahead. Re-bootstraps
+    // from the server (the source of truth after a clock change) so plans, pot,
+    // and the rotating rule setter all reflect the new week end-to-end.
+    const goingForward = weekOffsetDays === 0;
     try {
-      const clock = await devApi.advanceWeek();
+      const clock = goingForward ? await devApi.advanceWeek() : await devApi.previousWeek();
+      if (clock.persisted === false) {
+        showToast('Dev clock not saved — run schema.sql (dev_clock table missing)', 'error');
+        return;
+      }
+      setWeekOffsetDays(clock.offset_days);
       setTodayDow(clock.today_dow);
-      void bootstrap();
-      showToast('Jumped to next week', 'success');
+      await bootstrap();
+      showToast(goingForward ? 'Jumped to next week' : 'Back to this week', 'success');
     } catch (e) {
-      setThisWeek(snapshot.thisWeek);
-      setNextWeek(snapshot.nextWeek);
-      setThisWeekIsPractice(snapshot.thisWeekIsPractice);
-      setPot(snapshot.pot);
-      setPotCurrent(snapshot.potCurrent);
-      setPotNext(snapshot.potNext);
-      reportError('Could not advance week', e);
+      reportError('Could not change week', e);
     }
-  }, [bootstrap, nextWeek, pot, potCurrent, potNext, thisWeek, thisWeekIsPractice]);
+  }, [bootstrap, weekOffsetDays]);
 
   const placeRoomItem = useCallback(async (itemId: string, slot: number | null) => {
     try {
@@ -776,7 +773,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       lockNextWeek,
       checkInToday,
 
-      advanceWeek,
+      weekSimulated: weekOffsetDays > 0,
+      toggleWeek,
 
       refreshGroupsAtGym,
 
@@ -799,12 +797,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       refreshAll: bootstrap,
     };
   }, [
-    addGroup, addNextWeekDay, advanceWeek, approveRequest, badges, bootstrap, checkInToday,
+    addGroup, addNextWeekDay, approveRequest, badges, bootstrap, checkInToday,
     groupMembers, groupsAtGym, gyms, joinGroup, joinRequests, leaveGroup, loadBadges, loadMembers,
     lockNextWeek, me, myGroupSummary, nextWeek, placeRoomItem, pot, potCurrent, potNext,
     ready, refreshGroupsAtGym, rejectRequest, reloading, roomItems, setGym, setPlannedDays,
-    setThisWeekDays, thisWeek, thisWeekIsPractice, todayDow, toggleNextWeekDay, updateDisplayName,
-    updatePotConditions,
+    setThisWeekDays, thisWeek, thisWeekIsPractice, todayDow, toggleNextWeekDay, toggleWeek,
+    updateDisplayName, updatePotConditions, weekOffsetDays,
   ]);
 
   // tier is purely a function of elo; expose for callers that want it

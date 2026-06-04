@@ -19,6 +19,9 @@ def _clock_payload() -> dict:
         "today": time_utils.today_local().isoformat(),
         "week_start": time_utils.current_week_start().isoformat(),
         "today_dow": time_utils.current_day_of_week(),
+        # False ⇒ the dev_clock table is unreachable, so the offset won't survive
+        # across serverless instances (the schema needs to be applied).
+        "persisted": time_utils.offset_is_persistent(),
     }
 
 
@@ -30,6 +33,14 @@ def get_clock() -> dict:
 @router.post("/advance-week")
 def advance_week() -> dict:
     time_utils.advance_weeks(1)
+    return _clock_payload()
+
+
+@router.post("/previous-week")
+def previous_week() -> dict:
+    """Step the simulated clock back one week, clamped at the real current week
+    (never goes earlier than offset 0)."""
+    time_utils.set_offset_days(max(0, time_utils.get_offset_days() - 7))
     return _clock_payload()
 
 
