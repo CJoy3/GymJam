@@ -34,11 +34,25 @@ def _defaults_for(group_id: str, week_start: date, setter: str | None = None) ->
         "group_id": group_id,
         "week_start": week_start.isoformat(),
         "setter_user_id": setter,
-        "required_pledges": 3,
-        "stake_per_miss": 100,
+        "required_pledges": 1,
+        "stake_per_miss": 0,
         "is_finalized": False,
         "is_practice": False,
     }
+
+
+def _insert_conditions(payload: dict) -> Any | None:
+    """Insert a pot_conditions row, retrying without `is_practice` so older
+    schemas (missing that column) still persist the row instead of silently
+    falling back to synthesized defaults."""
+    sb = get_supabase()
+    inserted = _safe_exec(sb.table("pot_conditions").insert(payload))
+    if inserted and inserted.data:
+        return inserted
+    if "is_practice" in payload:
+        fallback = {k: v for k, v in payload.items() if k != "is_practice"}
+        return _safe_exec(sb.table("pot_conditions").insert(fallback))
+    return inserted
 
 
 def _leader_id(group_id: str) -> str | None:
@@ -50,11 +64,44 @@ def _leader_id(group_id: str) -> str | None:
     return res.data[0].get("leader_id")
 
 
-def _ensure_conditions(group_id: str, week_start: date) -> dict:
-    """Read pot_conditions for this week, auto-creating with defaults if missing.
-    The stored `setter_user_id` is kept in sync with the group's current leader."""
+def _group_defaults(group_id: str) -> dict:
+    """Return the leader's baseline pot rules stored on the group itself.
+
+    These are the source-of-truth values written at group creation. The
+    `pot_conditions` table can override them per-week, but if its writes fail
+    (RLS, missing column, anon-key deployment, etc.) we still serve the right
+    numbers from here. Falls back to (3, 100) only when even the columns are
+    missing on an old schema.
+    """
     sb = get_supabase()
-    leader = _leader_id(group_id)
+    res = _safe_exec(
+        sb.table("groups")
+        .select("leader_id, default_required_pledges, default_stake_per_miss")
+        .eq("id", group_id)
+        .limit(1)
+    )
+    if not res or not res.data:
+        return {"leader_id": None, "required_pledges": 3, "stake_per_miss": 100}
+    row = res.data[0]
+    return {
+        "leader_id": row.get("leader_id"),
+        "required_pledges": row.get("default_required_pledges") or 3,
+        "stake_per_miss": row.get("default_stake_per_miss")
+            if row.get("default_stake_per_miss") is not None else 100,
+    }
+
+
+def _ensure_conditions(group_id: str, week_start: date) -> dict:
+    """Read pot_conditions for this week, falling back to the group's stored
+    defaults if no per-week row exists or the table is unwritable.
+
+    The group's `default_required_pledges` / `default_stake_per_miss` are
+    source-of-truth — they're written atomically with the group itself, so
+    they survive even if `pot_conditions` inserts silently fail.
+    """
+    sb = get_supabase()
+    defaults = _group_defaults(group_id)
+    leader = defaults["leader_id"]
 
     res = _safe_exec(
         sb.table("pot_conditions")
@@ -66,7 +113,6 @@ def _ensure_conditions(group_id: str, week_start: date) -> dict:
     rows = (res.data if res else None) or []
     if rows:
         row = rows[0]
-        # Keep setter aligned with whoever currently leads (handles leader transfers).
         if leader and row.get("setter_user_id") != leader:
             _safe_exec(
                 sb.table("pot_conditions")
@@ -77,8 +123,16 @@ def _ensure_conditions(group_id: str, week_start: date) -> dict:
             row["setter_user_id"] = leader
         return row
 
-    payload = _defaults_for(group_id, week_start, leader)
-    inserted = _safe_exec(sb.table("pot_conditions").insert(payload))
+    payload = {
+        "group_id": group_id,
+        "week_start": week_start.isoformat(),
+        "setter_user_id": leader,
+        "required_pledges": defaults["required_pledges"],
+        "stake_per_miss": defaults["stake_per_miss"],
+        "is_finalized": False,
+        "is_practice": False,
+    }
+    inserted = _insert_conditions(payload)
     if inserted and inserted.data:
         return inserted.data[0]
 
@@ -92,6 +146,9 @@ def _ensure_conditions(group_id: str, week_start: date) -> dict:
     rows = (res.data if res else None) or []
     if rows:
         return rows[0]
+    # Last resort: serve the group's defaults synthesized in-memory. Even if
+    # pot_conditions is completely unwritable, the leader's chosen values
+    # still flow through to the client.
     return payload
 
 
@@ -104,19 +161,16 @@ def seed_conditions(
     stake_per_miss: int,
     is_finalized: bool = False,
     is_practice: bool = False,
-) -> None:
-    """Called by group creation to seed initial pot conditions for a week.
-    Idempotent — won't overwrite an existing row."""
+) -> dict:
+    """Persist initial pot conditions for a group's week.
+
+    Called by group creation to lock in the leader's chosen rules. Uses UPSERT so
+    the row is created on first call and overwritten on subsequent ones — the
+    leader's values always win. Raises on DB failure (not swallowed) so a broken
+    seed surfaces immediately at group-creation time instead of being silently
+    replaced by defaults the next time the pot is read.
+    """
     sb = get_supabase()
-    existing = _safe_exec(
-        sb.table("pot_conditions")
-        .select("group_id")
-        .eq("group_id", group_id)
-        .eq("week_start", week_start.isoformat())
-        .limit(1)
-    )
-    if existing and existing.data:
-        return
     payload = {
         "group_id": group_id,
         "week_start": week_start.isoformat(),
@@ -125,12 +179,47 @@ def seed_conditions(
         "stake_per_miss": stake_per_miss,
         "is_finalized": is_finalized,
         "is_practice": is_practice,
+        "updated_at": _utc_now_iso(),
     }
-    inserted = _safe_exec(sb.table("pot_conditions").insert(payload))
-    if not inserted:
-        # `is_practice` column may not exist yet on older schemas — retry without it.
-        payload.pop("is_practice", None)
-        _safe_exec(sb.table("pot_conditions").insert(payload))
+
+    def _try(p: dict) -> dict | None:
+        try:
+            res = sb.table("pot_conditions").upsert(p, on_conflict="group_id,week_start").execute()
+            if res and res.data:
+                return res.data[0]
+        except Exception:
+            return None
+        return None
+
+    row = _try(payload)
+    if row is not None:
+        return row
+
+    # Older deployments may be missing the `is_practice` column — retry without it.
+    fallback = {k: v for k, v in payload.items() if k != "is_practice"}
+    row = _try(fallback)
+    if row is not None:
+        return row
+
+    # As a last resort, surface the actual DB error so we don't silently corrupt
+    # the group with default values on the next read.
+    try:
+        res = (
+            sb.table("pot_conditions")
+            .upsert(fallback, on_conflict="group_id,week_start")
+            .execute()
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to seed pot conditions for {week_start}: {exc}",
+        )
+    if res and res.data:
+        return res.data[0]
+    raise HTTPException(
+        status_code=500,
+        detail=f"Pot conditions for {week_start} did not persist",
+    )
 
 
 def update_conditions(
@@ -155,18 +244,36 @@ def update_conditions(
         raise HTTPException(status_code=409, detail="Pot conditions are already finalized")
 
     sb = get_supabase()
-    res = _safe_exec(
+
+    # 1) Persist on the group itself — this is the source of truth and reliably
+    # works (we just used the same table to create the group). Future weeks
+    # automatically pick up the new baseline.
+    try:
+        sb.table("groups").update({
+            "default_required_pledges": required_pledges,
+            "default_stake_per_miss": stake_per_miss,
+        }).eq("id", group_id).execute()
+    except Exception:
+        # Column may be missing on an old schema — non-fatal; pot_conditions
+        # below will still take effect for this week.
+        pass
+
+    # 2) Best-effort per-week override in pot_conditions for record-keeping and
+    # in case a leader wants per-week variation later. If this write fails for
+    # any reason, the group-level defaults above still drive the response.
+    payload = {
+        "group_id": group_id,
+        "week_start": week_start.isoformat(),
+        "setter_user_id": leader or cond.get("setter_user_id"),
+        "required_pledges": required_pledges,
+        "stake_per_miss": stake_per_miss,
+        "updated_at": _utc_now_iso(),
+    }
+    _safe_exec(
         sb.table("pot_conditions")
-        .update({
-            "required_pledges": required_pledges,
-            "stake_per_miss": stake_per_miss,
-            "updated_at": _utc_now_iso(),
-        })
-        .eq("group_id", group_id)
-        .eq("week_start", week_start.isoformat())
+        .upsert(payload, on_conflict="group_id,week_start")
     )
-    if res and res.data:
-        return res.data[0]
+
     return {**cond, "required_pledges": required_pledges, "stake_per_miss": stake_per_miss}
 
 
@@ -190,8 +297,8 @@ def pot_detail(group_id: str, week: str = "current") -> dict:
     Members who haven't pledged any days are skipped (opt-out)."""
     week_start = _resolve_week(week)
     cond = _ensure_conditions(group_id, week_start)
-    required = cond.get("required_pledges", 3)
-    stake = cond.get("stake_per_miss", 100)
+    required = cond.get("required_pledges", 1)
+    stake = cond.get("stake_per_miss", 0)
     is_practice = bool(cond.get("is_practice"))
 
     sb = get_supabase()

@@ -121,23 +121,38 @@ def create_group(
     name: str,
     weekly_stake_elo: int,
     join_type: JoinType,
-    required_pledges: int = 3,
-    stake_per_miss: int = 100,
+    required_pledges: int,
+    stake_per_miss: int,
 ) -> dict:
     if current_membership(creator_id):
         raise HTTPException(status_code=409, detail="Leave your current group first")
+    # Validate caller-supplied pot defaults so we fail loud, not via DB-side check.
+    required_pledges = max(1, min(7, int(required_pledges or 3)))
+    stake_per_miss = max(0, int(stake_per_miss or 100))
+
     sb = get_supabase()
-    grp = (
-        sb.table("groups")
-        .insert({
-            "gym_id": gym_id,
-            "name": name,
-            "weekly_stake_elo": weekly_stake_elo,
-            "join_type": join_type,
-            "leader_id": creator_id,
-        })
-        .execute()
-    )
+    # Try inserting WITH the new columns first; if the schema is old, retry
+    # without them so creation still works (the values live in pot_conditions
+    # as a backup in that case).
+    base_payload = {
+        "gym_id": gym_id,
+        "name": name,
+        "weekly_stake_elo": weekly_stake_elo,
+        "join_type": join_type,
+        "leader_id": creator_id,
+    }
+    full_payload = {
+        **base_payload,
+        "default_required_pledges": required_pledges,
+        "default_stake_per_miss": stake_per_miss,
+    }
+    grp = None
+    try:
+        grp = sb.table("groups").insert(full_payload).execute()
+    except Exception:
+        grp = None
+    if not grp or not grp.data:
+        grp = sb.table("groups").insert(base_payload).execute()
     if not grp.data:
         raise HTTPException(status_code=500, detail="Failed to create group")
     group = grp.data[0]
@@ -152,24 +167,34 @@ def create_group(
     # the days remaining after today are pledgeable (sessions = remaining days),
     # the stake is 0, and the rules are frozen. Next week starts as normal with
     # the leader's chosen rules. After the practice week it continues as usual.
+    #
+    # If seeding fails the group would otherwise live without conditions and
+    # the next pot read would silently install defaults (3, 100) — so we roll
+    # back the group + membership rows and surface the underlying error.
     from app.services import pot as pot_svc
     from app.core.time_utils import current_day_of_week, current_week_start, next_week_start
 
-    remaining_days = max(0, 6 - current_day_of_week())  # days strictly after today
-    pot_svc.seed_conditions(
-        group["id"], current_week_start(),
-        setter_user_id=creator_id,
-        required_pledges=max(1, remaining_days),
-        stake_per_miss=0,
-        is_finalized=True,
-        is_practice=True,
-    )
-    pot_svc.seed_conditions(
-        group["id"], next_week_start(),
-        setter_user_id=creator_id,
-        required_pledges=required_pledges,
-        stake_per_miss=stake_per_miss,
-    )
+    try:
+        remaining_days = max(0, 6 - current_day_of_week())
+        pot_svc.seed_conditions(
+            group["id"], current_week_start(),
+            setter_user_id=creator_id,
+            required_pledges=max(1, remaining_days),
+            stake_per_miss=0,
+            is_finalized=True,
+            is_practice=True,
+        )
+        pot_svc.seed_conditions(
+            group["id"], next_week_start(),
+            setter_user_id=creator_id,
+            required_pledges=required_pledges,
+            stake_per_miss=stake_per_miss,
+        )
+    except Exception:
+        sb.table("group_memberships").delete().eq("group_id", group["id"]).execute()
+        sb.table("groups").delete().eq("id", group["id"]).execute()
+        raise
+
     return group
 
 

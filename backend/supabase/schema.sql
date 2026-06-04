@@ -31,8 +31,20 @@ create table if not exists groups (
     weekly_stake_elo integer not null default 500 check (weekly_stake_elo >= 0),
     join_type text not null default 'open' check (join_type in ('open', 'request')),
     leader_id uuid references users(id) on delete set null,
+    -- Leader-chosen baseline pot conditions, persisted on the group itself so
+    -- the values survive even if writes to pot_conditions silently fail.
+    default_required_pledges smallint not null default 3
+        check (default_required_pledges between 1 and 7),
+    default_stake_per_miss integer not null default 100
+        check (default_stake_per_miss >= 0),
     created_at timestamptz not null default now()
 );
+
+-- Idempotent column additions for existing deployments.
+alter table groups add column if not exists default_required_pledges smallint
+    not null default 3 check (default_required_pledges between 1 and 7);
+alter table groups add column if not exists default_stake_per_miss integer
+    not null default 100 check (default_stake_per_miss >= 0);
 
 create table if not exists group_memberships (
     id uuid primary key default gen_random_uuid(),
@@ -90,9 +102,9 @@ create table if not exists pot_conditions (
     group_id uuid not null references groups(id) on delete cascade,
     week_start date not null,
     setter_user_id uuid references users(id) on delete set null,
-    required_pledges smallint not null default 3
+    required_pledges smallint not null
         check (required_pledges between 1 and 7),
-    stake_per_miss integer not null default 100
+    stake_per_miss integer not null
         check (stake_per_miss >= 0),
     is_finalized boolean not null default false,
     -- The first week after a group is created is a no-stakes "practice" week.
@@ -107,10 +119,8 @@ create table if not exists pot_conditions (
 alter table pot_conditions
     add column if not exists is_practice boolean not null default false;
 
-drop trigger if exists pot_conditions_updated_at on pot_conditions;
-create trigger pot_conditions_updated_at
-    before update on pot_conditions
-    for each row execute function set_updated_at();
+-- (pot_conditions_updated_at trigger is created in the triggers section below,
+--  after set_updated_at() is defined.)
 
 -- Decorative gym-space items placed by users into a 3x3 grid (slots 0..8).
 create table if not exists user_room_items (
@@ -163,6 +173,11 @@ create trigger users_updated_at
 drop trigger if exists weekly_plans_updated_at on weekly_plans;
 create trigger weekly_plans_updated_at
     before update on weekly_plans
+    for each row execute function set_updated_at();
+
+drop trigger if exists pot_conditions_updated_at on pot_conditions;
+create trigger pot_conditions_updated_at
+    before update on pot_conditions
     for each row execute function set_updated_at();
 
 ------------------------------------------------------------
