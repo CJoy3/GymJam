@@ -177,7 +177,7 @@ export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => v
               editable={practiceEditable}
               dulledDows={thisWeekIsPractice ? dulledDows : undefined}
               onToggle={practiceEditable ? togglePractice : undefined}
-              onLongPress={onRescheduleDay}
+              onReschedule={onRescheduleDay}
             />
             <Sub style={{ marginTop: 14 }}>
               {thisWeekIsPractice
@@ -190,7 +190,7 @@ export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => v
             </Sub>
             {thisWeek.some((d) => d.state === 'missed') && (
               <Sub style={{ marginTop: 6, color: C.accent }}>
-                Missed a day for unforeseen circumstances? Long-press it to reschedule.
+                Missed a day for unforeseen circumstances? Tap the red day to reschedule it.
               </Sub>
             )}
           </Card>
