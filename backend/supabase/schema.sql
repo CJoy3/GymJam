@@ -107,10 +107,8 @@ create table if not exists pot_conditions (
 alter table pot_conditions
     add column if not exists is_practice boolean not null default false;
 
-drop trigger if exists pot_conditions_updated_at on pot_conditions;
-create trigger pot_conditions_updated_at
-    before update on pot_conditions
-    for each row execute function set_updated_at();
+-- (pot_conditions_updated_at trigger is created in the triggers section below,
+--  after set_updated_at() is defined.)
 
 -- Decorative gym-space items placed by users into a 3x3 grid (slots 0..8).
 create table if not exists user_room_items (
@@ -163,6 +161,11 @@ create trigger users_updated_at
 drop trigger if exists weekly_plans_updated_at on weekly_plans;
 create trigger weekly_plans_updated_at
     before update on weekly_plans
+    for each row execute function set_updated_at();
+
+drop trigger if exists pot_conditions_updated_at on pot_conditions;
+create trigger pot_conditions_updated_at
+    before update on pot_conditions
     for each row execute function set_updated_at();
 
 ------------------------------------------------------------

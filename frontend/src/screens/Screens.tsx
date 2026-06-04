@@ -353,7 +353,7 @@ export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: (
                 <View style={{ flex: 1 }}>
                   <H3>Next week's pot rules</H3>
                   <Sub style={{ marginTop: 2 }}>
-                    The group leader{potNext.setter_display_name ? ` (${potNext.setter_display_name})` : ''} set the conditions: {potNext.required_pledges} {potNext.required_pledges === 1 ? 'pledge' : 'pledges'} · {potNext.stake_per_miss} ELO per miss.
+                    The group leader{potNext.setter_display_name ? ` (${potNext.setter_display_name})` : ''} set the conditions: {potNext.required_pledges} {potNext.required_pledges === 1 ? 'pledge' : 'pledges'} · {(potNext.required_pledges * potNext.stake_per_miss).toLocaleString()} ELO at stake ({potNext.stake_per_miss} per miss).
                   </Sub>
                 </View>
               </View>
@@ -489,18 +489,22 @@ function PotConditionsEditor({
   onSave: (week: 'current' | 'next', required: number, stake: number) => Promise<void>;
 }) {
   const initialRequired = potNext && potNext.required_pledges > 0 ? potNext.required_pledges : 3;
-  const initialStake = potNext?.stake_per_miss ?? 100;
+  const initialTotal = potNext && potNext.required_pledges > 0
+    ? potNext.required_pledges * potNext.stake_per_miss
+    : 300;
   const [required, setRequired] = useState(String(initialRequired));
-  const [stake, setStake] = useState(String(initialStake));
+  const [total, setTotal] = useState(String(initialTotal));
   useEffect(() => {
     setRequired(String(initialRequired));
-    setStake(String(initialStake));
-  }, [initialRequired, initialStake]);
+    setTotal(String(initialTotal));
+  }, [initialRequired, initialTotal]);
+
+  const reqNum = Math.max(1, Math.min(7, parseInt(required, 10) || 1));
+  const perMiss = Math.round((parseInt(total, 10) || 0) / reqNum);
 
   const save = () => {
-    const r = Math.max(1, Math.min(7, parseInt(required, 10) || 0));
-    const s = Math.max(0, parseInt(stake, 10) || 0);
-    onSave('next', r, s);
+    // Stake per missed session is derived from the full weekly amount / sessions.
+    onSave('next', reqNum, perMiss);
   };
 
   return (
@@ -520,9 +524,9 @@ function PotConditionsEditor({
           <Sub style={{ marginTop: 4, fontSize: 11 }}>1–7 days</Sub>
         </View>
         <View style={{ flex: 1 }}>
-          <Eyebrow>Stake per miss</Eyebrow>
-          <TextInput value={stake} onChangeText={(t) => setStake(t.replace(/[^0-9]/g, ''))} keyboardType="number-pad" style={styles.input} />
-          <Sub style={{ marginTop: 4, fontSize: 11 }}>ELO per missed day</Sub>
+          <Eyebrow>Weekly stake</Eyebrow>
+          <TextInput value={total} onChangeText={(t) => setTotal(t.replace(/[^0-9]/g, ''))} keyboardType="number-pad" style={styles.input} />
+          <Sub style={{ marginTop: 4, fontSize: 11 }}>Total ELO · {perMiss} per miss</Sub>
         </View>
       </View>
       <Btn label="Save rules" size="md" onPress={save} style={{ marginTop: 14 }} />
@@ -633,7 +637,7 @@ export function GymBrowser({ onBack, onJoined, onCreated }: { onBack: () => void
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [freq, setFreq] = useState('3');           // required_pledges per week, 1..7
-  const [stakePerMiss, setStakePerMiss] = useState('100');
+  const [weeklyStake, setWeeklyStake] = useState('300');  // full ELO at stake for the week
   const [jt, setJt] = useState<'open' | 'request'>('open');
   const [inbox, setInbox] = useState(false);
   const inGroup = groupId !== null;
@@ -647,10 +651,12 @@ export function GymBrowser({ onBack, onJoined, onCreated }: { onBack: () => void
   const create = async () => {
     if (!name.trim()) return;
     const requiredPledges = Math.max(1, Math.min(7, parseInt(freq, 10) || 3));
-    const stakeMiss = Math.max(0, parseInt(stakePerMiss, 10) || 100);
+    const weeklyTotal = Math.max(0, parseInt(weeklyStake, 10) || 0);
+    // Stake per missed session is derived from the full weekly amount / sessions.
+    const stakeMiss = Math.round(weeklyTotal / requiredPledges);
     await addGroup({
       name: name.trim(),
-      weekly_stake_elo: requiredPledges * stakeMiss,
+      weekly_stake_elo: weeklyTotal,
       join_type: jt,
       required_pledges: requiredPledges,
       stake_per_miss: stakeMiss,
@@ -756,14 +762,16 @@ export function GymBrowser({ onBack, onJoined, onCreated }: { onBack: () => void
                   <Sub style={{ marginTop: 4, fontSize: 11 }}>1–7 days</Sub>
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Eyebrow>Stake per miss</Eyebrow>
+                  <Eyebrow>Weekly stake</Eyebrow>
                   <TextInput
-                    value={stakePerMiss}
-                    onChangeText={(t) => setStakePerMiss(t.replace(/[^0-9]/g, ''))}
+                    value={weeklyStake}
+                    onChangeText={(t) => setWeeklyStake(t.replace(/[^0-9]/g, ''))}
                     keyboardType="number-pad"
                     style={styles.input}
                   />
-                  <Sub style={{ marginTop: 4, fontSize: 11 }}>ELO per missed day</Sub>
+                  <Sub style={{ marginTop: 4, fontSize: 11 }}>
+                    Total ELO · {Math.round((parseInt(weeklyStake, 10) || 0) / Math.max(1, Math.min(7, parseInt(freq, 10) || 3)))} per miss
+                  </Sub>
                 </View>
               </View>
 

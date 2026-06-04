@@ -41,6 +41,20 @@ def _defaults_for(group_id: str, week_start: date, setter: str | None = None) ->
     }
 
 
+def _insert_conditions(payload: dict) -> Any | None:
+    """Insert a pot_conditions row, retrying without `is_practice` so older
+    schemas (missing that column) still persist the row instead of silently
+    falling back to synthesized defaults."""
+    sb = get_supabase()
+    inserted = _safe_exec(sb.table("pot_conditions").insert(payload))
+    if inserted and inserted.data:
+        return inserted
+    if "is_practice" in payload:
+        fallback = {k: v for k, v in payload.items() if k != "is_practice"}
+        return _safe_exec(sb.table("pot_conditions").insert(fallback))
+    return inserted
+
+
 def _leader_id(group_id: str) -> str | None:
     """The leader IS the setter — no rotation. Returns None if the group is leaderless."""
     sb = get_supabase()
@@ -78,7 +92,7 @@ def _ensure_conditions(group_id: str, week_start: date) -> dict:
         return row
 
     payload = _defaults_for(group_id, week_start, leader)
-    inserted = _safe_exec(sb.table("pot_conditions").insert(payload))
+    inserted = _insert_conditions(payload)
     if inserted and inserted.data:
         return inserted.data[0]
 
@@ -117,7 +131,7 @@ def seed_conditions(
     )
     if existing and existing.data:
         return
-    payload = {
+    _insert_conditions({
         "group_id": group_id,
         "week_start": week_start.isoformat(),
         "setter_user_id": setter_user_id,
@@ -125,12 +139,7 @@ def seed_conditions(
         "stake_per_miss": stake_per_miss,
         "is_finalized": is_finalized,
         "is_practice": is_practice,
-    }
-    inserted = _safe_exec(sb.table("pot_conditions").insert(payload))
-    if not inserted:
-        # `is_practice` column may not exist yet on older schemas — retry without it.
-        payload.pop("is_practice", None)
-        _safe_exec(sb.table("pot_conditions").insert(payload))
+    })
 
 
 def update_conditions(
