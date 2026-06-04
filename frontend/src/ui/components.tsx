@@ -3,10 +3,13 @@ import {
   View, Text, Pressable, StyleSheet, ViewStyle, TextStyle, ActivityIndicator,
 } from 'react-native';
 import Animated, {
-  Easing, FadeIn, useAnimatedStyle, useSharedValue, withTiming,
+  Easing, FadeIn, useAnimatedProps, useAnimatedStyle, useSharedValue, withTiming,
 } from 'react-native-reanimated';
+import Svg, { Circle } from 'react-native-svg';
 import { MaterialIcons } from '@expo/vector-icons';
 import { C, FONT, RADIUS, SPACE } from '../theme/tokens';
+
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 // Shared motion language — short, cubic ease-out, zero spring overshoot.
 const EASE_OUT = Easing.out(Easing.cubic);
@@ -174,6 +177,12 @@ export function Stat({
 
 /* ────────────────────────────  Ring  ─────────────────────────────── */
 
+/**
+ * Circular progress ring rendered via SVG so the arc length scales strictly
+ * with progress. At 0%, the colored arc has zero length (only the muted track
+ * shows); at 100%, the full circle is lit. Animates by tweening the dash offset
+ * on the UI thread via Reanimated.
+ */
 export function Ring({
   progress, size = 96, label, sublabel, color = C.success, track = C.muted, thickness,
 }: {
@@ -186,6 +195,8 @@ export function Ring({
   thickness?: number;
 }) {
   const stroke = thickness ?? Math.max(6, size * 0.085);
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
   const clamped = Math.max(0, Math.min(100, progress));
   const animated = useSharedValue(0);
 
@@ -193,28 +204,37 @@ export function Ring({
     animated.value = withTiming(clamped, { duration: 460, easing: EASE_OUT });
   }, [animated, clamped]);
 
-  const firstHalf = useAnimatedStyle(() => {
-    const deg = Math.min(animated.value, 50) * 3.6;
-    return { transform: [{ rotate: `${-135 + deg}deg` }] };
-  });
-  const secondHalf = useAnimatedStyle(() => {
-    const v = Math.max(0, animated.value - 50);
-    const deg = v * 3.6;
-    return {
-      transform: [{ rotate: `${-135 + deg}deg` }],
-      opacity: animated.value > 50 ? 1 : 0,
-    };
-  });
+  const animatedProps = useAnimatedProps(() => ({
+    strokeDashoffset: circumference * (1 - animated.value / 100),
+  }));
 
+  const center = size / 2;
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      <View style={{ position: 'absolute', width: size, height: size, borderRadius: size / 2, borderWidth: stroke, borderColor: track }} />
-      <Animated.View style={[StyleSheet.absoluteFill, firstHalf]}>
-        <View style={{ width: size, height: size, borderRadius: size / 2, borderWidth: stroke, borderColor: 'transparent', borderTopColor: color, borderRightColor: color }} />
-      </Animated.View>
-      <Animated.View style={[StyleSheet.absoluteFill, secondHalf]}>
-        <View style={{ width: size, height: size, borderRadius: size / 2, borderWidth: stroke, borderColor: 'transparent', borderTopColor: color, borderRightColor: color }} />
-      </Animated.View>
+      <Svg width={size} height={size} style={StyleSheet.absoluteFill}>
+        {/* muted track */}
+        <Circle
+          cx={center}
+          cy={center}
+          r={radius}
+          stroke={track}
+          strokeWidth={stroke}
+          fill="none"
+        />
+        {/* progress arc — starts from 12 o'clock, sweeps clockwise */}
+        <AnimatedCircle
+          cx={center}
+          cy={center}
+          r={radius}
+          stroke={color}
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          fill="none"
+          strokeDasharray={`${circumference} ${circumference}`}
+          animatedProps={animatedProps}
+          transform={`rotate(-90 ${center} ${center})`}
+        />
+      </Svg>
       <View style={{ alignItems: 'center' }}>
         {label != null && <Text style={[styles.ringLabel, { fontSize: size * 0.28 }]}>{label}</Text>}
         {sublabel != null && <Text style={[styles.ringSub, { fontSize: size * 0.13 }]}>{sublabel}</Text>}
