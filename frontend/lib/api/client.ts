@@ -47,7 +47,11 @@ function extractDetail(text: string): string {
   try {
     const parsed = JSON.parse(text);
     if (typeof parsed?.detail === 'string') return parsed.detail;
-    if (Array.isArray(parsed?.detail) && parsed.detail[0]?.msg) return parsed.detail[0].msg;
+    if (Array.isArray(parsed?.detail) && parsed.detail[0]?.msg) {
+      const first = parsed.detail[0];
+      const field = Array.isArray(first.loc) ? first.loc.join('.') : '';
+      return field ? `${field}: ${first.msg}` : first.msg;
+    }
   } catch {
     // Not JSON; fall through.
   }

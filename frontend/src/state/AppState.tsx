@@ -75,7 +75,7 @@ interface AppStateShape {
   groupId: string | null;
   isLeader: boolean;
   groups: Group[];
-  joinGroup: (groupId: string) => Promise<void>;
+  joinGroup: (groupId: string) => Promise<boolean>;
   leaveGroup: () => Promise<void>;
   addGroup: (g: {
     name: string;
@@ -83,7 +83,7 @@ interface AppStateShape {
     join_type: 'open' | 'request';
     required_pledges: number;
     stake_per_miss: number;
-  }) => Promise<void>;
+  }) => Promise<boolean>;
 
   // Requests
   joinRequests: JoinRequest[];
@@ -159,10 +159,6 @@ function daysToWeek(days: plansApi.PlanDay[]): DayStatus[] {
     const found = days.find((d) => d.day_of_week === i);
     return { day, state: (found?.state ?? 'unselected') as DayState };
   });
-}
-
-function blankWeek(): DayStatus[] {
-  return DAYS.map((day) => ({ day, state: 'unselected' as DayState }));
 }
 
 function setSelectedDays(week: DayStatus[], selected: number[]): DayStatus[] {
@@ -288,8 +284,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   // Groups are global (decoupled from gyms): always load every group on the
   // platform, regardless of the user's home gym. (Args kept for call-site
   // compatibility but no longer used for filtering.)
-  const loadGroupsForGym = useCallback(async (_gymId?: string | null, _currentUserId?: string | null) => {
-    const list = await groupsApi.listAllGroups();
+  const loadGroupsForGym = useCallback(async (gymId?: string | null, _currentUserId?: string | null) => {
+    const list = await groupsApi.listGroups(gymId);
     const mapped = list.map(summaryToGroup);
     setGroupsAtGym(mapped);
     const mine = mapped.find((g) => g.isMember) ?? null;
@@ -390,9 +386,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   /* ----- bootstrap ----- */
 
-  const loadClock = useCallback(async () => {
+  const loadClock = useCallback(async (reset = false) => {
     try {
-      const clock = await devApi.getClock();
+      const clock = reset ? await devApi.resetClock() : await devApi.getClock();
       setWeekOffsetDays(clock.offset_days);
       setTodayDow(clock.today_dow);
     } catch {
@@ -400,34 +396,25 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const bootstrap = useCallback(async () => {
+  const bootstrap = useCallback(async (resetClockOnStartup = false) => {
     setReloading(true);
     try {
       const deviceId = await getOrCreateUserId();
       const user = await usersApi.registerUser(deviceId);
       setMe(user);
+      await loadClock(resetClockOnStartup);
       // Fire every independent fetch in parallel instead of one-by-one — this
       // is the single biggest startup latency win against the serverless API.
-      const groupsPromise = user.gym_id
-        ? loadGroupsForGym()
-        : Promise.resolve(null);
-      if (!user.gym_id) {
-        setGroupsAtGym([]);
-        setMyGroupSummary(null);
-        setPot(0);
-        setJoinRequests([]);
-        setGroupMembers([]);
-      }
+      const groupsPromise = loadGroupsForGym(user.gym_id, user.id);
       const [mine] = await Promise.all([
         groupsPromise,
         loadGyms(),
         loadPlans(),
-        loadClock(),
         loadBadges(),
         loadRoom(),
       ]);
       // Only this depends on the resolved group id, so it runs after the batch.
-      if (mine) await refreshGroupContext(mine.id, mine.isLeader);
+      await refreshGroupContext(mine?.id ?? null, mine?.isLeader);
     } catch (e) {
       reportError('Failed to start GymJam', e);
     } finally {
@@ -437,7 +424,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   }, [loadGyms, loadGroupsForGym, loadPlans, loadClock, refreshGroupContext, loadBadges, loadRoom]);
 
   useEffect(() => {
-    bootstrap();
+    bootstrap(true);
   }, [bootstrap]);
 
   /* ----- actions ----- */
@@ -454,11 +441,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   }, [loadGroupsForGym, refreshGroupContext]);
 
   const joinGroup = useCallback(async (groupId: string) => {
-    if (!me?.gym_id) return;
+    if (!me) return false;
     const snapshot = groupsAtGym;
     const prevMine = myGroupSummary;
     const target = snapshot.find((g) => g.id === groupId);
-    if (!target) return;
+    if (!target) return false;
     const isOpen = target.joinType === 'open';
 
     // Optimistic local mutation — UI updates before the network call returns.
@@ -472,21 +459,23 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     if (isOpen) setMyGroupSummary({ ...target, isMember: true, members: target.members + 1 });
 
     try {
-      await groupsApi.joinGroup(groupId);
-      showToast(isOpen ? `Joined ${target.name}` : 'Request sent', 'success');
+      const res = await groupsApi.joinGroup(groupId);
+      showToast(res.action === 'joined' ? `Joined ${target.name}` : 'Request sent', 'success');
       const mine = await loadGroupsForGym(me.gym_id, me.id);
       await refreshGroupContext(mine?.id ?? null, mine?.isLeader);
       await loadPlans();
+      return true;
     } catch (e) {
       // Roll back to the snapshot taken before the optimistic mutation.
       setGroupsAtGym(snapshot);
       setMyGroupSummary(prevMine);
       reportError('Could not join group', e);
+      return false;
     }
   }, [groupsAtGym, loadGroupsForGym, loadPlans, refreshGroupContext, me, myGroupSummary]);
 
   const leaveGroup = useCallback(async () => {
-    if (!myGroupSummary || !me?.gym_id) return;
+    if (!myGroupSummary || !me) return;
     const snapshotGroups = groupsAtGym;
     const snapshotMine = myGroupSummary;
     const willDelete = myGroupSummary.isLeader === true && myGroupSummary.members <= 1;
@@ -518,7 +507,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   }, [groupsAtGym, loadGroupsForGym, loadPlans, refreshGroupContext, me, myGroupSummary]);
 
   const refreshGroupsAtGym = useCallback(async () => {
-    if (!me?.gym_id) return;
+    if (!me) return;
     try {
       const mine = await loadGroupsForGym(me.gym_id, me.id);
       await refreshGroupContext(mine?.id ?? null, mine?.isLeader);
@@ -534,20 +523,48 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     required_pledges: number;
     stake_per_miss: number;
   }) => {
-    if (!me) return;  // groups are global — no home gym required to create one
+    if (!me) return false;  // groups are global — no home gym required to create one
     try {
-      await groupsApi.createGroup({
+      const created = await groupsApi.createGroup({
+        gym_id: me.gym_id,
         name: g.name,
         weekly_stake_elo: g.weekly_stake_elo,
         join_type: g.join_type,
         required_pledges: g.required_pledges,
         stake_per_miss: g.stake_per_miss,
       });
-      const mine = await loadGroupsForGym();
-      await refreshGroupContext(mine?.id ?? null, mine?.isLeader);
-      await loadPlans();
+
+      const mine: Group = {
+        id: created.id,
+        name: created.name,
+        members: 1,
+        tier: 'Regular',
+        stake: `${created.weekly_stake_elo} ELO`,
+        joinType: created.join_type,
+        isLeader: true,
+        isMember: true,
+        requested: false,
+      };
+      setMyGroupSummary(mine);
+      setGroupsAtGym((prev) => [mine, ...prev.filter((group) => group.id !== mine.id)]);
+      setGroupMembers([]);
+      setPot(0);
+      setPotCurrent(null);
+      setPotNext(null);
+
+      void (async () => {
+        const refreshedMine = await loadGroupsForGym(me.gym_id, me.id);
+        await Promise.all([
+          refreshGroupContext(refreshedMine?.id ?? mine.id, refreshedMine?.isLeader ?? true),
+          loadPlans(),
+        ]);
+      })().catch(() => {
+        // The group already exists; keep the optimistic state and let pull-to-refresh reconcile.
+      });
+      return true;
     } catch (e) {
       reportError('Could not create group', e);
+      return false;
     }
   }, [loadGroupsForGym, loadPlans, refreshGroupContext, me]);
 
@@ -758,7 +775,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       }
       setWeekOffsetDays(clock.offset_days);
       setTodayDow(clock.today_dow);
-      await bootstrap();
+      await bootstrap(false);
       showToast(goingForward ? 'Jumped to next week' : 'Back to this week', 'success');
     } catch (e) {
       reportError('Could not change week', e);
@@ -836,7 +853,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       roomItems,
       placeRoomItem,
 
-      refreshAll: bootstrap,
+      refreshAll: () => bootstrap(false),
     };
   }, [
     addGroup, addNextWeekDay, approveRequest, badges, bootstrap, checkInToday,

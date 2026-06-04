@@ -117,8 +117,8 @@ export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => v
   // week has room the session moves with no penalty; if it's full (7 days) a
   // 50% ELO penalty applies instead of a full miss.
   const onRescheduleDay = (i: number) => {
-    const nextPledged = nextWeek.filter((d) => d.state === 'planned' || d.state === 'locked').length;
-    const willMove = nextPledged + 1 <= 7;
+    const nextOccupied = nextWeek.filter((d) => d.state !== 'unselected').length;
+    const willMove = nextOccupied + 1 <= 7;
     const stake = potCurrent?.stake_per_miss ?? 0;
     Alert.alert(
       'Reschedule — unforeseen circumstances',
@@ -706,8 +706,8 @@ export function GymBrowser({ onBack, onJoined, onCreated }: { onBack: () => void
 
   const join = async (g: Group) => {
     if (inGroup) return;
-    await joinGroup(g.id);
-    if (g.joinType === 'open') onJoined();
+    const ok = await joinGroup(g.id);
+    if (ok && g.joinType === 'open') onJoined();
   };
   const create = async () => {
     if (!name.trim()) return;
@@ -715,15 +715,17 @@ export function GymBrowser({ onBack, onJoined, onCreated }: { onBack: () => void
     const weeklyTotal = Math.max(0, parseInt(weeklyStake, 10) || 0);
     // Stake per missed session is derived from the full weekly amount / sessions.
     const stakeMiss = Math.round(weeklyTotal / requiredPledges);
-    await addGroup({
+    const ok = await addGroup({
       name: name.trim(),
       weekly_stake_elo: weeklyTotal,
       join_type: jt,
       required_pledges: requiredPledges,
       stake_per_miss: stakeMiss,
     });
-    setCreating(false); setName('');
-    onCreated();
+    if (ok) {
+      setCreating(false); setName('');
+      onCreated();
+    }
   };
   const onLeave = (g: Group) => {
     const sole = g.isLeader === true && g.members <= 1;
