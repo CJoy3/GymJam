@@ -152,24 +152,34 @@ def create_group(
     # the days remaining after today are pledgeable (sessions = remaining days),
     # the stake is 0, and the rules are frozen. Next week starts as normal with
     # the leader's chosen rules. After the practice week it continues as usual.
+    #
+    # If seeding fails the group would otherwise live without conditions and
+    # the next pot read would silently install defaults (3, 100) — so we roll
+    # back the group + membership rows and surface the underlying error.
     from app.services import pot as pot_svc
     from app.core.time_utils import current_day_of_week, current_week_start, next_week_start
 
-    remaining_days = max(0, 6 - current_day_of_week())  # days strictly after today
-    pot_svc.seed_conditions(
-        group["id"], current_week_start(),
-        setter_user_id=creator_id,
-        required_pledges=max(1, remaining_days),
-        stake_per_miss=0,
-        is_finalized=True,
-        is_practice=True,
-    )
-    pot_svc.seed_conditions(
-        group["id"], next_week_start(),
-        setter_user_id=creator_id,
-        required_pledges=required_pledges,
-        stake_per_miss=stake_per_miss,
-    )
+    try:
+        remaining_days = max(0, 6 - current_day_of_week())
+        pot_svc.seed_conditions(
+            group["id"], current_week_start(),
+            setter_user_id=creator_id,
+            required_pledges=max(1, remaining_days),
+            stake_per_miss=0,
+            is_finalized=True,
+            is_practice=True,
+        )
+        pot_svc.seed_conditions(
+            group["id"], next_week_start(),
+            setter_user_id=creator_id,
+            required_pledges=required_pledges,
+            stake_per_miss=stake_per_miss,
+        )
+    except Exception:
+        sb.table("group_memberships").delete().eq("group_id", group["id"]).execute()
+        sb.table("groups").delete().eq("id", group["id"]).execute()
+        raise
+
     return group
 
 

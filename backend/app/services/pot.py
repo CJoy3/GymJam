@@ -118,20 +118,17 @@ def seed_conditions(
     stake_per_miss: int,
     is_finalized: bool = False,
     is_practice: bool = False,
-) -> None:
-    """Called by group creation to seed initial pot conditions for a week.
-    Idempotent — won't overwrite an existing row."""
+) -> dict:
+    """Persist initial pot conditions for a group's week.
+
+    Called by group creation to lock in the leader's chosen rules. Uses UPSERT so
+    the row is created on first call and overwritten on subsequent ones — the
+    leader's values always win. Raises on DB failure (not swallowed) so a broken
+    seed surfaces immediately at group-creation time instead of being silently
+    replaced by defaults the next time the pot is read.
+    """
     sb = get_supabase()
-    existing = _safe_exec(
-        sb.table("pot_conditions")
-        .select("group_id")
-        .eq("group_id", group_id)
-        .eq("week_start", week_start.isoformat())
-        .limit(1)
-    )
-    if existing and existing.data:
-        return
-    _insert_conditions({
+    payload = {
         "group_id": group_id,
         "week_start": week_start.isoformat(),
         "setter_user_id": setter_user_id,
@@ -139,7 +136,47 @@ def seed_conditions(
         "stake_per_miss": stake_per_miss,
         "is_finalized": is_finalized,
         "is_practice": is_practice,
-    })
+        "updated_at": _utc_now_iso(),
+    }
+
+    def _try(p: dict) -> dict | None:
+        try:
+            res = sb.table("pot_conditions").upsert(p, on_conflict="group_id,week_start").execute()
+            if res and res.data:
+                return res.data[0]
+        except Exception:
+            return None
+        return None
+
+    row = _try(payload)
+    if row is not None:
+        return row
+
+    # Older deployments may be missing the `is_practice` column — retry without it.
+    fallback = {k: v for k, v in payload.items() if k != "is_practice"}
+    row = _try(fallback)
+    if row is not None:
+        return row
+
+    # As a last resort, surface the actual DB error so we don't silently corrupt
+    # the group with default values on the next read.
+    try:
+        res = (
+            sb.table("pot_conditions")
+            .upsert(fallback, on_conflict="group_id,week_start")
+            .execute()
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to seed pot conditions for {week_start}: {exc}",
+        )
+    if res and res.data:
+        return res.data[0]
+    raise HTTPException(
+        status_code=500,
+        detail=f"Pot conditions for {week_start} did not persist",
+    )
 
 
 def update_conditions(
