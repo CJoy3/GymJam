@@ -164,16 +164,26 @@ def update_conditions(
         raise HTTPException(status_code=409, detail="Pot conditions are already finalized")
 
     sb = get_supabase()
-    res = _safe_exec(
-        sb.table("pot_conditions")
-        .update({
-            "required_pledges": required_pledges,
-            "stake_per_miss": stake_per_miss,
-            "updated_at": _utc_now_iso(),
-        })
-        .eq("group_id", group_id)
-        .eq("week_start", week_start.isoformat())
-    )
+    # Upsert so the write succeeds whether or not the row already exists, in one
+    # atomic statement. Errors are surfaced (not swallowed) so a failed save is
+    # visible instead of silently resetting to defaults on the next read.
+    payload = {
+        "group_id": group_id,
+        "week_start": week_start.isoformat(),
+        "setter_user_id": leader or cond.get("setter_user_id"),
+        "required_pledges": required_pledges,
+        "stake_per_miss": stake_per_miss,
+        "updated_at": _utc_now_iso(),
+    }
+    try:
+        res = (
+            sb.table("pot_conditions")
+            .upsert(payload, on_conflict="group_id,week_start")
+            .execute()
+        )
+    except Exception as exc:  # noqa: BLE001 — surface the real DB error to the client
+        raise HTTPException(status_code=500, detail=f"Failed to save pot conditions: {exc}")
+
     if res and res.data:
         return res.data[0]
     return {**cond, "required_pledges": required_pledges, "stake_per_miss": stake_per_miss}
