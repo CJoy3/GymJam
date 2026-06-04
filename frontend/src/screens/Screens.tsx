@@ -82,8 +82,9 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
 
 export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => void; onPlan: () => void; onPot: () => void; onGroup: () => void }) {
   const {
-    thisWeek, elo, streak, pot, potCurrent, checkInToday, displayName,
+    thisWeek, nextWeek, elo, streak, pot, potCurrent, checkInToday, displayName,
     todayDow, thisWeekIsPractice, setThisWeekDays, toggleWeek, weekSimulated, groupId,
+    rescheduleMissedDay,
   } = useAppState();
   const refresh = useRefreshControl();
   const [advancing, setAdvancing] = useState(false);
@@ -112,6 +113,29 @@ export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => v
     try { await toggleWeek(); } finally { setAdvancing(false); }
   };
 
+  // Long-press a missed day → reschedule it (unforeseen circumstances). If next
+  // week has room the session moves with no penalty; if it's full (7 days) a
+  // 50% ELO penalty applies instead of a full miss.
+  const onRescheduleDay = (i: number) => {
+    const nextPledged = nextWeek.filter((d) => d.state === 'planned' || d.state === 'locked').length;
+    const willMove = nextPledged + 1 <= 7;
+    const stake = potCurrent?.stake_per_miss ?? 0;
+    Alert.alert(
+      'Reschedule — unforeseen circumstances',
+      willMove
+        ? 'Move this missed session into next week? No ELO penalty.'
+        : `Next week is already full (7 days), so this can't be moved. A 50% penalty (${Math.round(stake * 0.5)} ELO) will apply instead of a full miss.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: willMove ? 'Reschedule' : 'Apply 50% penalty',
+          style: willMove ? 'default' : 'destructive',
+          onPress: () => rescheduleMissedDay(i),
+        },
+      ],
+    );
+  };
+
   const totalAtStake = potCurrent ? potCurrent.members.reduce((s, m) => s + m.elo_at_risk, 0) : 0;
   const onTrack = potCurrent ? potCurrent.members.filter((m) => m.is_on_track).length : 0;
   const memberCount = potCurrent?.members.length ?? 0;
@@ -134,8 +158,11 @@ export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => v
         )}
 
         <FadeInItem delay={120} style={{ marginTop: 24 }}>
-          <Card padding={SPACE.xl} onPress={onGroup}>
-            <View style={[styles.rowBetween, { marginBottom: 16 }]}>
+          <Card padding={SPACE.xl}>
+            {/* Header navigates to the group; kept separate from the DayPicker so
+                its day-cell gestures (tap to pledge, long-press to reschedule)
+                aren't swallowed by a wrapping Pressable. */}
+            <Pressable onPress={onGroup} style={[styles.rowBetween, { marginBottom: 16 }]}>
               <View>
                 <View style={styles.rowGap}>
                   <Eyebrow style={styles.thisWeekHeader}>This week</Eyebrow>
@@ -144,12 +171,13 @@ export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => v
                 <Text style={styles.pledgeSubhead}>{thisWeekIsPractice ? 'Practice pledge' : 'Your pledge'}</Text>
               </View>
               <Ring progress={pct} size={68} thickness={6} label={done} sublabel={`/${pledged || 0}`} />
-            </View>
+            </Pressable>
             <DayPicker
               days={thisWeek}
               editable={practiceEditable}
               dulledDows={thisWeekIsPractice ? dulledDows : undefined}
               onToggle={practiceEditable ? togglePractice : undefined}
+              onLongPress={onRescheduleDay}
             />
             <Sub style={{ marginTop: 14 }}>
               {thisWeekIsPractice
@@ -160,6 +188,11 @@ export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => v
                 : pledged - done > 0 ? `${pledged - done} more session${pledged - done === 1 ? '' : 's'} to go.`
                 : 'All sessions done. Strong week.'}
             </Sub>
+            {thisWeek.some((d) => d.state === 'missed') && (
+              <Sub style={{ marginTop: 6, color: C.accent }}>
+                Missed a day for unforeseen circumstances? Long-press it to reschedule.
+              </Sub>
+            )}
           </Card>
         </FadeInItem>
 
