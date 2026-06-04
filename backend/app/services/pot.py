@@ -34,8 +34,8 @@ def _defaults_for(group_id: str, week_start: date, setter: str | None = None) ->
         "group_id": group_id,
         "week_start": week_start.isoformat(),
         "setter_user_id": setter,
-        "required_pledges": 3,
-        "stake_per_miss": 100,
+        "required_pledges": 1,
+        "stake_per_miss": 0,
         "is_finalized": False,
         "is_practice": False,
     }
@@ -209,8 +209,8 @@ def pot_detail(group_id: str, week: str = "current") -> dict:
     Members who haven't pledged any days are skipped (opt-out)."""
     week_start = _resolve_week(week)
     cond = _ensure_conditions(group_id, week_start)
-    required = cond.get("required_pledges", 3)
-    stake = cond.get("stake_per_miss", 100)
+    required = cond.get("required_pledges", 1)
+    stake = cond.get("stake_per_miss", 0)
     is_practice = bool(cond.get("is_practice"))
 
     sb = get_supabase()

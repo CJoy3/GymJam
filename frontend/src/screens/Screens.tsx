@@ -82,7 +82,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
 
 export function Home({ onCheckIn, onPlan, onPot }: { onCheckIn: () => void; onPlan: () => void; onPot: () => void }) {
   const {
-    thisWeek, elo, streak, pot, potCurrent, checkInToday, displayName,
+    thisWeek, elo, streak, pot, potCurrent, potNext, checkInToday, displayName,
     todayDow, thisWeekIsPractice, setThisWeekDays, advanceWeek, groupId,
   } = useAppState();
   const refresh = useRefreshControl();
@@ -112,6 +112,7 @@ export function Home({ onCheckIn, onPlan, onPot }: { onCheckIn: () => void; onPl
     try { await advanceWeek(); } finally { setAdvancing(false); }
   };
 
+  const potPreview = thisWeekIsPractice && potNext ? potNext : potCurrent;
   const totalAtStake = potCurrent ? potCurrent.members.reduce((s, m) => s + m.elo_at_risk, 0) : 0;
   const onTrack = potCurrent ? potCurrent.members.filter((m) => m.is_on_track).length : 0;
   const memberCount = potCurrent?.members.length ?? 0;
@@ -154,11 +155,11 @@ export function Home({ onCheckIn, onPlan, onPot }: { onCheckIn: () => void; onPl
             <Sub style={{ marginTop: 14 }}>
               {thisWeekIsPractice
                 ? (practiceRemaining > 0
-                    ? `Practice week — no ELO at stake. Tap the ${practiceRemaining} day${practiceRemaining === 1 ? '' : 's'} left to pledge. Plan next week as normal.`
-                    : 'Practice week — the real challenge starts next week. Plan it below.')
+                  ? `Practice week — no ELO at stake. Tap the ${practiceRemaining} day${practiceRemaining === 1 ? '' : 's'} left to pledge. Plan next week as normal.`
+                  : 'Practice week — the real challenge starts next week. Plan it below.')
                 : pledged === 0 ? 'No sessions pledged yet — plan next week.'
-                : pledged - done > 0 ? `${pledged - done} more session${pledged - done === 1 ? '' : 's'} to go.`
-                : 'All sessions done. Strong week.'}
+                  : pledged - done > 0 ? `${pledged - done} more session${pledged - done === 1 ? '' : 's'} to go.`
+                    : 'All sessions done. Strong week.'}
             </Sub>
           </Card>
         </FadeInItem>
@@ -177,8 +178,8 @@ export function Home({ onCheckIn, onPlan, onPot }: { onCheckIn: () => void; onPl
               </View>
             </View>
             <Text style={[styles.subOnCream, { marginTop: 6 }]}>
-              {memberCount > 0
-                ? `${onTrack} of ${memberCount} on track · ${totalAtStake.toLocaleString()} at stake`
+              {potPreview
+                ? `${thisWeekIsPractice ? 'Next week' : 'This week'} · ${potPreview.required_pledges} ${potPreview.required_pledges === 1 ? 'session' : 'sessions'} · ${potPreview.stake_per_miss.toLocaleString()} ELO per miss${memberCount > 0 ? ` · ${onTrack} of ${memberCount} on track` : ''}`
                 : 'Join a group to start the pot'}
             </Text>
           </Card>
@@ -244,9 +245,9 @@ export function CheckIn({ onClose }: { onClose: () => void }) {
         <FadeInItem delay={220} style={{ width: '100%', marginTop: 36 }}>
           <Card padding={SPACE.xl}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-around' }}>
-              <SimpleStat label="Done"    value={String(done)}    color={C.success} />
+              <SimpleStat label="Done" value={String(done)} color={C.success} />
               <SimpleStat label="Pledged" value={String(pledged)} />
-              <SimpleStat label="ELO"     value="+10"             color={C.accent} />
+              <SimpleStat label="ELO" value="+10" color={C.accent} />
             </View>
           </Card>
         </FadeInItem>
@@ -441,19 +442,19 @@ function MemberPlanRow({ days, highlightDows }: { days: DayStatus[]; highlightDo
         const isMissed = d.state === 'missed';
         const bg = matched && isPlanned ? C.primary
           : isDone ? C.success
-          : isPlanned ? 'transparent'
-          : isMissed ? C.dangerSoft
-          : 'transparent';
+            : isPlanned ? 'transparent'
+              : isMissed ? C.dangerSoft
+                : 'transparent';
         const fg = matched && isPlanned ? C.primaryFg
           : isPlanned ? C.success
-          : isDone ? C.primaryFg
-          : isMissed ? C.danger
-          : C.mutedFg;
+            : isDone ? C.primaryFg
+              : isMissed ? C.danger
+                : C.mutedFg;
         const border = matched && isPlanned ? C.primary
           : isPlanned ? C.success
-          : isDone ? C.success
-          : isMissed ? C.dangerSoft
-          : C.border;
+            : isDone ? C.success
+              : isMissed ? C.dangerSoft
+                : C.border;
         return (
           <View
             key={i}
@@ -488,24 +489,39 @@ function PotConditionsEditor({
   potNext: import('../../lib/api/pot').PotDetail | null;
   onSave: (week: 'current' | 'next', required: number, stake: number) => Promise<void>;
 }) {
-  const initialRequired = potNext && potNext.required_pledges > 0 ? potNext.required_pledges : 3;
-  const initialTotal = potNext && potNext.required_pledges > 0
-    ? potNext.required_pledges * potNext.stake_per_miss
-    : 300;
-  const [required, setRequired] = useState(String(initialRequired));
-  const [total, setTotal] = useState(String(initialTotal));
+  const [editing, setEditing] = useState(false);
+  const [required, setRequired] = useState('');
+  const [total, setTotal] = useState('');
+  const hasPotNext = !!potNext;
   useEffect(() => {
-    setRequired(String(initialRequired));
-    setTotal(String(initialTotal));
-  }, [initialRequired, initialTotal]);
+    if (editing) return;
+    if (potNext) {
+      setRequired(String(potNext.required_pledges));
+      setTotal(String(potNext.required_pledges * potNext.stake_per_miss));
+    } else {
+      setRequired('');
+      setTotal('');
+    }
+  }, [editing, potNext]);
+
+  const beginEdit = () => {
+    setRequired(potNext ? String(potNext.required_pledges) : '');
+    setTotal(potNext ? String(potNext.required_pledges * potNext.stake_per_miss) : '');
+    setEditing(true);
+  };
 
   const reqNum = Math.max(1, Math.min(7, parseInt(required, 10) || 1));
   const perMiss = Math.round((parseInt(total, 10) || 0) / reqNum);
 
-  const save = () => {
+  const save = async () => {
     // Stake per missed session is derived from the full weekly amount / sessions.
-    onSave('next', reqNum, perMiss);
+    await onSave('next', reqNum, perMiss);
+    setEditing(false);
   };
+
+  const savedRequired = potNext?.required_pledges ?? (required ? reqNum : 0);
+  const savedPerMiss = potNext?.stake_per_miss ?? (total ? perMiss : 0);
+  const savedTotal = potNext ? potNext.required_pledges * potNext.stake_per_miss : ((required && total) ? reqNum * perMiss : 0);
 
   return (
     <Card padding={SPACE.xl} tone="sage">
@@ -513,23 +529,58 @@ function PotConditionsEditor({
         <View style={{ flex: 1 }}>
           <Eyebrow>You're the leader</Eyebrow>
           <H3 style={{ marginTop: 4 }}>Next week's pot rules</H3>
-          <Sub style={{ marginTop: 4 }}>Only the group leader can set the conditions.</Sub>
+          <Sub style={{ marginTop: 4 }}>
+            {editing
+              ? 'Only the group leader can set the conditions.'
+              : hasPotNext
+                ? `${savedRequired} ${savedRequired === 1 ? 'session' : 'sessions'} · ${savedPerMiss.toLocaleString()} ELO per miss · ${savedTotal.toLocaleString()} total at risk`
+                : 'Waiting for pot rules to load.'}
+          </Sub>
         </View>
-        <Chip text="Leader" tone="success" icon="auto-awesome" compact />
+        <View style={{ alignItems: 'flex-end', gap: 8 }}>
+          <Chip text="Leader" tone="success" icon="auto-awesome" compact />
+          {!editing && (
+            <Pressable onPress={beginEdit} style={styles.editPill}>
+              <MaterialIcons name="edit" size={14} color={C.ink} />
+            </Pressable>
+          )}
+        </View>
       </View>
-      <View style={{ flexDirection: 'row', gap: 12 }}>
-        <View style={{ flex: 1 }}>
-          <Eyebrow>Sessions / week</Eyebrow>
-          <TextInput value={required} onChangeText={(t) => setRequired(t.replace(/[^0-9]/g, ''))} keyboardType="number-pad" style={styles.input} />
-          <Sub style={{ marginTop: 4, fontSize: 11 }}>1–7 days</Sub>
-        </View>
-        <View style={{ flex: 1 }}>
-          <Eyebrow>Weekly stake</Eyebrow>
-          <TextInput value={total} onChangeText={(t) => setTotal(t.replace(/[^0-9]/g, ''))} keyboardType="number-pad" style={styles.input} />
-          <Sub style={{ marginTop: 4, fontSize: 11 }}>Total ELO · {perMiss} per miss</Sub>
-        </View>
-      </View>
-      <Btn label="Save rules" size="md" onPress={save} style={{ marginTop: 14 }} />
+      {editing ? (
+        <>
+          <View style={{ flexDirection: 'row', gap: 12 }}>
+            <View style={{ flex: 1 }}>
+              <Eyebrow>Sessions / week</Eyebrow>
+              <TextInput value={required} onChangeText={(t) => setRequired(t.replace(/[^0-9]/g, ''))} keyboardType="number-pad" placeholder="Required sessions" placeholderTextColor={C.mutedFg} style={styles.input} />
+              <Sub style={{ marginTop: 4, fontSize: 11 }}>1–7 days</Sub>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Eyebrow>Weekly stake</Eyebrow>
+              <TextInput value={total} onChangeText={(t) => setTotal(t.replace(/[^0-9]/g, ''))} keyboardType="number-pad" placeholder="Weekly stake" placeholderTextColor={C.mutedFg} style={styles.input} />
+              <Sub style={{ marginTop: 4, fontSize: 11 }}>Total ELO · {perMiss} per miss</Sub>
+            </View>
+          </View>
+          <View style={{ flexDirection: 'row', gap: 10, marginTop: 14 }}>
+            <Btn label="Save rules" size="md" onPress={save} style={{ flex: 1 }} />
+            <Btn label="Cancel" size="md" variant="ghost" onPress={() => setEditing(false)} style={{ flex: 1 }} />
+          </View>
+        </>
+      ) : (
+        <Card padding={SPACE.lg} tone="default" style={{ backgroundColor: 'rgba(255,255,255,0.35)' }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+            <View style={{ flex: 1 }}>
+              <Eyebrow>Saved rules</Eyebrow>
+              <H3 style={{ marginTop: 4 }}>{hasPotNext ? `${savedRequired} ${savedRequired === 1 ? 'session' : 'sessions'}` : 'No saved rules yet'}</H3>
+              <Sub style={{ marginTop: 4 }}>
+                {hasPotNext ? `${savedPerMiss.toLocaleString()} ELO per miss · ${savedTotal.toLocaleString()} total at risk` : 'Tap edit to enter the next week’s rules.'}
+              </Sub>
+            </View>
+            <Pressable onPress={beginEdit} style={styles.editPill}>
+              <MaterialIcons name="edit" size={14} color={C.ink} />
+            </Pressable>
+          </View>
+        </Card>
+      )}
     </Card>
   );
 }
@@ -636,8 +687,8 @@ export function GymBrowser({ onBack, onJoined, onCreated }: { onBack: () => void
   const refresh = useRefreshControl();
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
-  const [freq, setFreq] = useState('3');           // required_pledges per week, 1..7
-  const [weeklyStake, setWeeklyStake] = useState('300');  // full ELO at stake for the week
+  const [freq, setFreq] = useState('');           // required_pledges per week, 1..7
+  const [weeklyStake, setWeeklyStake] = useState('');  // full ELO at stake for the week
   const [jt, setJt] = useState<'open' | 'request'>('open');
   const [inbox, setInbox] = useState(false);
   const inGroup = groupId !== null;
@@ -650,8 +701,11 @@ export function GymBrowser({ onBack, onJoined, onCreated }: { onBack: () => void
   };
   const create = async () => {
     if (!name.trim()) return;
-    const requiredPledges = Math.max(1, Math.min(7, parseInt(freq, 10) || 3));
-    const weeklyTotal = Math.max(0, parseInt(weeklyStake, 10) || 0);
+    const freqNum = parseInt(freq, 10);
+    const stakeNum = parseInt(weeklyStake, 10);
+    if (Number.isNaN(freqNum) || Number.isNaN(stakeNum)) return;
+    const requiredPledges = Math.max(1, Math.min(7, freqNum));
+    const weeklyTotal = Math.max(0, stakeNum);
     // Stake per missed session is derived from the full weekly amount / sessions.
     const stakeMiss = Math.round(weeklyTotal / requiredPledges);
     await addGroup({
@@ -661,9 +715,10 @@ export function GymBrowser({ onBack, onJoined, onCreated }: { onBack: () => void
       required_pledges: requiredPledges,
       stake_per_miss: stakeMiss,
     });
-    setCreating(false); setName('');
+    setCreating(false); setName(''); setFreq(''); setWeeklyStake('');
     onCreated();
   };
+  const canCreate = !!name.trim() && freq.trim() !== '' && weeklyStake.trim() !== '';
   const onLeave = (g: Group) => {
     const sole = g.isLeader === true && g.members <= 1;
     if (sole) {
@@ -757,6 +812,8 @@ export function GymBrowser({ onBack, onJoined, onCreated }: { onBack: () => void
                     value={freq}
                     onChangeText={(t) => setFreq(t.replace(/[^0-9]/g, ''))}
                     keyboardType="number-pad"
+                    placeholder="Enter sessions"
+                    placeholderTextColor={C.mutedFg}
                     style={styles.input}
                   />
                   <Sub style={{ marginTop: 4, fontSize: 11 }}>1–7 days</Sub>
@@ -767,10 +824,14 @@ export function GymBrowser({ onBack, onJoined, onCreated }: { onBack: () => void
                     value={weeklyStake}
                     onChangeText={(t) => setWeeklyStake(t.replace(/[^0-9]/g, ''))}
                     keyboardType="number-pad"
+                    placeholder="Enter ELO"
+                    placeholderTextColor={C.mutedFg}
                     style={styles.input}
                   />
                   <Sub style={{ marginTop: 4, fontSize: 11 }}>
-                    Total ELO · {Math.round((parseInt(weeklyStake, 10) || 0) / Math.max(1, Math.min(7, parseInt(freq, 10) || 3)))} per miss
+                    {freq && weeklyStake
+                      ? `Total ELO · ${Math.round((parseInt(weeklyStake, 10) || 0) / Math.max(1, Math.min(7, parseInt(freq, 10) || 1)))} per miss`
+                      : 'Enter both values to preview per miss'}
                   </Sub>
                 </View>
               </View>
@@ -791,7 +852,7 @@ export function GymBrowser({ onBack, onJoined, onCreated }: { onBack: () => void
                 })}
               </View>
               <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
-                <Btn label="Create & join" disabled={!name.trim()} onPress={create} style={{ flex: 1 }} size="md" />
+                <Btn label="Create & join" disabled={!canCreate} onPress={create} style={{ flex: 1 }} size="md" />
                 <Btn label="Cancel" variant="ghost" onPress={() => setCreating(false)} style={{ flex: 1 }} size="md" />
               </View>
             </Card>
@@ -981,19 +1042,19 @@ function RuleRow({ label, value, accent }: { label: string; value: string; accen
 
 type BadgeKey = keyof import('../../lib/api/badges').Badges;
 const BADGE_CATALOG: { key: BadgeKey; name: string; icon: keyof typeof MaterialIcons.glyphMap }[] = [
-  { key: 'first_week',       name: 'First Week',       icon: 'flag' },
-  { key: 'streak_master',    name: 'Streak Master',    icon: 'local-fire-department' },
-  { key: 'early_bird',       name: 'Early Bird',       icon: 'wb-sunny' },
+  { key: 'first_week', name: 'First Week', icon: 'flag' },
+  { key: 'streak_master', name: 'Streak Master', icon: 'local-fire-department' },
+  { key: 'early_bird', name: 'Early Bird', icon: 'wb-sunny' },
   { key: 'consistency_king', name: 'Consistency King', icon: 'workspace-premium' },
-  { key: 'pot_winner',       name: 'Pot Winner',       icon: 'paid' },
-  { key: 'group_leader',     name: 'Group Leader',     icon: 'group' },
+  { key: 'pot_winner', name: 'Pot Winner', icon: 'paid' },
+  { key: 'group_leader', name: 'Group Leader', icon: 'group' },
 ];
 
 const TIERS = [
-  { name: 'Beginner', min: 0,    max: 500,      icon: 'fitness-center' as const },
-  { name: 'Rookie',   min: 500,  max: 1000,     icon: 'directions-run' as const },
-  { name: 'Regular',  min: 1000, max: 2000,     icon: 'sports-martial-arts' as const },
-  { name: 'Mogger',   min: 2000, max: Infinity, icon: 'military-tech' as const },
+  { name: 'Beginner', min: 0, max: 500, icon: 'fitness-center' as const },
+  { name: 'Rookie', min: 500, max: 1000, icon: 'directions-run' as const },
+  { name: 'Regular', min: 1000, max: 2000, icon: 'sports-martial-arts' as const },
+  { name: 'Mogger', min: 2000, max: Infinity, icon: 'military-tech' as const },
 ];
 
 export function Progress({ onGymSpace }: { onGymSpace: () => void }) {
@@ -1121,15 +1182,15 @@ export function Progress({ onGymSpace }: { onGymSpace: () => void }) {
 
 interface SpaceItemDef { id: string; name: string; emoji: string; unlockElo: number; }
 const ROOM_ITEMS: SpaceItemDef[] = [
-  { id: 'mat',    name: 'Yoga Mat',    emoji: '🧘', unlockElo: 0 },
-  { id: 'db',     name: 'Dumbbells',   emoji: '🏋️', unlockElo: 0 },
-  { id: 'plant',  name: 'Plant',       emoji: '🪴', unlockElo: 500 },
-  { id: 'bench',  name: 'Bench',       emoji: '🛋️', unlockElo: 500 },
-  { id: 'banner', name: 'Banner',      emoji: '🏆', unlockElo: 1000 },
-  { id: 'tread',  name: 'Treadmill',   emoji: '🏃', unlockElo: 1000 },
-  { id: 'neon',   name: 'Neon Sign',   emoji: '💡', unlockElo: 1200 },
-  { id: 'ring',   name: 'Boxing Ring', emoji: '🥊', unlockElo: 2000 },
-  { id: 'mascot', name: 'Mascot',      emoji: '🐯', unlockElo: 2000 },
+  { id: 'mat', name: 'Yoga Mat', emoji: '🧘', unlockElo: 0 },
+  { id: 'db', name: 'Dumbbells', emoji: '🏋️', unlockElo: 0 },
+  { id: 'plant', name: 'Plant', emoji: '🪴', unlockElo: 500 },
+  { id: 'bench', name: 'Bench', emoji: '🛋️', unlockElo: 500 },
+  { id: 'banner', name: 'Banner', emoji: '🏆', unlockElo: 1000 },
+  { id: 'tread', name: 'Treadmill', emoji: '🏃', unlockElo: 1000 },
+  { id: 'neon', name: 'Neon Sign', emoji: '💡', unlockElo: 1200 },
+  { id: 'ring', name: 'Boxing Ring', emoji: '🥊', unlockElo: 2000 },
+  { id: 'mascot', name: 'Mascot', emoji: '🐯', unlockElo: 2000 },
 ];
 
 export function GymSpace({ onBack }: { onBack: () => void }) {
@@ -1249,8 +1310,14 @@ const styles = StyleSheet.create({
   devFabText: { fontFamily: FONT.semibold, fontSize: 12, color: C.primaryFg, letterSpacing: 0.2 },
 
   iconChip: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  editPill: {
+    width: 32, height: 32, borderRadius: 16,
+    backgroundColor: C.bg,
+    borderWidth: 1, borderColor: C.borderHi,
+    alignItems: 'center', justifyContent: 'center',
+  },
   closeBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: C.card, borderWidth: 1, borderColor: C.borderHi, alignItems: 'center', justifyContent: 'center' },
-  iconBtn:  { width: 40, height: 40, borderRadius: 20, backgroundColor: C.card, borderWidth: 1, borderColor: C.borderHi, alignItems: 'center', justifyContent: 'center' },
+  iconBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: C.card, borderWidth: 1, borderColor: C.borderHi, alignItems: 'center', justifyContent: 'center' },
 
   footer: {
     padding: SPACE.xl, paddingBottom: 32,
