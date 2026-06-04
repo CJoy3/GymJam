@@ -45,7 +45,7 @@ export default function GymJamApp() {
   const render = () => {
     switch (screen) {
       case 'onboarding':   return <Onboarding onDone={() => setScreen('gym-browser')} />;
-      case 'home':         return <Home onCheckIn={() => setScreen('check-in')} onPlan={() => setScreen('plan-week')} onPot={() => setScreen('pot-tracker')} />;
+      case 'home':         return <Home onCheckIn={() => setScreen('check-in')} onPlan={() => setScreen('plan-week')} onPot={() => setScreen('pot-tracker')} onGroup={() => setScreen('group')} />;
       case 'check-in':     return <CheckIn onClose={() => setScreen('home')} />;
       case 'plan-week':    return <PlanWeek onDone={() => setScreen('home')} onCancel={() => setScreen('home')} />;
       case 'group':        return groupId
@@ -56,7 +56,7 @@ export default function GymJamApp() {
       case 'progress':     return <Progress onGymSpace={() => setScreen('gym-space')} />;
       case 'gym-space':    return <GymSpace onBack={() => setScreen('progress')} />;
       case 'profile':      return <ProfileView onBrowse={() => setScreen('gym-browser')} />;
-      default:             return <Home onCheckIn={() => setScreen('check-in')} onPlan={() => setScreen('plan-week')} onPot={() => setScreen('pot-tracker')} />;
+      default:             return <Home onCheckIn={() => setScreen('check-in')} onPlan={() => setScreen('plan-week')} onPot={() => setScreen('pot-tracker')} onGroup={() => setScreen('group')} />;
     }
   };
 

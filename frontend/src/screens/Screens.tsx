@@ -80,7 +80,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
    │ Home — greeting, this week, pot, primary CTAs            │
    ╰─────────────────────────────────────────────────────────╯ */
 
-export function Home({ onCheckIn, onPlan, onPot }: { onCheckIn: () => void; onPlan: () => void; onPot: () => void }) {
+export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => void; onPlan: () => void; onPot: () => void; onGroup: () => void }) {
   const {
     thisWeek, elo, streak, pot, potCurrent, checkInToday, displayName,
     todayDow, thisWeekIsPractice, setThisWeekDays, advanceWeek, groupId,
@@ -134,14 +134,14 @@ export function Home({ onCheckIn, onPlan, onPot }: { onCheckIn: () => void; onPl
         )}
 
         <FadeInItem delay={120} style={{ marginTop: 24 }}>
-          <Card padding={SPACE.xl}>
+          <Card padding={SPACE.xl} onPress={onGroup}>
             <View style={[styles.rowBetween, { marginBottom: 16 }]}>
               <View>
                 <View style={styles.rowGap}>
-                  <Eyebrow>This week</Eyebrow>
+                  <Eyebrow style={styles.thisWeekHeader}>This week</Eyebrow>
                   {thisWeekIsPractice && <Chip text="Practice" tone="accent" compact />}
                 </View>
-                <Text style={styles.h2}>{thisWeekIsPractice ? 'Practice pledge' : 'Your pledge'}</Text>
+                <Text style={styles.pledgeSubhead}>{thisWeekIsPractice ? 'Practice pledge' : 'Your pledge'}</Text>
               </View>
               <Ring progress={pct} size={68} thickness={6} label={done} sublabel={`/${pledged || 0}`} />
             </View>
@@ -1229,6 +1229,9 @@ const styles = StyleSheet.create({
 
   cardTitle: { fontFamily: FONT.bold, fontSize: 16, color: C.ink, letterSpacing: -0.2 },
   h2: { fontFamily: FONT.bold, fontSize: 22, color: C.ink, letterSpacing: -0.3, lineHeight: 28, marginTop: 4 },
+  // Pledge Overview card: "This week" is now the prominent header; "Your pledge" is de-emphasized.
+  thisWeekHeader: { fontFamily: FONT.extra, fontSize: 20, color: C.ink, letterSpacing: -0.3, textTransform: 'none' },
+  pledgeSubhead: { fontFamily: FONT.regular, fontSize: 14, color: C.mutedFg, letterSpacing: 0, marginTop: 3 },
 
   eyebrowOnCream: { fontFamily: FONT.bold, fontSize: 11, color: 'rgba(27,23,20,0.55)', letterSpacing: 0.8, textTransform: 'uppercase' },
   subOnCream: { fontFamily: FONT.medium, fontSize: 13, color: 'rgba(27,23,20,0.65)' },
