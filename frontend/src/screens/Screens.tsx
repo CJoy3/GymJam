@@ -82,8 +82,9 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
 
 export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => void; onPlan: () => void; onPot: () => void; onGroup: () => void }) {
   const {
-    thisWeek, elo, streak, pot, potCurrent, checkInToday, displayName,
+    thisWeek, nextWeek, elo, streak, pot, potCurrent, checkInToday, displayName,
     todayDow, thisWeekIsPractice, setThisWeekDays, toggleWeek, weekSimulated, groupId,
+    rescheduleMissedDay,
   } = useAppState();
   const refresh = useRefreshControl();
   const [advancing, setAdvancing] = useState(false);
@@ -110,6 +111,29 @@ export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => v
   const onAdvance = async () => {
     setAdvancing(true);
     try { await toggleWeek(); } finally { setAdvancing(false); }
+  };
+
+  // Long-press a missed day → reschedule it (unforeseen circumstances). If next
+  // week has room the session moves with no penalty; if it's full (7 days) a
+  // 50% ELO penalty applies instead of a full miss.
+  const onRescheduleDay = (i: number) => {
+    const nextPledged = nextWeek.filter((d) => d.state === 'planned' || d.state === 'locked').length;
+    const willMove = nextPledged + 1 <= 7;
+    const stake = potCurrent?.stake_per_miss ?? 0;
+    Alert.alert(
+      'Reschedule — unforeseen circumstances',
+      willMove
+        ? 'Move this missed session into next week? No ELO penalty.'
+        : `Next week is already full (7 days), so this can't be moved. A 50% penalty (${Math.round(stake * 0.5)} ELO) will apply instead of a full miss.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: willMove ? 'Reschedule' : 'Apply 50% penalty',
+          style: willMove ? 'default' : 'destructive',
+          onPress: () => rescheduleMissedDay(i),
+        },
+      ],
+    );
   };
 
   const totalAtStake = potCurrent ? potCurrent.members.reduce((s, m) => s + m.elo_at_risk, 0) : 0;
@@ -150,6 +174,7 @@ export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => v
               editable={practiceEditable}
               dulledDows={thisWeekIsPractice ? dulledDows : undefined}
               onToggle={practiceEditable ? togglePractice : undefined}
+              onLongPress={onRescheduleDay}
             />
             <Sub style={{ marginTop: 14 }}>
               {thisWeekIsPractice
@@ -160,6 +185,11 @@ export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => v
                 : pledged - done > 0 ? `${pledged - done} more session${pledged - done === 1 ? '' : 's'} to go.`
                 : 'All sessions done. Strong week.'}
             </Sub>
+            {thisWeek.some((d) => d.state === 'missed') && (
+              <Sub style={{ marginTop: 6, color: C.accent }}>
+                Missed a day for unforeseen circumstances? Long-press it to reschedule.
+              </Sub>
+            )}
           </Card>
         </FadeInItem>
 

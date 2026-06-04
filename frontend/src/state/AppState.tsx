@@ -13,7 +13,7 @@ import * as usersApi from '../../lib/api/users';
 import { getOrCreateUserId } from '../../lib/userId';
 import { showToast } from '../ui/toast';
 
-export type DayState = 'planned' | 'checked-in' | 'missed' | 'locked' | 'unselected';
+export type DayState = 'planned' | 'checked-in' | 'missed' | 'locked' | 'unselected' | 'rescheduled';
 export interface DayStatus { day: string; state: DayState; }
 
 export const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
@@ -102,6 +102,7 @@ interface AppStateShape {
   lockNextWeek: () => Promise<void>;
   addNextWeekDay: (i: number) => Promise<void>;
   checkInToday: () => Promise<void>;
+  rescheduleMissedDay: (dow: number) => Promise<void>;
 
   // Dev clock — toggle between the real week and one week ahead
   weekSimulated: boolean;        // true when the clock is shifted into next week
@@ -656,6 +657,29 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }
   }, [thisWeek, me, refreshGroupContext, myGroupSummary, loadBadges]);
 
+  const rescheduleMissedDay = useCallback(async (dow: number) => {
+    try {
+      const res = await plansApi.rescheduleMissedDay(dow);
+      setThisWeek(planToWeek(res.this_week));
+      setNextWeek(planToWeek(res.next_week));
+      setMe((prev) => (prev ? { ...prev, elo: res.new_elo } : prev));
+      if (res.outcome === 'moved') {
+        const target = res.moved_to_dow != null ? DAYS[res.moved_to_dow] : 'next week';
+        showToast(`Session moved to ${target} — no penalty`, 'success');
+      } else {
+        showToast(
+          res.penalty_elo > 0
+            ? `Next week is full — 50% penalty applied (−${res.penalty_elo} ELO)`
+            : 'Next week is full — session excused',
+          'info',
+        );
+      }
+      await refreshGroupContext(myGroupSummary?.id ?? null, myGroupSummary?.isLeader);
+    } catch (e) {
+      reportError('Could not reschedule', e);
+    }
+  }, [myGroupSummary, refreshGroupContext]);
+
   const updateDisplayName = useCallback(async (name: string) => {
     const trimmed = name.trim();
     if (!trimmed) return;
@@ -710,7 +734,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     // and the rotating rule setter all reflect the new week end-to-end.
     const goingForward = weekOffsetDays === 0;
     try {
-      const clock = goingForward ? await devApi.advanceWeek() : await devApi.previousWeek();
+      // Two-state toggle: forward = +1 week; backward = snap all the way back to
+      // the real week (offset 0) in a single press, even if earlier testing left
+      // the clock several weeks ahead.
+      const clock = goingForward ? await devApi.advanceWeek() : await devApi.resetClock();
       if (clock.persisted === false) {
         showToast('Dev clock not saved — run schema.sql (dev_clock table missing)', 'error');
         return;
@@ -772,6 +799,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       addNextWeekDay,
       lockNextWeek,
       checkInToday,
+      rescheduleMissedDay,
 
       weekSimulated: weekOffsetDays > 0,
       toggleWeek,
@@ -800,9 +828,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     addGroup, addNextWeekDay, approveRequest, badges, bootstrap, checkInToday,
     groupMembers, groupsAtGym, gyms, joinGroup, joinRequests, leaveGroup, loadBadges, loadMembers,
     lockNextWeek, me, myGroupSummary, nextWeek, placeRoomItem, pot, potCurrent, potNext,
-    ready, refreshGroupsAtGym, rejectRequest, reloading, roomItems, setGym, setPlannedDays,
-    setThisWeekDays, thisWeek, thisWeekIsPractice, todayDow, toggleNextWeekDay, toggleWeek,
-    updateDisplayName, updatePotConditions, weekOffsetDays,
+    ready, refreshGroupsAtGym, rejectRequest, reloading, rescheduleMissedDay, roomItems, setGym,
+    setPlannedDays, setThisWeekDays, thisWeek, thisWeekIsPractice, todayDow, toggleNextWeekDay,
+    toggleWeek, updateDisplayName, updatePotConditions, weekOffsetDays,
   ]);
 
   // tier is purely a function of elo; expose for callers that want it

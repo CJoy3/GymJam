@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
 from app.api.deps import get_current_user
-from app.schemas.plan import TwoWeekView, WeeklyPlan
+from app.schemas.plan import RescheduleResult, TwoWeekView, WeeklyPlan
 from app.services import plans as plans_svc
 
 router = APIRouter()
@@ -39,3 +39,10 @@ def set_current_week_days(
 @router.post("/me/next/lock", response_model=WeeklyPlan)
 def lock_next_week(current: dict = Depends(get_current_user)) -> dict:
     return plans_svc.lock_next_week(current["id"])
+
+
+@router.post("/me/current/days/{dow}/reschedule", response_model=RescheduleResult)
+def reschedule_missed_day(dow: int, current: dict = Depends(get_current_user)) -> dict:
+    """Reschedule a missed current-week day into next week, or apply a 50%
+    penalty if next week is already full."""
+    return plans_svc.reschedule_missed_day(current["id"], dow)

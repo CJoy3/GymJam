@@ -7,26 +7,32 @@ import type { DayStatus } from '../state/AppState';
 const LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
 export function DayPicker({
-  days, editable = false, onToggle, dulledDows,
+  days, editable = false, onToggle, dulledDows, onLongPress,
 }: {
   days: DayStatus[];
   editable?: boolean;
   onToggle?: (i: number) => void;
   dulledDows?: number[];
+  // Long-press a missed day to reschedule it (unforeseen circumstances).
+  onLongPress?: (i: number) => void;
 }) {
   const dulled = new Set(dulledDows ?? []);
   return (
     <View style={{ flexDirection: 'row', gap: 6 }}>
       {days.map((d, i) => {
         const isDulled = dulled.has(i);
-        const disabled = isDulled || !editable
-          || d.state === 'locked' || d.state === 'checked-in' || d.state === 'missed';
+        const canLongPress = !!onLongPress && d.state === 'missed' && !isDulled;
+        const canToggle = editable && !isDulled
+          && d.state !== 'locked' && d.state !== 'checked-in' && d.state !== 'missed' && d.state !== 'rescheduled';
+        const disabled = !canToggle && !canLongPress;
         const s = stateStyle(d.state);
         return (
           <Pressable
             key={i}
             disabled={disabled}
-            onPress={() => onToggle?.(i)}
+            onPress={() => { if (canToggle) onToggle?.(i); }}
+            onLongPress={() => { if (canLongPress) onLongPress?.(i); }}
+            delayLongPress={350}
             style={({ pressed }) => [{
               flex: 1, minWidth: 38, height: 60, borderRadius: RADIUS.md,
               alignItems: 'center', justifyContent: 'center',
@@ -39,6 +45,7 @@ export function DayPicker({
             {d.state === 'missed' && <MaterialIcons name="close" size={16} color={s.fg} />}
             {d.state === 'planned' && <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: s.fg }} />}
             {d.state === 'locked' && <MaterialIcons name="lock" size={12} color={s.fg} />}
+            {d.state === 'rescheduled' && <MaterialIcons name="event-repeat" size={14} color={s.fg} />}
           </Pressable>
         );
       })}
@@ -83,6 +90,7 @@ function stateStyle(state: DayStatus['state']) {
     case 'checked-in': return { bg: C.success,     fg: C.primaryFg, border: C.success, borderWidth: 1 };
     case 'planned':    return { bg: 'transparent', fg: C.success,   border: C.success, borderWidth: 2 };
     case 'missed':     return { bg: C.dangerSoft,  fg: C.danger,    border: C.dangerSoft, borderWidth: 1 };
+    case 'rescheduled':return { bg: C.accentSoft,  fg: C.accent,    border: C.accentSoft, borderWidth: 1 };
     case 'locked':     return { bg: C.muted,       fg: C.mutedFg,   border: C.muted, borderWidth: 1 };
     default:           return { bg: 'transparent', fg: C.mutedFg,   border: C.border, borderWidth: 1 };
   }
