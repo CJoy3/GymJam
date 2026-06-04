@@ -103,10 +103,17 @@ create table if not exists plan_days (
     plan_id uuid not null references weekly_plans(id) on delete cascade,
     day_of_week smallint not null check (day_of_week between 0 and 6),
     state text not null default 'unselected'
-        check (state in ('unselected', 'planned', 'locked', 'checked-in', 'missed')),
+        check (state in ('unselected', 'planned', 'locked', 'checked-in', 'missed', 'rescheduled')),
     checked_in_at timestamptz,
     unique (plan_id, day_of_week)
 );
+
+-- Allow the 'rescheduled' state on existing deployments (a missed day that was
+-- excused for "unforeseen circumstances" — either moved to next week or settled
+-- with a 50% penalty when next week was full).
+alter table plan_days drop constraint if exists plan_days_state_check;
+alter table plan_days add constraint plan_days_state_check
+    check (state in ('unselected', 'planned', 'locked', 'checked-in', 'missed', 'rescheduled'));
 
 -- Weekly pot conditions for a group. Each week, one member (the "setter",
 -- rotated by joined_at order) decides required_pledges + stake_per_miss.
@@ -228,3 +235,4 @@ alter table plan_days           disable row level security;
 alter table pot_conditions      disable row level security;
 alter table user_room_items     disable row level security;
 alter table dev_clock           disable row level security;
+ 

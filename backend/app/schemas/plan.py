@@ -2,7 +2,7 @@ from datetime import date, datetime
 from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
-DayState = Literal["unselected", "planned", "locked", "checked-in", "missed"]
+DayState = Literal["unselected", "planned", "locked", "checked-in", "missed", "rescheduled"]
 
 
 class PlanDay(BaseModel):
@@ -32,3 +32,14 @@ class CheckInResult(BaseModel):
     plan: WeeklyPlan
     elo_awarded: int
     new_elo: int
+
+
+class RescheduleResult(BaseModel):
+    # "moved"   → the missed day was rescheduled into next week (no penalty)
+    # "penalty" → next week was full, so a 50% Elo penalty was applied instead
+    outcome: Literal["moved", "penalty"]
+    moved_to_dow: Optional[int] = None
+    penalty_elo: int = 0
+    new_elo: int
+    this_week: WeeklyPlan
+    next_week: WeeklyPlan

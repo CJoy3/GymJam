@@ -230,6 +230,104 @@ def set_current_week_days(user_id: str, dows: list[int]) -> dict:
     return result
 
 
+RESCHEDULE_PENALTY_FRACTION = 0.5  # overflow misses cost 50% instead of 100%
+WEEK_CAPACITY = 7                   # physical max pledge-days in any week
+
+
+def reschedule_missed_day(user_id: str, dow: int) -> dict:
+    """Excuse a missed *current-week* session ("unforeseen circumstances").
+
+    Hybrid rule:
+      - If next week has room ((pledged + 1) <= 7) → move the pledge there with no
+        Elo penalty for the current week.
+      - If next week is already full (7 pledged) → it can't be moved, so apply a
+        50% Elo penalty of the session's stake instead of the full 100% a plain
+        miss would cost.
+
+    Either way the current day becomes 'rescheduled' so it's resolved and cannot
+    be actioned (or penalised) twice.
+    """
+    if not 0 <= dow <= 6:
+        raise HTTPException(status_code=400, detail="day_of_week must be 0..6")
+
+    sb = get_supabase()
+    cur_plan = _ensure_plan(user_id, current_week_start())
+    day_res = (
+        sb.table("plan_days")
+        .select("state")
+        .eq("plan_id", cur_plan["id"])
+        .eq("day_of_week", dow)
+        .limit(1)
+        .execute()
+    )
+    if not day_res.data:
+        raise HTTPException(status_code=500, detail="Plan day missing")
+    if day_res.data[0]["state"] != "missed":
+        raise HTTPException(status_code=409, detail="Only a missed day can be rescheduled")
+
+    # The session's original stake (per missed day) for the current week.
+    group_id = cur_plan.get("group_id")
+    stake = 0
+    if group_id:
+        cond = pot_svc.get_conditions(group_id, "current")
+        stake = int(cond.get("stake_per_miss") or 0)
+
+    next_plan = _ensure_plan(user_id, next_week_start())
+    next_days = (
+        sb.table("plan_days")
+        .select("day_of_week, state")
+        .eq("plan_id", next_plan["id"])
+        .execute()
+    ).data or []
+    pledged = [d for d in next_days if d["state"] in ("planned", "locked")]
+
+    def _result(outcome: str, moved_to: int | None, penalty: int, new_elo: int) -> dict:
+        this_week = _load_plan_with_days(_ensure_plan(user_id, current_week_start()))
+        nxt_week = _load_plan_with_days(_ensure_plan(user_id, next_week_start()))
+        this_week["is_practice"] = _current_week_is_practice_for(user_id, group_id)
+        nxt_week["is_practice"] = _is_practice_week(next_plan.get("group_id"), "next")
+        return {
+            "outcome": outcome,
+            "moved_to_dow": moved_to,
+            "penalty_elo": penalty,
+            "new_elo": new_elo,
+            "this_week": this_week,
+            "next_week": nxt_week,
+        }
+
+    if len(pledged) + 1 <= WEEK_CAPACITY:
+        # Room next week → move the pledge into the first free day.
+        taken = {
+            d["day_of_week"] for d in next_days
+            if d["state"] in ("planned", "locked", "checked-in", "missed", "rescheduled")
+        }
+        free = next((d for d in range(7) if d not in taken), None)
+        if free is not None:
+            sb.table("plan_days").update({"state": "planned"}).eq(
+                "plan_id", next_plan["id"]
+            ).eq("day_of_week", free).execute()
+        sb.table("plan_days").update({"state": "rescheduled"}).eq(
+            "plan_id", cur_plan["id"]
+        ).eq("day_of_week", dow).execute()
+        _recompute_stake(cur_plan["id"])
+        _recompute_stake(next_plan["id"])
+        user = users_svc.get_by_id(user_id)
+        return _result("moved", free, 0, int(user["elo"]))
+
+    # Next week is full → 50% penalty instead of moving.
+    penalty = int(round(stake * RESCHEDULE_PENALTY_FRACTION))
+    user = users_svc.get_by_id(user_id)
+    applied = min(penalty, int(user["elo"]))  # never drive ELO below 0
+    new_elo = int(user["elo"])
+    if applied > 0:
+        new_elo = int(users_svc.add_elo(user_id, -applied)["elo"])
+    sb.table("plan_days").update({"state": "rescheduled"}).eq(
+        "plan_id", cur_plan["id"]
+    ).eq("day_of_week", dow).execute()
+    _recompute_stake(cur_plan["id"])
+    return _result("penalty", None, applied, new_elo)
+
+
 def toggle_next_week_day(user_id: str, dow: int) -> dict:
     if not 0 <= dow <= 6:
         raise HTTPException(status_code=400, detail="day_of_week must be 0..6")
