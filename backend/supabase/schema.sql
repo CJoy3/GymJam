@@ -55,7 +55,7 @@ create table if not exists group_memberships (
     unique (group_id, user_id),
     -- A user belongs to at most one group at a time.
     unique (user_id)
-);
+); 
 
 create table if not exists join_requests (
     id uuid primary key default gen_random_uuid(),
