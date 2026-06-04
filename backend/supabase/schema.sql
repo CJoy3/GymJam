@@ -64,7 +64,7 @@ create table if not exists group_memberships (
     unique (group_id, user_id),
     -- A user belongs to at most one group at a time.
     unique (user_id)
-);
+); 
 
 -- Additive migration for existing deployments. NULL on legacy rows means
 -- "established member" — never treated as a mid-week joiner.
@@ -116,9 +116,9 @@ create table if not exists pot_conditions (
     group_id uuid not null references groups(id) on delete cascade,
     week_start date not null,
     setter_user_id uuid references users(id) on delete set null,
-    required_pledges smallint not null default 3
+    required_pledges smallint not null
         check (required_pledges between 1 and 7),
-    stake_per_miss integer not null default 100
+    stake_per_miss integer not null
         check (stake_per_miss >= 0),
     is_finalized boolean not null default false,
     -- The first week after a group is created is a no-stakes "practice" week.

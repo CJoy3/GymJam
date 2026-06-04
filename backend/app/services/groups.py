@@ -143,8 +143,8 @@ def create_group(
     name: str,
     weekly_stake_elo: int,
     join_type: JoinType,
-    required_pledges: int = 3,
-    stake_per_miss: int = 100,
+    required_pledges: int,
+    stake_per_miss: int,
 ) -> dict:
     if current_membership(creator_id):
         raise HTTPException(status_code=409, detail="Leave your current group first")
