@@ -19,6 +19,9 @@ def _clock_payload() -> dict:
         "today": time_utils.today_local().isoformat(),
         "week_start": time_utils.current_week_start().isoformat(),
         "today_dow": time_utils.current_day_of_week(),
+        # False ⇒ the dev_clock table is unreachable, so the offset won't survive
+        # across serverless instances (the schema needs to be applied).
+        "persisted": time_utils.offset_is_persistent(),
     }
 
 

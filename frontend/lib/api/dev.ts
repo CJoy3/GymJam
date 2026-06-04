@@ -6,6 +6,8 @@ export interface DevClock {
   today: string;
   week_start: string;
   today_dow: number;
+  // False ⇒ dev_clock table missing; offset won't survive across serverless calls.
+  persisted?: boolean;
 }
 
 export const getClock = () => apiGet<DevClock>('/dev/clock');

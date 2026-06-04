@@ -711,6 +711,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     const goingForward = weekOffsetDays === 0;
     try {
       const clock = goingForward ? await devApi.advanceWeek() : await devApi.previousWeek();
+      if (clock.persisted === false) {
+        showToast('Dev clock not saved — run schema.sql (dev_clock table missing)', 'error');
+        return;
+      }
       setWeekOffsetDays(clock.offset_days);
       setTodayDow(clock.today_dow);
       await bootstrap();
