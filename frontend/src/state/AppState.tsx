@@ -282,8 +282,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     setGyms(list.map((g) => ({ id: g.id, name: g.name })));
   }, []);
 
-  const loadGroupsForGym = useCallback(async (gymId: string, currentUserId: string) => {
-    const list = await groupsApi.listGroupsAtGym(gymId);
+  const loadGroups = useCallback(async () => {
+    // Groups are global — fetch every group on the platform, not just one gym's.
+    const list = await groupsApi.listGroups();
     const mapped = list.map(summaryToGroup);
     setGroupsAtGym(mapped);
     const mine = mapped.find((g) => g.isMember) ?? null;
@@ -391,16 +392,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       const user = await usersApi.registerUser(deviceId);
       setMe(user);
       await loadGyms();
-      if (user.gym_id) {
-        const mine = await loadGroupsForGym(user.gym_id, user.id);
-        await refreshGroupContext(mine?.id ?? null, mine?.isLeader);
-      } else {
-        setGroupsAtGym([]);
-        setMyGroupSummary(null);
-        setPot(0);
-        setJoinRequests([]);
-        setGroupMembers([]);
-      }
+      // Groups are global now — load them regardless of whether a home gym is set.
+      const mine = await loadGroups();
+      await refreshGroupContext(mine?.id ?? null, mine?.isLeader);
       await loadPlans();
       await Promise.all([loadBadges(), loadRoom()]);
     } catch (e) {
@@ -409,7 +403,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       setReady(true);
       setReloading(false);
     }
-  }, [loadGyms, loadGroupsForGym, loadPlans, refreshGroupContext, loadBadges, loadRoom]);
+  }, [loadGyms, loadGroups, loadPlans, refreshGroupContext, loadBadges, loadRoom]);
 
   useEffect(() => {
     bootstrap();
@@ -419,17 +413,18 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   const setGym = useCallback(async (gymId: string) => {
     try {
+      // Home gym is still saved as a user attribute; it no longer scopes groups.
       const u = await usersApi.updateMe({ gym_id: gymId });
       setMe(u);
-      const mine = await loadGroupsForGym(gymId, u.id);
+      const mine = await loadGroups();
       await refreshGroupContext(mine?.id ?? null, mine?.isLeader);
     } catch (e) {
       reportError('Could not set gym', e);
     }
-  }, [loadGroupsForGym, refreshGroupContext]);
+  }, [loadGroups, refreshGroupContext]);
 
   const joinGroup = useCallback(async (groupId: string) => {
-    if (!me?.gym_id) return;
+    if (!me) return;
     const snapshot = groupsAtGym;
     const prevMine = myGroupSummary;
     const target = snapshot.find((g) => g.id === groupId);
@@ -449,7 +444,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     try {
       await groupsApi.joinGroup(groupId);
       showToast(isOpen ? `Joined ${target.name}` : 'Request sent', 'success');
-      const mine = await loadGroupsForGym(me.gym_id, me.id);
+      const mine = await loadGroups();
       await refreshGroupContext(mine?.id ?? null, mine?.isLeader);
       await loadPlans();
     } catch (e) {
@@ -458,10 +453,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       setMyGroupSummary(prevMine);
       reportError('Could not join group', e);
     }
-  }, [groupsAtGym, loadGroupsForGym, loadPlans, refreshGroupContext, me, myGroupSummary]);
+  }, [groupsAtGym, loadGroups, loadPlans, refreshGroupContext, me, myGroupSummary]);
 
   const leaveGroup = useCallback(async () => {
-    if (!myGroupSummary || !me?.gym_id) return;
+    if (!myGroupSummary || !me) return;
     const snapshotGroups = groupsAtGym;
     const snapshotMine = myGroupSummary;
     const willDelete = myGroupSummary.isLeader === true && myGroupSummary.members <= 1;
@@ -482,7 +477,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     try {
       const res = await groupsApi.leaveGroup(snapshotMine.id);
       showToast(res.deleted ? `Deleted ${snapshotMine.name}` : `Left ${snapshotMine.name}`, 'success');
-      const mine = await loadGroupsForGym(me.gym_id, me.id);
+      const mine = await loadGroups();
       await refreshGroupContext(mine?.id ?? null, mine?.isLeader);
       await loadPlans();
     } catch (e) {
@@ -490,17 +485,17 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       setMyGroupSummary(snapshotMine);
       reportError('Could not leave group', e);
     }
-  }, [groupsAtGym, loadGroupsForGym, loadPlans, refreshGroupContext, me, myGroupSummary]);
+  }, [groupsAtGym, loadGroups, loadPlans, refreshGroupContext, me, myGroupSummary]);
 
   const refreshGroupsAtGym = useCallback(async () => {
-    if (!me?.gym_id) return;
+    if (!me) return;
     try {
-      const mine = await loadGroupsForGym(me.gym_id, me.id);
+      const mine = await loadGroups();
       await refreshGroupContext(mine?.id ?? null, mine?.isLeader);
     } catch {
       // best-effort refresh
     }
-  }, [loadGroupsForGym, refreshGroupContext, me]);
+  }, [loadGroups, refreshGroupContext, me]);
 
   const addGroup = useCallback(async (g: {
     name: string;
@@ -509,23 +504,22 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     required_pledges: number;
     stake_per_miss: number;
   }) => {
-    if (!me?.gym_id) return;
+    if (!me) return;
     try {
       await groupsApi.createGroup({
-        gym_id: me.gym_id,
         name: g.name,
         weekly_stake_elo: g.weekly_stake_elo,
         join_type: g.join_type,
         required_pledges: g.required_pledges,
         stake_per_miss: g.stake_per_miss,
       });
-      const mine = await loadGroupsForGym(me.gym_id, me.id);
+      const mine = await loadGroups();
       await refreshGroupContext(mine?.id ?? null, mine?.isLeader);
       await loadPlans();
     } catch (e) {
       reportError('Could not create group', e);
     }
-  }, [loadGroupsForGym, loadPlans, refreshGroupContext, me]);
+  }, [loadGroups, loadPlans, refreshGroupContext, me]);
 
   const approveRequest = useCallback(async (id: string) => {
     const snapshot = joinRequests;

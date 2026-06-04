@@ -69,13 +69,13 @@ def _fill_week(days: list[dict] | None) -> list[dict]:
     return out
 
 
-def list_at_gym(gym_id: str, current_user_id: str) -> list[dict]:
-    """Return groups at a gym, enriched with member_count + my membership state."""
+def list_all(current_user_id: str) -> list[dict]:
+    """Return every group on the platform, enriched with member_count + my
+    membership state. Groups are global — no gym filter is applied."""
     sb = get_supabase()
     groups = (
         sb.table("groups")
         .select("*")
-        .eq("gym_id", gym_id)
         .order("created_at", desc=True)
         .execute()
     ).data or []
@@ -139,7 +139,6 @@ def current_membership(user_id: str) -> dict | None:
 
 def create_group(
     creator_id: str,
-    gym_id: str,
     name: str,
     weekly_stake_elo: int,
     join_type: JoinType,
@@ -156,8 +155,8 @@ def create_group(
     # Try inserting WITH the new columns first; if the schema is old, retry
     # without them so creation still works (the values live in pot_conditions
     # as a backup in that case).
+    # Groups are global: no gym_id is assigned (column stays NULL).
     base_payload = {
-        "gym_id": gym_id,
         "name": name,
         "weekly_stake_elo": weekly_stake_elo,
         "join_type": join_type,

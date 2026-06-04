@@ -26,7 +26,9 @@ create table if not exists users (
 
 create table if not exists groups (
     id uuid primary key default gen_random_uuid(),
-    gym_id uuid not null references gyms(id) on delete cascade,
+    -- Groups are global and independent of gyms. `gym_id` is retained only as an
+    -- optional origin hint and no longer gates membership or visibility.
+    gym_id uuid references gyms(id) on delete set null,
     name text not null,
     weekly_stake_elo integer not null default 500 check (weekly_stake_elo >= 0),
     join_type text not null default 'open' check (join_type in ('open', 'request')),
@@ -45,6 +47,13 @@ alter table groups add column if not exists default_required_pledges smallint
     not null default 3 check (default_required_pledges between 1 and 7);
 alter table groups add column if not exists default_stake_per_miss integer
     not null default 100 check (default_stake_per_miss >= 0);
+
+-- Decouple groups from gyms: gym_id becomes optional, and deleting a gym no
+-- longer cascades into deleting its groups (groups are global now).
+alter table groups alter column gym_id drop not null;
+alter table groups drop constraint if exists groups_gym_id_fkey;
+alter table groups add constraint groups_gym_id_fkey
+    foreign key (gym_id) references gyms(id) on delete set null;
 
 create table if not exists group_memberships (
     id uuid primary key default gen_random_uuid(),

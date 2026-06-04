@@ -5,7 +5,7 @@ export type JoinType = 'open' | 'request';
 
 export interface Group {
   id: string;
-  gym_id: string;
+  gym_id: string | null;  // decoupled — groups are global, gym is an optional hint
   name: string;
   weekly_stake_elo: number;
   join_type: JoinType;
@@ -36,11 +36,10 @@ export interface Pot {
   contributor_count: number;
 }
 
-export const listGroupsAtGym = (gym_id: string) =>
-  apiGet<GroupSummary[]>(`/groups/by-gym/${gym_id}`);
+export const listGroups = () =>
+  apiGet<GroupSummary[]>('/groups');
 
 export const createGroup = (payload: {
-  gym_id: string;
   name: string;
   weekly_stake_elo: number;
   join_type: JoinType;

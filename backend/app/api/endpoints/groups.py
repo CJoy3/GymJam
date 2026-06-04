@@ -15,16 +15,16 @@ from app.services import pot as pot_svc
 router = APIRouter()
 
 
-@router.get("/by-gym/{gym_id}", response_model=list[GroupSummary])
-def list_groups_at_gym(gym_id: str, current: dict = Depends(get_current_user)) -> list[dict]:
-    return groups_svc.list_at_gym(gym_id, current["id"])
+@router.get("", response_model=list[GroupSummary])
+def list_groups(current: dict = Depends(get_current_user)) -> list[dict]:
+    """Browse all groups on the platform — global, not scoped to a gym."""
+    return groups_svc.list_all(current["id"])
 
 
 @router.post("", response_model=Group, status_code=201)
 def create_group(payload: GroupCreate, current: dict = Depends(get_current_user)) -> dict:
     return groups_svc.create_group(
         creator_id=current["id"],
-        gym_id=payload.gym_id,
         name=payload.name,
         weekly_stake_elo=payload.weekly_stake_elo,
         join_type=payload.join_type,
