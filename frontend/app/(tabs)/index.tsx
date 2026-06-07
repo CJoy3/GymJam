@@ -6,9 +6,8 @@ import Animated, { Easing, FadeIn } from 'react-native-reanimated';
 
 import {
   Onboarding, Home, CheckIn, PlanWeek, GroupView, NoGroup,
-  GymBrowser, PotTracker, Progress, GymSpace,
-} from '../../src/screens/Screens';
-import { ProfileView } from '../../src/screens/ProfileScreen';
+  GymBrowser, PotTracker, Progress, GymSpace, ProfileView,
+} from '../../src/screens';
 import { useAppState } from '../../src/state/AppState';
 import { BlobBackground } from '../../src/ui/Blob';
 import { C, FONT } from '../../src/theme/tokens';
