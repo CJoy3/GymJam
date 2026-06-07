@@ -59,6 +59,7 @@ class GroupMemberDetail(BaseModel):
     """A group member with their week-by-week pledge state."""
     user_id: str
     display_name: str
+    avatar: Optional[str] = None
     elo: int
     role: Role
     joined_at: datetime

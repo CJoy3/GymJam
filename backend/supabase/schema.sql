@@ -17,12 +17,17 @@ create table if not exists users (
     id uuid primary key default gen_random_uuid(),
     device_id text not null unique,
     display_name text not null default 'Anonymous',
+    -- Chosen pixel-art avatar id (see frontend avatar catalog). NULL ⇒ initials.
+    avatar text,
     elo integer not null default 1000 check (elo >= 0),
     streak integer not null default 0 check (streak >= 0),
     gym_id uuid references gyms(id) on delete set null,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now()
 );
+
+-- Additive migration for existing deployments.
+alter table users add column if not exists avatar text;
 
 create table if not exists groups (
     id uuid primary key default gen_random_uuid(),
