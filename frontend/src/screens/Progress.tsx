@@ -1,12 +1,13 @@
 import React from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 
 import { C, FONT, SPACE } from '../theme/tokens';
-import { Card, Chip, Eyebrow, FadeInItem, H1, H3, Sub } from '../ui/components';
+import { Card, Chip, Eyebrow, FadeInItem, H1, Sub } from '../ui/components';
 import { BlobBackground } from '../ui/Blob';
 import { useRefreshControl } from '../ui/useRefresh';
 import { useAppState } from '../state/AppState';
+import { GymScene, ALL_UNLOCKS } from '../gymspace';
 import { pageWrap, styles } from './_shared';
 
 /* Progress — ELO ladder + badges */
@@ -35,6 +36,7 @@ export function Progress({ onGymSpace }: { onGymSpace: () => void }) {
   const cur = TIERS[ti] ?? TIERS[0];
   const next = TIERS[ti + 1];
   const pct = next ? ((elo - cur.min) / (next.min - cur.min)) * 100 : 100;
+  const nextUnlock = ALL_UNLOCKS.find((u) => u.elo > elo) ?? null;
 
   return (
     <View style={styles.screen}>
@@ -46,7 +48,25 @@ export function Progress({ onGymSpace }: { onGymSpace: () => void }) {
           <Sub style={{ marginTop: 6 }}>Track your growth and unlock rewards</Sub>
         </FadeInItem>
 
-        <FadeInItem delay={100} style={{ marginTop: 24 }}>
+        {/* Pixel-art gym — front and centre. Grows as you climb the arena. */}
+        <FadeInItem delay={80} style={{ marginTop: 20 }}>
+          <Pressable onPress={onGymSpace}>
+            <GymScene elo={elo} />
+            <View style={[styles.rowBetween, { marginTop: 12 }]}>
+              <View style={{ flex: 1 }}>
+                <Eyebrow>Your gym</Eyebrow>
+                <Sub style={{ marginTop: 2 }}>
+                  {nextUnlock
+                    ? `Next unlock: ${nextUnlock.label} · ${nextUnlock.elo.toLocaleString()} ELO`
+                    : 'Fully decked out — legendary status'}
+                </Sub>
+              </View>
+              <Chip text="Expand" tone="accent" icon="open-in-full" compact />
+            </View>
+          </Pressable>
+        </FadeInItem>
+
+        <FadeInItem delay={140} style={{ marginTop: 18 }}>
           <Card padding={SPACE.xl}>
             <View style={styles.rowBetween}>
               <View>
@@ -125,23 +145,6 @@ export function Progress({ onGymSpace }: { onGymSpace: () => void }) {
             );
           })}
         </View>
-
-        <FadeInItem delay={520} style={{ marginTop: 24 }}>
-          <Card onPress={onGymSpace} padding={SPACE.lg} tone="peach">
-            <View style={styles.rowBetween}>
-              <View style={[styles.rowGap, { flex: 1 }]}>
-                <View style={[styles.iconChip, { backgroundColor: 'rgba(232,155,124,0.20)' }]}>
-                  <MaterialIcons name="grid-view" size={20} color={C.accent} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <H3>Your gym space</H3>
-                  <Sub style={{ marginTop: 2 }}>Decorate with what you've unlocked</Sub>
-                </View>
-              </View>
-              <MaterialIcons name="chevron-right" size={22} color={C.inkSoft} />
-            </View>
-          </Card>
-        </FadeInItem>
       </ScrollView>
     </View>
   );

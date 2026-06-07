@@ -2,40 +2,19 @@ import React from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 
-import { C, SPACE } from '../theme/tokens';
-import { Card, Eyebrow, FadeInItem, H1, Sub } from '../ui/components';
+import { C, SPACE, tierForElo } from '../theme/tokens';
+import { Card, Chip, Eyebrow, FadeInItem, H1, Sub } from '../ui/components';
 import { BlobBackground } from '../ui/Blob';
 import { useAppState } from '../state/AppState';
+import { GymScene, ALL_UNLOCKS, TIERS } from '../gymspace';
 import { pageWrap, styles } from './_shared';
 
-/* Gym space — decoration grid */
-
-interface SpaceItemDef { id: string; name: string; emoji: string; unlockElo: number; }
-const ROOM_ITEMS: SpaceItemDef[] = [
-  { id: 'mat',    name: 'Yoga Mat',    emoji: '🧘', unlockElo: 0 },
-  { id: 'db',     name: 'Dumbbells',   emoji: '🏋️', unlockElo: 0 },
-  { id: 'plant',  name: 'Plant',       emoji: '🪴', unlockElo: 500 },
-  { id: 'bench',  name: 'Bench',       emoji: '🛋️', unlockElo: 500 },
-  { id: 'banner', name: 'Banner',      emoji: '🏆', unlockElo: 1000 },
-  { id: 'tread',  name: 'Treadmill',   emoji: '🏃', unlockElo: 1000 },
-  { id: 'neon',   name: 'Neon Sign',   emoji: '💡', unlockElo: 1200 },
-  { id: 'ring',   name: 'Boxing Ring', emoji: '🥊', unlockElo: 2000 },
-  { id: 'mascot', name: 'Mascot',      emoji: '🐯', unlockElo: 2000 },
-];
+/* Gym space — the expanded pixel-art scene + unlock collection */
 
 export function GymSpace({ onBack }: { onBack: () => void }) {
-  const { elo, roomItems, placeRoomItem } = useAppState();
-  const placementByItem = new Map(roomItems.map((r) => [r.item_id, r.slot] as const));
-  const placedSlots = new Set(roomItems.map((r) => r.slot));
-
-  const unlocked = (it: SpaceItemDef) => elo >= it.unlockElo;
-  const freeSlot = () => { for (let s = 0; s < 9; s++) if (!placedSlots.has(s)) return s; return null; };
-  const toggle = (it: SpaceItemDef) => {
-    if (!unlocked(it)) return;
-    if (placementByItem.has(it.id)) { placeRoomItem(it.id, null); return; }
-    const f = freeSlot(); if (f === null) return;
-    placeRoomItem(it.id, f);
-  };
+  const { elo } = useAppState();
+  const unlocked = ALL_UNLOCKS.filter((u) => elo >= u.elo).length;
+  const curTier = tierForElo(elo);
 
   return (
     <View style={styles.screen}>
@@ -48,63 +27,88 @@ export function GymSpace({ onBack }: { onBack: () => void }) {
         </FadeInItem>
 
         <FadeInItem delay={60} style={{ marginTop: 18 }}>
-          <Eyebrow>Your space</Eyebrow>
-          <H1 style={{ marginTop: 6 }}>Decorate your gym</H1>
-          <Sub style={{ marginTop: 6 }}>Earn rewards by levelling up, then place them</Sub>
+          <Eyebrow>Your gym</Eyebrow>
+          <H1 style={{ marginTop: 6 }}>The {curTier} gym</H1>
+          <Sub style={{ marginTop: 6 }}>It levels up as you climb the arena — no upkeep, just progress.</Sub>
         </FadeInItem>
 
-        <FadeInItem delay={120} style={{ marginTop: 24 }}>
-          <Card padding={SPACE.md}>
-            <View style={styles.roomGrid}>
-              {Array.from({ length: 9 }).map((_, slot) => {
-                const placement = roomItems.find((r) => r.slot === slot);
-                const def = placement && ROOM_ITEMS.find((i) => i.id === placement.item_id);
-                return (
-                  <View key={slot} style={styles.roomCell}>
-                    <View style={[styles.roomTile, def ? { backgroundColor: C.cardHi, borderColor: C.border, borderWidth: 0 } : null]}>
-                      {def && <Text style={{ fontSize: 32 }}>{def.emoji}</Text>}
-                    </View>
+        {/* The hero scene, larger here. */}
+        <FadeInItem delay={120} style={{ marginTop: 22 }}>
+          <GymScene elo={elo} aspect={1.3} />
+        </FadeInItem>
+
+        {/* Arena → gym levels */}
+        <FadeInItem delay={180} style={{ marginTop: 24 }}>
+          <View style={[styles.rowBetween, { marginBottom: 12 }]}>
+            <Eyebrow>Gym levels</Eyebrow>
+            <Sub>{curTier}</Sub>
+          </View>
+        </FadeInItem>
+        <FadeInItem delay={220}>
+          <Card padding={0}>
+            {TIERS.map((t, i) => {
+              const reached = elo >= t.min;
+              const current = curTier === t.name;
+              return (
+                <View
+                  key={t.name}
+                  style={[
+                    styles.ladderRow,
+                    i < TIERS.length - 1 && { borderBottomWidth: 1, borderBottomColor: C.border },
+                    current && { backgroundColor: 'rgba(232,155,124,0.06)' },
+                  ]}
+                >
+                  <View style={[styles.ladderIcon, { backgroundColor: reached ? C.primary : C.muted }]}>
+                    <MaterialIcons name={reached ? 'fitness-center' : 'lock'} size={18} color={reached ? C.primaryFg : C.mutedFg} />
                   </View>
-                );
-              })}
-            </View>
-            <Sub style={{ textAlign: 'center', marginTop: 12 }}>Tap an item to place · tap a placed item to remove</Sub>
+                  <View style={{ flex: 1 }}>
+                    <View style={styles.rowGap}>
+                      <Text style={[styles.cardTitle, !reached && { color: C.mutedFg }]}>{t.name} gym</Text>
+                      {current && <Chip text="You" tone="accent" compact />}
+                    </View>
+                    <Sub style={{ marginTop: 2 }}>{t.min === 0 ? 'From the start' : `${t.min.toLocaleString()} ELO`}</Sub>
+                  </View>
+                  {reached && <MaterialIcons name="check-circle" size={20} color={C.success} />}
+                </View>
+              );
+            })}
           </Card>
         </FadeInItem>
 
-        <FadeInItem delay={180} style={{ marginTop: 22 }}>
-          <Eyebrow style={{ marginBottom: 12 }}>Items</Eyebrow>
+        {/* Equipment collection */}
+        <FadeInItem delay={280} style={{ marginTop: 24 }}>
+          <View style={[styles.rowBetween, { marginBottom: 12 }]}>
+            <Eyebrow>Equipment</Eyebrow>
+            <Sub>{unlocked} / {ALL_UNLOCKS.length} unlocked</Sub>
+          </View>
         </FadeInItem>
-
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
-          {ROOM_ITEMS.map((it, i) => {
-            const on = unlocked(it);
-            const isPlaced = placementByItem.has(it.id);
+        <View style={{ gap: 10 }}>
+          {ALL_UNLOCKS.map((u, i) => {
+            const on = elo >= u.elo;
             return (
-              <FadeInItem key={it.id} delay={220 + i * 40} style={{ width: '31%' }}>
-                <Pressable
-                  disabled={!on}
-                  onPress={() => toggle(it)}
-                  style={[styles.itemTile, { opacity: on ? 1 : 0.45 }]}
-                >
-                  <Text style={{ fontSize: 30 }}>{it.emoji}</Text>
-                  <Text style={styles.itemName} numberOfLines={1}>{it.name}</Text>
-                  {!on && (
-                    <View style={styles.lockBadge}>
-                      <MaterialIcons name="lock" size={9} color={C.mutedFg} />
-                      <Text style={styles.lockText}>{it.unlockElo}</Text>
+              <FadeInItem key={u.id} delay={320 + i * 40}>
+                <Card padding={SPACE.lg} style={on ? undefined : { opacity: 0.5 }}>
+                  <View style={styles.rowBetween}>
+                    <View style={[styles.rowGap, { flex: 1 }]}>
+                      <View style={[styles.iconChip, { backgroundColor: on ? C.successSoft : C.muted }]}>
+                        <MaterialIcons name={on ? 'check' : 'lock'} size={16} color={on ? C.success : C.mutedFg} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.cardTitle}>{u.label}</Text>
+                        <Sub style={{ marginTop: 2 }}>{on ? 'Unlocked' : `Unlocks at ${u.elo.toLocaleString()} ELO`}</Sub>
+                      </View>
                     </View>
-                  )}
-                  {on && isPlaced && (
-                    <View style={styles.placedBadge}>
-                      <MaterialIcons name="check" size={11} color={C.primaryFg} />
-                    </View>
-                  )}
-                </Pressable>
+                    {on
+                      ? <Chip text="In your gym" tone="success" compact />
+                      : <Sub>{(u.elo - elo).toLocaleString()} to go</Sub>}
+                  </View>
+                </Card>
               </FadeInItem>
             );
           })}
         </View>
+
+        <View style={{ height: 16 }} />
       </ScrollView>
     </View>
   );
