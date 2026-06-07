@@ -166,6 +166,19 @@ create table if not exists user_room_items (
 create unique index if not exists user_room_items_unique_slot
     on user_room_items(user_id, slot);
 
+-- Nudges: a member pokes another member to get to the gym. Used both to
+-- surface "X nudged you" in the activity feed and to rate-limit the button
+-- (at most one from→to nudge per hour).
+create table if not exists nudges (
+    id uuid primary key default gen_random_uuid(),
+    group_id uuid not null references groups(id) on delete cascade,
+    from_user_id uuid not null references users(id) on delete cascade,
+    to_user_id uuid not null references users(id) on delete cascade,
+    created_at timestamptz not null default now()
+);
+create index if not exists nudges_to_idx   on nudges(to_user_id, created_at desc);
+create index if not exists nudges_pair_idx on nudges(from_user_id, to_user_id, created_at desc);
+
 -- Single-row development clock. `offset_days` shifts the app's notion of "today"
 -- forward (in whole weeks) so the week-by-week flow can be demoed on demand.
 create table if not exists dev_clock (
@@ -245,5 +258,6 @@ alter table weekly_plans        disable row level security;
 alter table plan_days           disable row level security;
 alter table pot_conditions      disable row level security;
 alter table user_room_items     disable row level security;
+alter table nudges              disable row level security;
 alter table dev_clock           disable row level security;
  

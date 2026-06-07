@@ -12,14 +12,13 @@ import { pageWrap, styles } from './_shared';
 /* Gym browser — list + create + leader inbox */
 
 export function GymBrowser({ onBack, onJoined, onCreated }: { onBack: () => void; onJoined: () => void; onCreated: () => void }) {
-  const { groupId, groups, addGroup, joinGroup, leaveGroup, joinRequests, approveRequest, rejectRequest, refreshGroupsAtGym } = useAppState();
+  const { groupId, groups, addGroup, joinGroup, leaveGroup, refreshGroupsAtGym } = useAppState();
   const refresh = useRefreshControl();
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
   const [freq, setFreq] = useState('3');           // required_pledges per week, 1..7
   const [weeklyStake, setWeeklyStake] = useState('300');  // full ELO at stake for the week
   const [jt, setJt] = useState<'open' | 'request'>('open');
-  const [inbox, setInbox] = useState(false);
   const inGroup = groupId !== null;
   useEffect(() => { refreshGroupsAtGym(); }, [refreshGroupsAtGym]);
 
@@ -71,48 +70,14 @@ export function GymBrowser({ onBack, onJoined, onCreated }: { onBack: () => void
             <Pressable onPress={onBack} style={styles.iconBtn}>
               <MaterialIcons name="arrow-back" size={20} color={C.ink} />
             </Pressable>
-            {joinRequests.length > 0 && (
-              <Pressable onPress={() => setInbox((s) => !s)} style={styles.inboxBtn}>
-                <MaterialIcons name="notifications" size={18} color={C.accent} />
-                <Text style={{ fontFamily: FONT.semibold, color: C.accent, marginLeft: 6 }}>{joinRequests.length}</Text>
-              </Pressable>
-            )}
           </View>
         </FadeInItem>
 
         <FadeInItem delay={60} style={{ marginTop: 18 }}>
           <Eyebrow>All groups · any gym</Eyebrow>
           <H1 style={{ marginTop: 6 }}>Browse groups</H1>
-          <Sub style={{ marginTop: 6 }}>Groups are global — join friends from any gym.</Sub>
+          <Sub style={{ marginTop: 6 }}>Groups are global — join friends from any gym. Join requests now appear in the group notifications menu.</Sub>
         </FadeInItem>
-
-        {inbox && joinRequests.length > 0 && (
-          <FadeInItem delay={100} style={{ marginTop: 18 }}>
-            <Card padding={SPACE.lg} tone="peach">
-              <Eyebrow style={{ color: C.accent, marginBottom: 10 }}>JOIN REQUESTS</Eyebrow>
-              <View style={{ gap: 10 }}>
-                {joinRequests.map((req) => (
-                  <View key={req.id} style={styles.rowBetween}>
-                    <View style={styles.rowGap}>
-                      <View style={[styles.avatar, { width: 32, height: 32 }]}>
-                        <Text style={[styles.avatarText, { fontSize: 11 }]}>{req.userName.slice(0, 2).toUpperCase()}</Text>
-                      </View>
-                      <Text style={{ fontFamily: FONT.semibold, color: C.ink, fontSize: 14 }}>{req.userName}</Text>
-                    </View>
-                    <View style={{ flexDirection: 'row', gap: 8 }}>
-                      <Pressable onPress={() => { approveRequest(req.id); if (joinRequests.length === 1) setInbox(false); }} style={[styles.miniBtn, { backgroundColor: C.success }]}>
-                        <MaterialIcons name="check" size={16} color={C.primaryFg} />
-                      </Pressable>
-                      <Pressable onPress={() => { rejectRequest(req.id); if (joinRequests.length === 1) setInbox(false); }} style={[styles.miniBtn, { backgroundColor: C.muted }]}>
-                        <MaterialIcons name="close" size={16} color={C.inkSoft} />
-                      </Pressable>
-                    </View>
-                  </View>
-                ))}
-              </View>
-            </Card>
-          </FadeInItem>
-        )}
 
         <FadeInItem delay={140} style={{ marginTop: 22 }}>
           <View style={[styles.rowBetween, { marginBottom: 12 }]}>

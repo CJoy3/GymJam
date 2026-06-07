@@ -6,10 +6,12 @@ import * as badgesApi from '../../lib/api/badges';
 import * as devApi from '../../lib/api/dev';
 import * as gymsApi from '../../lib/api/gyms';
 import * as groupsApi from '../../lib/api/groups';
+import * as notificationsApi from '../../lib/api/notifications';
 import * as plansApi from '../../lib/api/plans';
 import * as potApi from '../../lib/api/pot';
 import * as roomApi from '../../lib/api/room';
 import * as usersApi from '../../lib/api/users';
+import { ApiError } from '../../lib/api/client';
 import { getOrCreateUserId } from '../../lib/userId';
 import { showToast } from '../ui/toast';
 import {
@@ -50,6 +52,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [potNext, setPotNext] = useState<potApi.PotDetail | null>(null);
   const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
   const [groupMembers, setGroupMembers] = useState<GroupMember[]>([]);
+  const [activity, setActivity] = useState<notificationsApi.ActivityItem[]>([]);
+  const [nudgeCooldowns, setNudgeCooldowns] = useState<Record<string, number>>({});
   const [badges, setBadges] = useState<badgesApi.Badges>({
     first_week: false,
     streak_master: false,
@@ -144,15 +148,28 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const loadActivity = useCallback(async (groupId: string | null) => {
+    if (!groupId) {
+      setActivity([]);
+      return;
+    }
+    try {
+      setActivity(await notificationsApi.getGroupActivity(groupId));
+    } catch {
+      setActivity([]);
+    }
+  }, []);
+
   const refreshGroupContext = useCallback(
     async (groupId: string | null, isLeader: boolean | undefined) => {
       await Promise.all([
         loadPot(groupId),
         loadInbox(groupId, isLeader),
         loadMembers(groupId),
+        loadActivity(groupId),
       ]);
     },
-    [loadPot, loadInbox, loadMembers],
+    [loadPot, loadInbox, loadMembers, loadActivity],
   );
 
   const loadBadges = useCallback(async () => {
@@ -528,6 +545,30 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }
   }, [loadMembers, me, myGroupSummary]);
 
+  const nudge = useCallback(async (targetUserId: string) => {
+    if (!myGroupSummary?.id) return;
+    // Optimistically start the hour-long cooldown so the button locks instantly.
+    const oneHour = 60 * 60 * 1000;
+    setNudgeCooldowns((prev) => ({ ...prev, [targetUserId]: Date.now() + oneHour }));
+    try {
+      const res = await notificationsApi.nudgeMember(myGroupSummary.id, targetUserId);
+      setNudgeCooldowns((prev) => ({ ...prev, [targetUserId]: new Date(res.next_allowed_at).getTime() }));
+      showToast('Nudge sent 👟', 'success');
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 429) {
+        // Already nudged recently — keep the cooldown and surface the message.
+        showToast(e.message, 'info');
+      } else {
+        setNudgeCooldowns((prev) => {
+          const next = { ...prev };
+          delete next[targetUserId];
+          return next;
+        });
+        reportError('Could not nudge', e);
+      }
+    }
+  }, [myGroupSummary]);
+
   const updatePotConditions = useCallback(
     async (week: 'current' | 'next', required: number, stake: number) => {
       if (!myGroupSummary?.id) return;
@@ -647,6 +688,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       groupMembers,
       refreshMembers: () => loadMembers(myGroupSummary?.id ?? null),
 
+      activity,
+      refreshActivity: () => loadActivity(myGroupSummary?.id ?? null),
+      nudge,
+      nudgeCooldowns,
+
       badges,
       refreshBadges: loadBadges,
 
@@ -659,9 +705,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       refreshAll: () => bootstrap(false),
     };
   }, [
-    addGroup, addNextWeekDay, approveRequest, badges, bootstrap, checkInToday,
-    groupMembers, groupsAtGym, gyms, joinGroup, joinRequests, leaveGroup, loadBadges, loadMembers,
-    lockNextWeek, me, myGroupSummary, nextWeek, placeRoomItem, pot, potCurrent, potNext,
+    activity, addGroup, addNextWeekDay, approveRequest, badges, bootstrap, checkInToday,
+    groupMembers, groupsAtGym, gyms, joinGroup, joinRequests, leaveGroup, loadActivity, loadBadges, loadMembers,
+    lockNextWeek, me, myGroupSummary, nextWeek, nudge, nudgeCooldowns, placeRoomItem, pot, potCurrent, potNext,
     ready, refreshGroupsAtGym, rejectRequest, reloading, rescheduleMissedDay, roomItems, setGym,
     setPlannedDays, setThisWeekDays, thisWeek, thisWeekIsPractice, todayDow, toggleNextWeekDay,
     toggleWeek, updateAvatar, updateDisplayName, updatePotConditions, weekOffsetDays,

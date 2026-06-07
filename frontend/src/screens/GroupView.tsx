@@ -1,8 +1,8 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 
-import { C, SPACE } from '../theme/tokens';
+import { C, FONT, SPACE } from '../theme/tokens';
 import { Card, Chip, Eyebrow, FadeInItem, H1, H3, Sub } from '../ui/components';
 import { Avatar } from '../ui/Avatar';
 import { DayPicker } from '../ui/DayPicker';
@@ -11,17 +11,37 @@ import { useRefreshControl } from '../ui/useRefresh';
 import { useAppState } from '../state/AppState';
 import { pageWrap, styles } from './_shared';
 
-/* Group view — members + per-day join */
+/* Group view — members, notifications menu, per-day join + nudges */
+
+const KIND_META: Record<string, { icon: keyof typeof MaterialIcons.glyphMap; color: string }> = {
+  join_request: { icon: 'person-add', color: C.accent },
+  nudge:        { icon: 'campaign', color: C.accent },
+  missed:       { icon: 'close', color: C.danger },
+  checkin:      { icon: 'check-circle', color: C.success },
+  streak:       { icon: 'local-fire-department', color: C.accent },
+};
 
 export function GroupView({ onBrowse }: { onBrowse: () => void }) {
-  const { groupName, groupMembers, refreshGroupsAtGym, potNext, userId } = useAppState();
+  const {
+    groupName, groupMembers, refreshGroupsAtGym, potNext, userId,
+    activity, refreshActivity, approveRequest, rejectRequest, nudge, nudgeCooldowns,
+  } = useAppState();
   const refresh = useRefreshControl();
+  const [showFeed, setShowFeed] = useState(false);
   useEffect(() => { refreshGroupsAtGym(); }, [refreshGroupsAtGym]);
   const setterName = potNext?.setter_user_id === userId ? 'You' : potNext?.setter_display_name;
   // Put my row first so I always see myself at the top of the group.
   const orderedMembers = userId
     ? [...groupMembers].sort((a, b) => Number(b.userId === userId) - Number(a.userId === userId))
     : groupMembers;
+  const actionableCount = activity.filter((a) => a.kind === 'join_request' || a.kind === 'nudge').length;
+
+  const toggleFeed = () => {
+    setShowFeed((s) => {
+      if (!s) refreshActivity();
+      return !s;
+    });
+  };
 
   return (
     <View style={styles.screen}>
@@ -36,11 +56,58 @@ export function GroupView({ onBrowse }: { onBrowse: () => void }) {
                 {groupMembers.length} {groupMembers.length === 1 ? 'member' : 'members'} · this week
               </Sub>
             </View>
-            <Pressable onPress={onBrowse} style={styles.iconBtn}>
-              <MaterialIcons name="swap-horiz" size={20} color={C.ink} />
-            </Pressable>
+            <View style={[styles.rowGap, { gap: 8 }]}>
+              <Pressable onPress={toggleFeed} style={styles.iconBtn}>
+                <MaterialIcons name={showFeed ? 'notifications-active' : 'notifications-none'} size={20} color={showFeed ? C.accent : C.ink} />
+                {actionableCount > 0 && (
+                  <View style={badge.dot}>
+                    <Text style={badge.text}>{actionableCount}</Text>
+                  </View>
+                )}
+              </Pressable>
+              <Pressable onPress={onBrowse} style={styles.iconBtn}>
+                <MaterialIcons name="swap-horiz" size={20} color={C.ink} />
+              </Pressable>
+            </View>
           </View>
         </FadeInItem>
+
+        {showFeed && (
+          <FadeInItem delay={40} style={{ marginTop: 16 }}>
+            <Card padding={SPACE.lg}>
+              <Eyebrow style={{ marginBottom: 12 }}>Notifications</Eyebrow>
+              {activity.length === 0 ? (
+                <Sub style={{ textAlign: 'center' }}>
+                  No updates yet. Plan sessions and nudge teammates to get things going.
+                </Sub>
+              ) : (
+                <View style={{ gap: 14 }}>
+                  {activity.map((a) => {
+                    const meta = KIND_META[a.kind] ?? KIND_META.nudge;
+                    return (
+                      <View key={a.id} style={styles.rowGap}>
+                        <View style={[styles.iconChip, { backgroundColor: C.muted, width: 32, height: 32 }]}>
+                          <MaterialIcons name={meta.icon} size={16} color={meta.color} />
+                        </View>
+                        <Text style={{ flex: 1, fontFamily: FONT.medium, color: C.ink, fontSize: 14 }}>{a.message}</Text>
+                        {a.kind === 'join_request' && a.request_id && (
+                          <View style={{ flexDirection: 'row', gap: 8 }}>
+                            <Pressable onPress={() => approveRequest(a.request_id as string)} style={[styles.miniBtn, { backgroundColor: C.success }]}>
+                              <MaterialIcons name="check" size={16} color={C.primaryFg} />
+                            </Pressable>
+                            <Pressable onPress={async () => { await rejectRequest(a.request_id as string); refreshActivity(); }} style={[styles.miniBtn, { backgroundColor: C.muted }]}>
+                              <MaterialIcons name="close" size={16} color={C.inkSoft} />
+                            </Pressable>
+                          </View>
+                        )}
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+            </Card>
+          </FadeInItem>
+        )}
 
         {setterName && (
           <FadeInItem delay={80} style={{ marginTop: 18 }}>
@@ -71,6 +138,7 @@ export function GroupView({ onBrowse }: { onBrowse: () => void }) {
               const done = m.thisWeek.filter((d) => d.state === 'checked-in').length;
               const notPledging = pledged === 0;
               const isMe = m.userId === userId;
+              const onCooldown = (nudgeCooldowns[m.userId] ?? 0) > Date.now();
               return (
                 <FadeInItem key={m.userId} delay={140 + i * 60}>
                   <Card
@@ -81,16 +149,28 @@ export function GroupView({ onBrowse }: { onBrowse: () => void }) {
                     }}
                   >
                     <View style={[styles.rowBetween, { marginBottom: 14 }]}>
-                      <View style={styles.rowGap}>
+                      <View style={[styles.rowGap, { flex: 1 }]}>
                         <Avatar id={m.avatar} name={m.name} accent={isMe} size={40} />
-                        <View>
+                        <View style={{ flex: 1 }}>
                           <Text style={[styles.cardTitle, isMe && { color: C.accent }]}>{isMe ? 'You' : m.name}</Text>
                           <Sub style={{ marginTop: 2 }}>
                             {notPledging ? 'Sitting out this week' : `${done} of ${pledged} done`}
                           </Sub>
                         </View>
                       </View>
-                      {m.isLeader && <Chip text="Leader" tone="accent" compact />}
+                      <View style={[styles.rowGap, { gap: 8 }]}>
+                        {m.isLeader && <Chip text="Leader" tone="accent" compact />}
+                        {!isMe && (
+                          <Pressable
+                            onPress={() => nudge(m.userId)}
+                            disabled={onCooldown}
+                            style={[styles.linkBtn, onCooldown && { opacity: 0.45 }]}
+                          >
+                            <MaterialIcons name="campaign" size={15} color={C.ink} />
+                            <Text style={styles.linkText}>{onCooldown ? 'Nudged' : 'Nudge'}</Text>
+                          </Pressable>
+                        )}
+                      </View>
                     </View>
                     <DayPicker days={m.thisWeek} />
                   </Card>
@@ -103,3 +183,15 @@ export function GroupView({ onBrowse }: { onBrowse: () => void }) {
     </View>
   );
 }
+
+const badge = {
+  dot: {
+    position: 'absolute' as const,
+    top: -4, right: -4,
+    minWidth: 18, height: 18, borderRadius: 9,
+    paddingHorizontal: 4,
+    backgroundColor: C.accent,
+    alignItems: 'center' as const, justifyContent: 'center' as const,
+  },
+  text: { fontFamily: FONT.bold, fontSize: 10, color: C.primaryFg },
+};

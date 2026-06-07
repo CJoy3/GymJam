@@ -1,5 +1,6 @@
 /** Shared view-model types and constants for the GymJam app state. */
 import * as badgesApi from '../../lib/api/badges';
+import * as notificationsApi from '../../lib/api/notifications';
 import * as potApi from '../../lib/api/pot';
 import * as roomApi from '../../lib/api/room';
 
@@ -116,6 +117,12 @@ export interface AppStateShape {
   // Group members (this & next week pledges per person)
   groupMembers: GroupMember[];
   refreshMembers: () => Promise<void>;
+
+  // Group activity feed + nudges
+  activity: notificationsApi.ActivityItem[];
+  refreshActivity: () => Promise<void>;
+  nudge: (targetUserId: string) => Promise<void>;
+  nudgeCooldowns: Record<string, number>; // userId → epoch ms until allowed again
 
   // Badges (derived flags from real stats)
   badges: badgesApi.Badges;
