@@ -4,6 +4,7 @@ export interface User {
   id: string;
   device_id: string;
   display_name: string;
+  avatar: string | null;
   elo: number;
   streak: number;
   gym_id: string | null;
@@ -16,5 +17,5 @@ export const registerUser = (device_id: string, display_name?: string) =>
 
 export const getMe = () => apiGet<User>('/users/me');
 
-export const updateMe = (patch: { display_name?: string; gym_id?: string | null }) =>
+export const updateMe = (patch: { display_name?: string; gym_id?: string | null; avatar?: string }) =>
   apiPatch<User>('/users/me', patch);

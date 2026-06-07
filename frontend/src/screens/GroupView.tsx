@@ -4,6 +4,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 
 import { C, SPACE } from '../theme/tokens';
 import { Card, Chip, Eyebrow, FadeInItem, H1, H3, Sub } from '../ui/components';
+import { Avatar } from '../ui/Avatar';
 import { DayPicker } from '../ui/DayPicker';
 import { BlobBackground } from '../ui/Blob';
 import { useRefreshControl } from '../ui/useRefresh';
@@ -17,6 +18,10 @@ export function GroupView({ onBrowse }: { onBrowse: () => void }) {
   const refresh = useRefreshControl();
   useEffect(() => { refreshGroupsAtGym(); }, [refreshGroupsAtGym]);
   const setterName = potNext?.setter_user_id === userId ? 'You' : potNext?.setter_display_name;
+  // Put my row first so I always see myself at the top of the group.
+  const orderedMembers = userId
+    ? [...groupMembers].sort((a, b) => Number(b.userId === userId) - Number(a.userId === userId))
+    : groupMembers;
 
   return (
     <View style={styles.screen}>
@@ -61,20 +66,25 @@ export function GroupView({ onBrowse }: { onBrowse: () => void }) {
           </FadeInItem>
         ) : (
           <View style={{ gap: 12, marginTop: 22 }}>
-            {groupMembers.map((m, i) => {
+            {orderedMembers.map((m, i) => {
               const pledged = m.thisWeek.filter((d) => d.state !== 'unselected').length;
               const done = m.thisWeek.filter((d) => d.state === 'checked-in').length;
               const notPledging = pledged === 0;
+              const isMe = m.userId === userId;
               return (
                 <FadeInItem key={m.userId} delay={140 + i * 60}>
-                  <Card padding={SPACE.lg} style={notPledging ? { opacity: 0.55 } : undefined}>
+                  <Card
+                    padding={SPACE.lg}
+                    style={{
+                      ...(notPledging ? { opacity: 0.55 } : null),
+                      ...(isMe ? { borderColor: C.accent, borderWidth: 1.5, backgroundColor: 'rgba(232,155,124,0.06)' } : null),
+                    }}
+                  >
                     <View style={[styles.rowBetween, { marginBottom: 14 }]}>
                       <View style={styles.rowGap}>
-                        <View style={styles.avatar}>
-                          <Text style={styles.avatarText}>{m.initials}</Text>
-                        </View>
+                        <Avatar id={m.avatar} name={m.name} accent={isMe} size={40} />
                         <View>
-                          <Text style={styles.cardTitle}>{m.name}</Text>
+                          <Text style={[styles.cardTitle, isMe && { color: C.accent }]}>{isMe ? 'You' : m.name}</Text>
                           <Sub style={{ marginTop: 2 }}>
                             {notPledging ? 'Sitting out this week' : `${done} of ${pledged} done`}
                           </Sub>

@@ -37,6 +37,7 @@ export interface GroupMember {
   userId: string;
   name: string;
   initials: string;
+  avatar: string | null;
   elo: number;
   isLeader: boolean;
   thisWeek: DayStatus[];
@@ -51,6 +52,7 @@ export interface AppStateShape {
   // Profile
   userId: string | null;
   displayName: string;
+  avatar: string | null;
   elo: number;
   streak: number;
 
@@ -121,6 +123,7 @@ export interface AppStateShape {
 
   // Profile
   updateDisplayName: (name: string) => Promise<void>;
+  updateAvatar: (avatar: string) => Promise<void>;
 
   // Gym-space room
   roomItems: roomApi.RoomItem[];

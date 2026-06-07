@@ -120,6 +120,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         userId: m.user_id,
         name: m.display_name,
         initials: initialsOf(m.display_name),
+        avatar: m.avatar,
         elo: m.elo,
         isLeader: m.role === 'leader',
         thisWeek: daysToWeek(m.this_week_days),
@@ -513,6 +514,20 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }
   }, [loadMembers, me, myGroupSummary]);
 
+  const updateAvatar = useCallback(async (avatar: string) => {
+    const snapshotMe = me;
+    setMe((prev) => (prev ? { ...prev, avatar } : prev));
+    try {
+      const u = await usersApi.updateMe({ avatar });
+      setMe(u);
+      // The group list shows my avatar, so refresh it.
+      if (myGroupSummary?.id) await loadMembers(myGroupSummary.id);
+    } catch (e) {
+      setMe(snapshotMe);
+      reportError('Could not update avatar', e);
+    }
+  }, [loadMembers, me, myGroupSummary]);
+
   const updatePotConditions = useCallback(
     async (week: 'current' | 'next', required: number, stake: number) => {
       if (!myGroupSummary?.id) return;
@@ -585,6 +600,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
       userId: me?.id ?? null,
       displayName: me?.display_name ?? 'You',
+      avatar: me?.avatar ?? null,
       elo: me?.elo ?? 0,
       streak: me?.streak ?? 0,
 
@@ -635,6 +651,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       refreshBadges: loadBadges,
 
       updateDisplayName,
+      updateAvatar,
 
       roomItems,
       placeRoomItem,
@@ -647,7 +664,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     lockNextWeek, me, myGroupSummary, nextWeek, placeRoomItem, pot, potCurrent, potNext,
     ready, refreshGroupsAtGym, rejectRequest, reloading, rescheduleMissedDay, roomItems, setGym,
     setPlannedDays, setThisWeekDays, thisWeek, thisWeekIsPractice, todayDow, toggleNextWeekDay,
-    toggleWeek, updateDisplayName, updatePotConditions, weekOffsetDays,
+    toggleWeek, updateAvatar, updateDisplayName, updatePotConditions, weekOffsetDays,
   ]);
 
   // tier is purely a function of elo; expose for callers that want it

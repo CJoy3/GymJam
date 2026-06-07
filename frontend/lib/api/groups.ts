@@ -89,6 +89,7 @@ export const getGroupPot = (group_id: string, week: 'current' | 'next' = 'curren
 export interface GroupMemberDetail {
   user_id: string;
   display_name: string;
+  avatar: string | null;
   elo: number;
   role: 'member' | 'leader';
   joined_at: string;
