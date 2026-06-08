@@ -86,7 +86,7 @@ def list_all(current_user_id: str) -> list[dict]:
 
     members = (
         sb.table("group_memberships")
-        .select("group_id, user_id, role")
+        .select("group_id, user_id, role, users(elo)")
         .in_("group_id", group_ids)
         .execute()
     ).data or []
@@ -107,9 +107,12 @@ def list_all(current_user_id: str) -> list[dict]:
     for g in groups:
         gm = by_group_members.get(g["id"], [])
         mine = next((m for m in gm if m["user_id"] == current_user_id), None)
+        elos = [(m.get("users") or {}).get("elo") or 0 for m in gm]
+        avg_elo = round(sum(elos) / len(elos)) if elos else 0
         enriched.append({
             **g,
             "member_count": len(gm),
+            "avg_elo": avg_elo,
             "is_member": mine is not None,
             "is_leader": mine is not None and mine["role"] == "leader",
             "join_request_pending": g["id"] in my_pending,

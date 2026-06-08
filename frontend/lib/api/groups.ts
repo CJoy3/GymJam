@@ -15,6 +15,7 @@ export interface Group {
 
 export interface GroupSummary extends Group {
   member_count: number;
+  avg_elo: number;
   is_member: boolean;
   is_leader: boolean;
   join_request_pending: boolean;

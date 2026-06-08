@@ -167,7 +167,7 @@ export function GymBrowser({ onBack, onJoined, onCreated }: { onBack: () => void
                       <View style={[styles.rowGap, { gap: 8, marginTop: 6, flexWrap: 'wrap' }]}>
                         <Sub>{g.members} {g.members === 1 ? 'member' : 'members'}</Sub>
                         <Text style={styles.dot}>·</Text>
-                        <Sub>{g.stake}</Sub>
+                        <Sub>{g.avgElo} avg ELO</Sub>
                         <Text style={styles.dot}>·</Text>
                         <Sub>{g.joinType === 'open' ? 'Open' : 'Private'}</Sub>
                       </View>

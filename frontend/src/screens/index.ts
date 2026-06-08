@@ -6,6 +6,7 @@ export { PlanWeek } from './PlanWeek';
 export { GroupView } from './GroupView';
 export { NoGroup } from './NoGroup';
 export { GymBrowser } from './GymBrowser';
+export { Leaderboard } from './Leaderboard';
 export { PotTracker } from './PotTracker';
 export { Progress } from './Progress';
 export { GymSpace } from './GymSpace';

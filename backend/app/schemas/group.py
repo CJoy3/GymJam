@@ -33,6 +33,7 @@ class Group(BaseModel):
 class GroupSummary(Group):
     """Group enriched with derived counts for list views."""
     member_count: int
+    avg_elo: int
     is_member: bool
     is_leader: bool
     join_request_pending: bool

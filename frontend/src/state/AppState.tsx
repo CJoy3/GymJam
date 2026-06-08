@@ -349,7 +349,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         name: created.name,
         members: 1,
         tier: 'Regular',
-        stake: `${created.weekly_stake_elo} ELO`,
+        avgElo: me.elo,
         joinType: created.join_type,
         isLeader: true,
         isMember: true,

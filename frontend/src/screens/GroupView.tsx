@@ -21,7 +21,7 @@ const KIND_META: Record<string, { icon: keyof typeof MaterialIcons.glyphMap; col
   streak:       { icon: 'local-fire-department', color: C.accent },
 };
 
-export function GroupView({ onBrowse }: { onBrowse: () => void }) {
+export function GroupView({ onBrowse, onLeaderboard }: { onBrowse: () => void; onLeaderboard: () => void }) {
   const {
     groupName, groupMembers, refreshGroupsAtGym, potNext, userId,
     activity, refreshActivity, approveRequest, rejectRequest, nudge, nudgeCooldowns,
@@ -64,6 +64,9 @@ export function GroupView({ onBrowse }: { onBrowse: () => void }) {
                     <Text style={badge.text}>{actionableCount}</Text>
                   </View>
                 )}
+              </Pressable>
+              <Pressable onPress={onLeaderboard} style={styles.iconBtn}>
+                <MaterialIcons name="emoji-events" size={20} color={C.ink} />
               </Pressable>
               <Pressable onPress={onBrowse} style={styles.iconBtn}>
                 <MaterialIcons name="swap-horiz" size={20} color={C.ink} />
