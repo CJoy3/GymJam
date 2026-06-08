@@ -12,6 +12,7 @@ class UserUpdate(BaseModel):
     display_name: Optional[str] = Field(default=None, max_length=64)
     gym_id: Optional[str] = None
     avatar: Optional[str] = Field(default=None, max_length=32)
+    elo: Optional[int] = Field(default=None, ge=0)
 
 
 class User(BaseModel):

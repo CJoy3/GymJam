@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 
@@ -8,19 +8,17 @@ import { DayPicker } from '../ui/DayPicker';
 import { BlobBackground } from '../ui/Blob';
 import { useRefreshControl } from '../ui/useRefresh';
 import { useAppState } from '../state/AppState';
-import { pageWrap, styles } from './_shared';
+import { LABELS, pageWrap, styles } from './_shared';
 
 /* Home — greeting, this week, pot, primary CTAs */
 
 export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => void; onPlan: () => void; onPot: () => void; onGroup: () => void }) {
   const {
     thisWeek, nextWeek, elo, streak, pot, potCurrent, checkInToday, displayName,
-    todayDow, thisWeekIsPractice, setThisWeekDays, groupId,
+    todayDow, thisWeekIsPractice, setThisWeekDays,
     rescheduleMissedDay,
-    goToPreviousWeek, goToNextWeek, goToPreviousDay, goToNextDay,
   } = useAppState();
   const refresh = useRefreshControl();
-  const [steppingClock, setSteppingClock] = useState<null | 'prevWeek' | 'nextWeek' | 'prevDay' | 'nextDay'>(null);
   const done = thisWeek.filter((d) => d.state === 'checked-in').length;
   const pledged = thisWeek.filter((d) => d.state === 'checked-in' || d.state === 'planned' || d.state === 'locked').length;
   const pct = pledged ? (done / pledged) * 100 : 0;
@@ -40,18 +38,6 @@ export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => v
     if (planned.has(i)) planned.delete(i); else planned.add(i);
     setThisWeekDays([...planned]);
   };
-
-  // Dev clock controls — step the simulated "today" by a day or week so we can
-  // reliably test how pledges progress (planned → locked → checked-in/missed,
-  // week rollovers, pot settlement) without waiting for real time to pass.
-  const stepSimClock = (key: typeof steppingClock, action: () => Promise<void>) => async () => {
-    setSteppingClock(key);
-    try { await action(); } finally { setSteppingClock(null); }
-  };
-  const onPreviousWeek = stepSimClock('prevWeek', goToPreviousWeek);
-  const onNextWeek = stepSimClock('nextWeek', goToNextWeek);
-  const onPreviousDay = stepSimClock('prevDay', goToPreviousDay);
-  const onNextDay = stepSimClock('nextDay', goToNextDay);
 
   // Long-press a missed day → reschedule it (unforeseen circumstances). If next
   // week has room the session moves with no penalty; if it's full (7 days) a
@@ -108,7 +94,7 @@ export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => v
                   <Eyebrow style={styles.thisWeekHeader}>This week</Eyebrow>
                   {thisWeekIsPractice && <Chip text="Practice" tone="accent" compact />}
                 </View>
-                <Text style={styles.pledgeSubhead}>{thisWeekIsPractice ? 'Practice pledge' : 'Your pledge'}</Text>
+                <Text style={styles.pledgeSubhead}>{thisWeekIsPractice ? 'Practice pledge' : 'Your pledge'} · {LABELS[todayDow]}</Text>
               </View>
               <Ring progress={pct} size={68} thickness={6} label={done} sublabel={`/${pledged || 0}`} />
             </Pressable>
@@ -183,42 +169,6 @@ export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => v
         </View>
       </View>
 
-      {groupId && (
-        <View style={styles.devClockBar}>
-          <Pressable onPress={onPreviousWeek} disabled={!!steppingClock} style={styles.devClockBtn}>
-            <MaterialIcons
-              name={steppingClock === 'prevWeek' ? 'hourglass-empty' : 'fast-rewind'}
-              size={15}
-              color={C.primaryFg}
-            />
-            <Text style={styles.devFabText}>Week</Text>
-          </Pressable>
-          <Pressable onPress={onPreviousDay} disabled={!!steppingClock} style={styles.devClockBtn}>
-            <MaterialIcons
-              name={steppingClock === 'prevDay' ? 'hourglass-empty' : 'chevron-left'}
-              size={17}
-              color={C.primaryFg}
-            />
-            <Text style={styles.devFabText}>Day</Text>
-          </Pressable>
-          <Pressable onPress={onNextDay} disabled={!!steppingClock} style={styles.devClockBtn}>
-            <Text style={styles.devFabText}>Day</Text>
-            <MaterialIcons
-              name={steppingClock === 'nextDay' ? 'hourglass-empty' : 'chevron-right'}
-              size={17}
-              color={C.primaryFg}
-            />
-          </Pressable>
-          <Pressable onPress={onNextWeek} disabled={!!steppingClock} style={styles.devClockBtn}>
-            <Text style={styles.devFabText}>Week</Text>
-            <MaterialIcons
-              name={steppingClock === 'nextWeek' ? 'hourglass-empty' : 'fast-forward'}
-              size={15}
-              color={C.primaryFg}
-            />
-          </Pressable>
-        </View>
-      )}
     </View>
   );
 }
