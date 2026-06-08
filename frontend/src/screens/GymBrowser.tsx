@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Alert, Platform, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 
@@ -6,6 +6,7 @@ import { C, FONT, SPACE } from '../theme/tokens';
 import { Btn, Card, Chip, Eyebrow, FadeInItem, H1, H3, Sub } from '../ui/components';
 import { BlobBackground } from '../ui/Blob';
 import { useRefreshControl } from '../ui/useRefresh';
+import { usePolling } from '../ui/usePolling';
 import { useAppState, Group } from '../state/AppState';
 import { pageWrap, styles } from './_shared';
 
@@ -20,7 +21,7 @@ export function GymBrowser({ onBack, onJoined, onCreated }: { onBack: () => void
   const [weeklyStake, setWeeklyStake] = useState('300');  // full ELO at stake for the week
   const [jt, setJt] = useState<'open' | 'request'>('open');
   const inGroup = groupId !== null;
-  useEffect(() => { refreshGroupsAtGym(); }, [refreshGroupsAtGym]);
+  usePolling(refreshGroupsAtGym, 12000);
 
   const join = async (g: Group) => {
     if (inGroup) return;
@@ -167,7 +168,7 @@ export function GymBrowser({ onBack, onJoined, onCreated }: { onBack: () => void
                       <View style={[styles.rowGap, { gap: 8, marginTop: 6, flexWrap: 'wrap' }]}>
                         <Sub>{g.members} {g.members === 1 ? 'member' : 'members'}</Sub>
                         <Text style={styles.dot}>·</Text>
-                        <Sub>{g.stake}</Sub>
+                        <Sub>{g.totalElo} ELO</Sub>
                         <Text style={styles.dot}>·</Text>
                         <Sub>{g.joinType === 'open' ? 'Open' : 'Private'}</Sub>
                       </View>

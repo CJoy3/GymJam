@@ -4,6 +4,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 
 import { C, FONT, RADIUS, SPACE } from '../theme/tokens';
 import { Btn, Card, Chip, Eyebrow, FadeInItem, H1, H3, Num, Sub } from '../ui/components';
+import { Avatar } from '../ui/Avatar';
 import { DayPicker } from '../ui/DayPicker';
 import { BlobBackground } from '../ui/Blob';
 import { showToast } from '../ui/toast';
@@ -137,9 +138,7 @@ export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: (
               {otherMembers.map((m) => (
                 <Card key={m.userId} padding={SPACE.lg}>
                   <View style={[styles.rowGap, { marginBottom: 12 }]}>
-                    <View style={styles.avatar}>
-                      <Text style={styles.avatarText}>{m.initials}</Text>
-                    </View>
+                    <Avatar id={m.avatar} name={m.name} size={40} />
                     <View style={{ flex: 1 }}>
                       <Text style={styles.cardTitle}>{m.name}</Text>
                       <Sub style={{ marginTop: 2 }}>

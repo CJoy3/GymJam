@@ -7,7 +7,7 @@ import React from 'react';
 import { StyleProp, Text, View, ViewStyle } from 'react-native';
 
 import { C, FONT } from '../theme/tokens';
-import { PixelSprite } from '../gymspace/pixel';
+import { PixelSprite, spriteSize } from '../gymspace/pixel';
 import { AVATARS } from '../gymspace/avatars';
 
 function initialsOf(name: string): string {
@@ -47,7 +47,7 @@ export function Avatar({
       ]}
     >
       {rows ? (
-        <PixelSprite rows={rows} pixel={size / 12} />
+        <PixelSprite rows={rows} pixel={size / spriteSize(rows).w} />
       ) : (
         <Text style={{ fontFamily: FONT.bold, fontSize: size * 0.34, color: accent ? C.primaryFg : C.ink }}>
           {initialsOf(name)}

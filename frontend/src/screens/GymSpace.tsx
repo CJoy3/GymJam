@@ -6,15 +6,21 @@ import { C, SPACE, tierForElo } from '../theme/tokens';
 import { Card, Chip, Eyebrow, FadeInItem, H1, Sub } from '../ui/components';
 import { BlobBackground } from '../ui/Blob';
 import { useAppState } from '../state/AppState';
-import { GymScene, ALL_UNLOCKS, TIERS } from '../gymspace';
+import { GymScene, ALL_UNLOCKS, TIERS, SLOT_BY_ID } from '../gymspace';
 import { pageWrap, styles } from './_shared';
 
-/* Gym space — the expanded pixel-art scene + unlock collection */
+/* Gym space — the expanded, editable pixel-art scene + unlock collection */
 
 export function GymSpace({ onBack }: { onBack: () => void }) {
-  const { elo } = useAppState();
-  const unlocked = ALL_UNLOCKS.filter((u) => elo >= u.elo).length;
+  const { elo, roomItems, placeRoomItem } = useAppState();
   const curTier = tierForElo(elo);
+  const placed = new Set(roomItems.map((r) => r.item_id));
+  const unlockedCount = ALL_UNLOCKS.filter((u) => elo >= u.elo).length;
+
+  const toggle = (id: string) => {
+    if (placed.has(id)) placeRoomItem(id, null);
+    else placeRoomItem(id, SLOT_BY_ID[id] ?? 0);
+  };
 
   return (
     <View style={styles.screen}>
@@ -29,12 +35,12 @@ export function GymSpace({ onBack }: { onBack: () => void }) {
         <FadeInItem delay={60} style={{ marginTop: 18 }}>
           <Eyebrow>Your gym</Eyebrow>
           <H1 style={{ marginTop: 6 }}>The {curTier} gym</H1>
-          <Sub style={{ marginTop: 6 }}>It levels up as you climb the arena — no upkeep, just progress.</Sub>
+          <Sub style={{ marginTop: 6 }}>Tap a piece of equipment to place or remove it. Locked gear unlocks as your ELO climbs.</Sub>
         </FadeInItem>
 
-        {/* The hero scene, larger here. */}
+        {/* Editable scene: tap unlocked props (＋ to add, tap to remove). */}
         <FadeInItem delay={120} style={{ marginTop: 22 }}>
-          <GymScene elo={elo} aspect={1.3} />
+          <GymScene elo={elo} aspect={1.3} editable placedItemIds={placed} onToggleItem={toggle} />
         </FadeInItem>
 
         {/* Arena → gym levels */}
@@ -75,34 +81,39 @@ export function GymSpace({ onBack }: { onBack: () => void }) {
           </Card>
         </FadeInItem>
 
-        {/* Equipment collection */}
+        {/* Equipment — tap an unlocked item to place / remove it. */}
         <FadeInItem delay={280} style={{ marginTop: 24 }}>
           <View style={[styles.rowBetween, { marginBottom: 12 }]}>
             <Eyebrow>Equipment</Eyebrow>
-            <Sub>{unlocked} / {ALL_UNLOCKS.length} unlocked</Sub>
+            <Sub>{unlockedCount} / {ALL_UNLOCKS.length} unlocked</Sub>
           </View>
         </FadeInItem>
         <View style={{ gap: 10 }}>
           {ALL_UNLOCKS.map((u, i) => {
             const on = elo >= u.elo;
+            const isPlaced = placed.has(u.id);
             return (
               <FadeInItem key={u.id} delay={320 + i * 40}>
-                <Card padding={SPACE.lg} style={on ? undefined : { opacity: 0.5 }}>
-                  <View style={styles.rowBetween}>
-                    <View style={[styles.rowGap, { flex: 1 }]}>
-                      <View style={[styles.iconChip, { backgroundColor: on ? C.successSoft : C.muted }]}>
-                        <MaterialIcons name={on ? 'check' : 'lock'} size={16} color={on ? C.success : C.mutedFg} />
+                <Pressable disabled={!on} onPress={() => toggle(u.id)}>
+                  <Card padding={SPACE.lg} style={on ? undefined : { opacity: 0.5 }}>
+                    <View style={styles.rowBetween}>
+                      <View style={[styles.rowGap, { flex: 1 }]}>
+                        <View style={[styles.iconChip, { backgroundColor: isPlaced ? C.successSoft : C.muted }]}>
+                          <MaterialIcons name={!on ? 'lock' : isPlaced ? 'check' : 'add'} size={16} color={isPlaced ? C.success : C.mutedFg} />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.cardTitle}>{u.label}</Text>
+                          <Sub style={{ marginTop: 2 }}>
+                            {!on ? `Unlocks at ${u.elo.toLocaleString()} ELO` : isPlaced ? 'In your gym · tap to remove' : 'Tap to add to your gym'}
+                          </Sub>
+                        </View>
                       </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.cardTitle}>{u.label}</Text>
-                        <Sub style={{ marginTop: 2 }}>{on ? 'Unlocked' : `Unlocks at ${u.elo.toLocaleString()} ELO`}</Sub>
-                      </View>
+                      {!on
+                        ? <Sub>{(u.elo - elo).toLocaleString()} to go</Sub>
+                        : <Chip text={isPlaced ? 'Placed' : 'Add'} tone={isPlaced ? 'success' : 'neutral'} compact />}
                     </View>
-                    {on
-                      ? <Chip text="In your gym" tone="success" compact />
-                      : <Sub>{(u.elo - elo).toLocaleString()} to go</Sub>}
-                  </View>
-                </Card>
+                  </Card>
+                </Pressable>
               </FadeInItem>
             );
           })}

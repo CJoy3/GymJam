@@ -33,6 +33,7 @@ class Group(BaseModel):
 class GroupSummary(Group):
     """Group enriched with derived counts for list views."""
     member_count: int
+    total_elo: int
     is_member: bool
     is_leader: bool
     join_request_pending: bool
@@ -53,6 +54,19 @@ class JoinRequestOut(BaseModel):
     display_name: str
     status: RequestStatus
     created_at: datetime
+
+
+class SquadMapMember(BaseModel):
+    """A group member located at their home gym, for plotting on the Squad Map."""
+    user_id: str
+    display_name: str
+    avatar: Optional[str] = None
+    elo: int
+    is_me: bool
+    gym_id: Optional[str] = None
+    gym_name: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
 
 
 class GroupMemberDetail(BaseModel):

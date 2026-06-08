@@ -21,7 +21,7 @@ export interface Group {
   name: string;
   members: number;
   tier: string;            // derived: "Beginner" for now (no DB column yet)
-  stake: string;           // "500 ELO"
+  totalElo: number;        // sum of ELO across the group's members (bigger groups aren't penalised)
   joinType: 'open' | 'request';
   isLeader?: boolean;
   isMember?: boolean;
@@ -110,6 +110,9 @@ export interface AppStateShape {
 
   // Refresh on demand (used by screens that come back into focus)
   refreshGroupsAtGym: () => Promise<void>;
+  // Lighter refresh of just the current group's live data (members/pot/activity),
+  // for frequent polling on group screens without refetching the whole list.
+  refreshGroup: () => Promise<void>;
 
   // Pot — full breakdown for the current week + simpler aggregate
   pot: number;                              // total_pot_elo for current week (alias)

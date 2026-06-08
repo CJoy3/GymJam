@@ -86,7 +86,7 @@ def list_all(current_user_id: str) -> list[dict]:
 
     members = (
         sb.table("group_memberships")
-        .select("group_id, user_id, role")
+        .select("group_id, user_id, role, users(elo)")
         .in_("group_id", group_ids)
         .execute()
     ).data or []
@@ -107,9 +107,11 @@ def list_all(current_user_id: str) -> list[dict]:
     for g in groups:
         gm = by_group_members.get(g["id"], [])
         mine = next((m for m in gm if m["user_id"] == current_user_id), None)
+        total_elo = sum((m.get("users") or {}).get("elo") or 0 for m in gm)
         enriched.append({
             **g,
             "member_count": len(gm),
+            "total_elo": total_elo,
             "is_member": mine is not None,
             "is_leader": mine is not None and mine["role"] == "leader",
             "join_request_pending": g["id"] in my_pending,
@@ -330,6 +332,38 @@ def list_members(group_id: str) -> list[dict]:
             "joined_at": m["joined_at"],
             "this_week_days": _fill_week(plan_by_user_week.get((m["user_id"], this_start))),
             "next_week_days": _fill_week(plan_by_user_week.get((m["user_id"], next_start))),
+        })
+    return out
+
+
+def squad_map(group_id: str, current_user_id: str) -> list[dict]:
+    """Each member of the group, located at their home gym — for plotting on
+    the Squad Map. Members without a home gym (or an un-geocoded gym) are
+    still returned with null coordinates so the client can list them
+    separately rather than dropping them silently."""
+    sb = get_supabase()
+    memberships = (
+        sb.table("group_memberships")
+        .select("user_id, users(display_name, avatar, elo, gym_id, gyms(id, name, latitude, longitude))")
+        .eq("group_id", group_id)
+        .order("joined_at", desc=False)
+        .execute()
+    ).data or []
+
+    out: list[dict] = []
+    for m in memberships:
+        u = m.get("users") or {}
+        gym = u.get("gyms") or {}
+        out.append({
+            "user_id": m["user_id"],
+            "display_name": u.get("display_name") or "Anonymous",
+            "avatar": u.get("avatar"),
+            "elo": u.get("elo") or 0,
+            "is_me": m["user_id"] == current_user_id,
+            "gym_id": gym.get("id"),
+            "gym_name": gym.get("name"),
+            "latitude": gym.get("latitude"),
+            "longitude": gym.get("longitude"),
         })
     return out
 

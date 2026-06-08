@@ -12,6 +12,7 @@ from fastapi import HTTPException
 
 from app.core.supabase_client import get_supabase
 from app.core.time_utils import current_week_start, next_week_start
+from app.services import users as users_svc
 
 
 def _utc_now_iso() -> str:
@@ -357,9 +358,106 @@ def get_conditions(group_id: str, week: str = "current") -> dict:
     return _ensure_conditions(group_id, week_start)
 
 
+def _settlement_inputs(group_id: str, week_start: date, stake: int) -> tuple[int, list[str]]:
+    """Pot total + the user_ids who share it for a finished week.
+
+    A member only gets a slice if they actually pledged — pledging 0 days
+    means they sat the week out and opted out of the pot entirely (mirrors the
+    opt-out rule `pot_detail` already applies when reading the pot). Practice
+    weeks naturally contribute nothing (stake_per_miss is seeded at 0), so no
+    special-casing is needed here for them.
+    """
+    sb = get_supabase()
+    membership_res = _safe_exec(
+        sb.table("group_memberships").select("user_id").eq("group_id", group_id)
+    )
+    user_ids = [m["user_id"] for m in (membership_res.data if membership_res else None) or []]
+    if not user_ids:
+        return 0, []
+
+    plans_res = _safe_exec(
+        sb.table("weekly_plans")
+        .select("user_id, plan_days(state)")
+        .eq("group_id", group_id)
+        .eq("week_start", week_start.isoformat())
+        .in_("user_id", user_ids)
+    )
+    plans = (plans_res.data if plans_res else None) or []
+
+    pot_total = 0
+    participants: list[str] = []
+    for plan in plans:
+        days = plan.get("plan_days") or []
+        pledged_count = sum(
+            1 for d in days if d["state"] in ("planned", "locked", "checked-in", "missed")
+        )
+        if pledged_count == 0:
+            continue  # sat this week out — no claim on the pot
+
+        missed_count = sum(1 for d in days if d["state"] == "missed")
+        pot_total += missed_count * stake
+        participants.append(plan["user_id"])
+
+    return pot_total, participants
+
+
+def _claim_for_settlement(group_id: str, week_start: date) -> dict | None:
+    """Atomically flip `is_settled` false → true and return the row, or None if
+    it was already settled (or missing). The conditional `eq(is_settled, False)`
+    makes this a claim: only the request that actually performs the flip gets a
+    row back, so concurrent loads can't double-pay the same week."""
+    sb = get_supabase()
+    res = _safe_exec(
+        sb.table("pot_conditions")
+        .update({"is_settled": True})
+        .eq("group_id", group_id)
+        .eq("week_start", week_start.isoformat())
+        .eq("is_settled", False)
+    )
+    rows = (res.data if res else None) or []
+    return rows[0] if rows else None
+
+
+def _settle_week(group_id: str, week_start: date) -> None:
+    """Pay out a single finished week's pot, evenly split across participants,
+    straight onto their personal ELO. No-op if it's already been settled."""
+    cond = _claim_for_settlement(group_id, week_start)
+    if not cond:
+        return
+    stake = cond.get("stake_per_miss", 0)
+    pot_total, participants = _settlement_inputs(group_id, week_start, stake)
+    if not participants or pot_total <= 0:
+        return
+    share = pot_total // len(participants)
+    if share <= 0:
+        return
+    for user_id in participants:
+        users_svc.add_elo(user_id, share)
+
+
+def settle_due_weeks(group_id: str) -> None:
+    """Lazily pay out any finished-but-unsettled weeks for a group.
+
+    There's no background job, so this runs opportunistically whenever the pot
+    is loaded (`pot_detail`) — which happens on every refresh — picking up
+    payouts as soon as the (possibly dev-clock-driven) week rolls over.
+    """
+    sb = get_supabase()
+    res = _safe_exec(
+        sb.table("pot_conditions")
+        .select("group_id, week_start")
+        .eq("group_id", group_id)
+        .eq("is_settled", False)
+        .lt("week_start", current_week_start().isoformat())
+    )
+    for row in (res.data if res else None) or []:
+        _settle_week(group_id, date.fromisoformat(str(row["week_start"])[:10]))
+
+
 def pot_detail(group_id: str, week: str = "current") -> dict:
     """Full breakdown: conditions + per-member pledge state.
     Members who haven't pledged any days are skipped (opt-out)."""
+    settle_due_weeks(group_id)
     week_start = _resolve_week(week)
     cond = _ensure_conditions(group_id, week_start)
     required = cond.get("required_pledges", 1)

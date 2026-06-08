@@ -13,6 +13,11 @@ create table if not exists gyms (
     created_at timestamptz not null default now()
 );
 
+-- Coordinates for the Squad Map (members' home gyms plotted on a map). Nullable
+-- so older rows / un-geocoded gyms simply don't render a pin.
+alter table gyms add column if not exists latitude double precision;
+alter table gyms add column if not exists longitude double precision;
+
 create table if not exists users (
     id uuid primary key default gen_random_uuid(),
     device_id text not null unique,
@@ -141,15 +146,21 @@ create table if not exists pot_conditions (
     is_finalized boolean not null default false,
     -- The first week after a group is created is a no-stakes "practice" week.
     is_practice boolean not null default false,
+    -- Set once the week's pot has been paid out (see settle_due_weeks below),
+    -- so a finished week is distributed exactly once no matter how many times
+    -- it's revisited (e.g. the dev clock stepping back and forth over it).
+    is_settled boolean not null default false,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now(),
     primary key (group_id, week_start)
 );
 
 -- Backfill for existing deployments (the create-table above is skipped if the
--- table already exists, so add the column explicitly).
+-- table already exists, so add the columns explicitly).
 alter table pot_conditions
     add column if not exists is_practice boolean not null default false;
+alter table pot_conditions
+    add column if not exists is_settled boolean not null default false;
 
 -- (pot_conditions_updated_at trigger is created in the triggers section below,
 --  after set_updated_at() is defined.)

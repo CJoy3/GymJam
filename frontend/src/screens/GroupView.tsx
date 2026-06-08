@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 
@@ -8,6 +8,7 @@ import { Avatar } from '../ui/Avatar';
 import { DayPicker } from '../ui/DayPicker';
 import { BlobBackground } from '../ui/Blob';
 import { useRefreshControl } from '../ui/useRefresh';
+import { usePolling } from '../ui/usePolling';
 import { useAppState } from '../state/AppState';
 import { pageWrap, styles } from './_shared';
 
@@ -21,14 +22,15 @@ const KIND_META: Record<string, { icon: keyof typeof MaterialIcons.glyphMap; col
   streak:       { icon: 'local-fire-department', color: C.accent },
 };
 
-export function GroupView({ onBrowse }: { onBrowse: () => void }) {
+export function GroupView({ onBrowse, onLeaderboard }: { onBrowse: () => void; onLeaderboard: () => void }) {
   const {
-    groupName, groupMembers, refreshGroupsAtGym, potNext, userId,
+    groupName, groupMembers, refreshGroup, potNext, userId,
     activity, refreshActivity, approveRequest, rejectRequest, nudge, nudgeCooldowns,
   } = useAppState();
   const refresh = useRefreshControl();
   const [showFeed, setShowFeed] = useState(false);
-  useEffect(() => { refreshGroupsAtGym(); }, [refreshGroupsAtGym]);
+  // Keep the group fresh: refresh on open, on app foreground, and gently while viewing.
+  usePolling(refreshGroup, 9000);
   const setterName = potNext?.setter_user_id === userId ? 'You' : potNext?.setter_display_name;
   // Put my row first so I always see myself at the top of the group.
   const orderedMembers = userId
@@ -64,6 +66,9 @@ export function GroupView({ onBrowse }: { onBrowse: () => void }) {
                     <Text style={badge.text}>{actionableCount}</Text>
                   </View>
                 )}
+              </Pressable>
+              <Pressable onPress={onLeaderboard} style={styles.iconBtn}>
+                <MaterialIcons name="emoji-events" size={20} color={C.ink} />
               </Pressable>
               <Pressable onPress={onBrowse} style={styles.iconBtn}>
                 <MaterialIcons name="swap-horiz" size={20} color={C.ink} />

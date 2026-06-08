@@ -6,7 +6,7 @@ import Animated, { Easing, FadeIn } from 'react-native-reanimated';
 
 import {
   Onboarding, Home, CheckIn, PlanWeek, GroupView, NoGroup,
-  GymBrowser, PotTracker, Progress, GymSpace, ProfileView, DevSettings,
+  GymBrowser, Leaderboard, PotTracker, Progress, GymSpace, ProfileView, SquadMapScreen, DevSettings,
 } from '../../src/screens';
 import { useAppState } from '../../src/state/AppState';
 import { BlobBackground } from '../../src/ui/Blob';
@@ -16,7 +16,8 @@ const EASE_OUT = Easing.out(Easing.cubic);
 
 type Screen =
   | 'onboarding' | 'home' | 'check-in' | 'plan-week' | 'group'
-  | 'gym-browser' | 'pot-tracker' | 'progress' | 'gym-space' | 'profile' | 'dev-settings';
+  | 'gym-browser' | 'leaderboard' | 'pot-tracker' | 'progress' | 'gym-space'
+  | 'profile' | 'squad-map' | 'dev-settings';
 
 export default function GymJamApp() {
   const { ready, gymId, groupId } = useAppState();
@@ -48,13 +49,15 @@ export default function GymJamApp() {
       case 'check-in':     return <CheckIn onClose={() => setScreen('home')} />;
       case 'plan-week':    return <PlanWeek onDone={() => setScreen('home')} onCancel={() => setScreen('home')} />;
       case 'group':        return groupId
-                              ? <GroupView onBrowse={() => setScreen('gym-browser')} />
+                              ? <GroupView onBrowse={() => setScreen('gym-browser')} onLeaderboard={() => setScreen('leaderboard')} />
                               : <NoGroup onBrowse={() => setScreen('gym-browser')} />;
       case 'gym-browser':  return <GymBrowser onBack={() => setScreen(groupId ? 'group' : 'home')} onJoined={() => setScreen('home')} onCreated={() => setScreen('group')} />;
+      case 'leaderboard':  return <Leaderboard onBack={() => setScreen(groupId ? 'group' : 'home')} />;
       case 'pot-tracker':  return <PotTracker onBack={() => setScreen('home')} />;
       case 'progress':     return <Progress onGymSpace={() => setScreen('gym-space')} />;
       case 'gym-space':    return <GymSpace onBack={() => setScreen('progress')} />;
-      case 'profile':      return <ProfileView onSettings={() => setScreen('dev-settings')} />;
+      case 'profile':      return <ProfileView onSettings={() => setScreen('dev-settings')} onSquadMap={() => setScreen('squad-map')} />;
+      case 'squad-map':    return <SquadMapScreen onBack={() => setScreen('profile')} />;
       case 'dev-settings': return <DevSettings onBack={() => setScreen('profile')} />;
       default:             return <Home onCheckIn={() => setScreen('check-in')} onPlan={() => setScreen('plan-week')} onPot={() => setScreen('pot-tracker')} onGroup={() => setScreen('group')} />;
     }
@@ -68,9 +71,9 @@ export default function GymJamApp() {
       {showTabs && (
         <View style={styles.tabBar}>
           <Tab label="Home"     icon="home"          active={screen === 'home'} onPress={() => setScreen('home')} />
-          <Tab label="Group"    icon="group"         active={['group', 'gym-browser', 'pot-tracker'].includes(screen)} onPress={() => setScreen('group')} />
+          <Tab label="Group"    icon="group"         active={['group', 'gym-browser', 'leaderboard', 'pot-tracker'].includes(screen)} onPress={() => setScreen('group')} />
           <Tab label="Progress" icon="trending-up"   active={['progress', 'gym-space'].includes(screen)} onPress={() => setScreen('progress')} />
-          <Tab label="Profile"  icon="person"        active={screen === 'profile'} onPress={() => setScreen('profile')} />
+          <Tab label="Profile"  icon="person"        active={['profile', 'squad-map'].includes(screen)} onPress={() => setScreen('profile')} />
         </View>
       )}
     </SafeAreaView>
