@@ -11,7 +11,7 @@ import { AVATAR_IDS } from '../gymspace';
 
 const pageWrap = { padding: SPACE.xl, paddingTop: 56, paddingBottom: 40 } as const;
 
-export function ProfileView({ onBrowse }: { onBrowse: () => void }) {
+export function ProfileView() {
   const { elo, streak, gymName, groupName, displayName, avatar, thisWeek, updateDisplayName, updateAvatar } = useAppState();
   const refresh = useRefreshControl();
   const sessionsDone = thisWeek.filter((d) => d.state === 'checked-in').length;
@@ -126,9 +126,6 @@ export function ProfileView({ onBrowse }: { onBrowse: () => void }) {
           </View>
         </FadeInItem>
 
-        <FadeInItem delay={240} style={{ marginTop: 24, gap: 10 }}>
-          <Btn label="Browse / switch groups" variant="inverse" icon="group" onPress={onBrowse} />
-        </FadeInItem>
       </ScrollView>
     </View>
   );

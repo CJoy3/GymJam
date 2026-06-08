@@ -94,6 +94,11 @@ def advance_weeks(n: int = 1) -> int:
     return set_offset_days(refresh_offset(force=True) + 7 * n)
 
 
+def advance_days(n: int = 1) -> int:
+    """Move the simulated clock forward (or, with n < 0, backward) by `n` days."""
+    return set_offset_days(refresh_offset(force=True) + n)
+
+
 def reset_clock() -> int:
     return set_offset_days(0)
 

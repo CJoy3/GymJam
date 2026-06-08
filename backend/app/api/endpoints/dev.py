@@ -44,6 +44,21 @@ def previous_week() -> dict:
     return _clock_payload()
 
 
+@router.post("/next-day")
+def next_day() -> dict:
+    """Step the simulated clock forward one day."""
+    time_utils.advance_days(1)
+    return _clock_payload()
+
+
+@router.post("/previous-day")
+def previous_day() -> dict:
+    """Step the simulated clock back one day, clamped at the real current day
+    (never goes earlier than offset 0)."""
+    time_utils.set_offset_days(max(0, time_utils.get_offset_days() - 1))
+    return _clock_payload()
+
+
 @router.post("/reset-clock")
 def reset_clock() -> dict:
     time_utils.reset_clock()

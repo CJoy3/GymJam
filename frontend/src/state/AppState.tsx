@@ -624,6 +624,43 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }
   }, [bootstrap, weekOffsetDays]);
 
+  // Fine-grained dev clock controls — step the simulated "today" forward or
+  // backward by a single day or week, so testers can walk through pledge state
+  // transitions (planned → locked → checked-in/missed, week rollovers, …) one
+  // step at a time rather than only jumping a whole week.
+  const stepClock = useCallback(async (action: () => Promise<devApi.DevClock>, message: string) => {
+    try {
+      const clock = await action();
+      if (clock.persisted === false) {
+        showToast('Dev clock not saved — run schema.sql (dev_clock table missing)', 'error');
+        return;
+      }
+      setWeekOffsetDays(clock.offset_days);
+      setTodayDow(clock.today_dow);
+      await bootstrap(false);
+      showToast(message, 'success');
+    } catch (e) {
+      reportError('Could not change the simulated date', e);
+    }
+  }, [bootstrap]);
+
+  const goToPreviousWeek = useCallback(
+    () => stepClock(devApi.previousWeek, 'Back a week'),
+    [stepClock],
+  );
+  const goToNextWeek = useCallback(
+    () => stepClock(devApi.advanceWeek, 'Jumped to next week'),
+    [stepClock],
+  );
+  const goToPreviousDay = useCallback(
+    () => stepClock(devApi.previousDay, 'Back a day'),
+    [stepClock],
+  );
+  const goToNextDay = useCallback(
+    () => stepClock(devApi.nextDay, 'Jumped to next day'),
+    [stepClock],
+  );
+
   const placeRoomItem = useCallback(async (itemId: string, slot: number | null) => {
     try {
       const items = await roomApi.setItemPlacement(itemId, slot);
@@ -677,6 +714,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
       weekSimulated: weekOffsetDays > 0,
       toggleWeek,
+      goToPreviousWeek,
+      goToNextWeek,
+      goToPreviousDay,
+      goToNextDay,
 
       refreshGroupsAtGym,
 
@@ -706,6 +747,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     };
   }, [
     activity, addGroup, addNextWeekDay, approveRequest, badges, bootstrap, checkInToday,
+    goToNextDay, goToNextWeek, goToPreviousDay, goToPreviousWeek,
     groupMembers, groupsAtGym, gyms, joinGroup, joinRequests, leaveGroup, loadActivity, loadBadges, loadMembers,
     lockNextWeek, me, myGroupSummary, nextWeek, nudge, nudgeCooldowns, placeRoomItem, pot, potCurrent, potNext,
     ready, refreshGroupsAtGym, rejectRequest, reloading, rescheduleMissedDay, roomItems, setGym,
