@@ -26,6 +26,7 @@ export interface FloorItem {
   elo: number;
   x: number;
   band: number;
+  slot: number;   // user_room_items slot (0..8) for placement persistence
 }
 
 export interface WallItem {
@@ -35,6 +36,8 @@ export interface WallItem {
   elo: number;
   x: number;
   top: number;
+  slot?: number;       // omitted for structural decor
+  structural?: boolean; // always shown, not user-toggleable (lamp, window)
 }
 
 export const TIERS: Tier[] = [
@@ -53,23 +56,30 @@ export function tierForScene(elo: number): { tier: Tier; index: number } {
 export const CHARACTER_BAND = 0.5;
 
 export const FLOOR_ITEMS: FloorItem[] = [
-  { id: 'mat',        label: 'Yoga Mat',   sprite: PROPS.mat,        elo: 0,    x: 0.20, band: 0.86 },
-  { id: 'dumbbells',  label: 'Dumbbells',  sprite: PROPS.dumbbells,  elo: 0,    x: 0.82, band: 0.88 },
-  { id: 'bench',      label: 'Bench',      sprite: PROPS.bench,      elo: 500,  x: 0.30, band: 0.34 },
-  { id: 'plant',      label: 'Plant',      sprite: PROPS.plant,      elo: 500,  x: 0.92, band: 0.46 },
-  { id: 'barbell',    label: 'Barbell',    sprite: PROPS.barbell,    elo: 1000, x: 0.70, band: 0.72 },
-  { id: 'kettlebell', label: 'Kettlebell', sprite: PROPS.kettlebell, elo: 2000, x: 0.12, band: 0.58 },
-  { id: 'trophy',     label: 'Trophy',     sprite: PROPS.trophy,     elo: 2000, x: 0.88, band: 0.74 },
+  { id: 'mat',        label: 'Yoga Mat',   sprite: PROPS.mat,        elo: 0,    x: 0.20, band: 0.86, slot: 0 },
+  { id: 'dumbbells',  label: 'Dumbbells',  sprite: PROPS.dumbbells,  elo: 0,    x: 0.82, band: 0.88, slot: 1 },
+  { id: 'bench',      label: 'Bench',      sprite: PROPS.bench,      elo: 500,  x: 0.30, band: 0.34, slot: 2 },
+  { id: 'plant',      label: 'Plant',      sprite: PROPS.plant,      elo: 500,  x: 0.92, band: 0.46, slot: 3 },
+  { id: 'barbell',    label: 'Barbell',    sprite: PROPS.barbell,    elo: 1000, x: 0.70, band: 0.72, slot: 4 },
+  { id: 'kettlebell', label: 'Kettlebell', sprite: PROPS.kettlebell, elo: 2000, x: 0.12, band: 0.58, slot: 5 },
+  { id: 'trophy',     label: 'Trophy',     sprite: PROPS.trophy,     elo: 2000, x: 0.88, band: 0.74, slot: 6 },
 ];
 
 export const WALL_ITEMS: WallItem[] = [
-  { id: 'light',  label: 'Lamp',      sprite: WALL.light,  elo: 0,    x: 0.50, top: 0.02 },
-  { id: 'window', label: 'Window',    sprite: WALL.window, elo: 0,    x: 0.28, top: 0.30 },
-  { id: 'banner', label: 'Banner',    sprite: WALL.banner, elo: 1000, x: 0.62, top: 0.16 },
-  { id: 'neon',   label: 'Neon Sign', sprite: WALL.neon,   elo: 1200, x: 0.85, top: 0.34 },
+  { id: 'light',  label: 'Lamp',      sprite: WALL.light,  elo: 0,    x: 0.50, top: 0.02, structural: true },
+  { id: 'window', label: 'Window',    sprite: WALL.window, elo: 0,    x: 0.28, top: 0.30, structural: true },
+  { id: 'banner', label: 'Banner',    sprite: WALL.banner, elo: 1000, x: 0.62, top: 0.16, slot: 7 },
+  { id: 'neon',   label: 'Neon Sign', sprite: WALL.neon,   elo: 1200, x: 0.85, top: 0.34, slot: 8 },
 ];
 
-/** Everything unlockable, in ELO order — used by the collection checklist. */
+/** Slot lookup by item id, for placement writes. */
+export const SLOT_BY_ID: Record<string, number> = {};
+for (const it of FLOOR_ITEMS) SLOT_BY_ID[it.id] = it.slot;
+for (const it of WALL_ITEMS) if (it.slot !== undefined) SLOT_BY_ID[it.id] = it.slot;
+
+/** Everything *placeable* (excludes structural decor), in ELO order — used by
+ * the collection checklist and the editor. */
 export const ALL_UNLOCKS = [...FLOOR_ITEMS, ...WALL_ITEMS]
+  .filter((it) => !('structural' in it && it.structural))
   .map((it) => ({ id: it.id, label: it.label, elo: it.elo }))
   .sort((a, b) => a.elo - b.elo);

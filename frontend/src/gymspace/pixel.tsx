@@ -6,7 +6,7 @@
  * The palette (`PX`) is locked to the GymJam theme tokens plus a few harmonised
  * shadow shades, so every sprite stays inside the "warm dark sanctuary" look.
  */
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { StyleProp, ViewStyle } from 'react-native';
 import Svg, { Rect } from 'react-native-svg';
 
@@ -80,4 +80,31 @@ export function PixelSprite({
 /** Native pixel dimensions of a sprite, for layout math. */
 export function spriteSize(rows: string[]): { w: number; h: number } {
   return { w: rows.reduce((m, r) => Math.max(m, r.length), 0), h: rows.length };
+}
+
+/** Cycles a frame index at `fps`. No-op for single-frame sprites. */
+export function useFrameIndex(count: number, fps: number): number {
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    if (count <= 1) return;
+    const id = setInterval(() => setI((p) => (p + 1) % count), Math.max(80, 1000 / fps));
+    return () => clearInterval(id);
+  }, [count, fps]);
+  return i % Math.max(1, count);
+}
+
+/** A looping multi-frame sprite (e.g. a bicep-curl cycle). */
+export function AnimatedPixelSprite({
+  frames,
+  pixel = 4,
+  fps = 3,
+  style,
+}: {
+  frames: string[][];
+  pixel?: number;
+  fps?: number;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const i = useFrameIndex(frames.length, fps);
+  return <PixelSprite rows={frames[i] ?? frames[0]} pixel={pixel} style={style} />;
 }
