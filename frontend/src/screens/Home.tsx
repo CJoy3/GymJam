@@ -8,7 +8,7 @@ import { DayPicker } from '../ui/DayPicker';
 import { BlobBackground } from '../ui/Blob';
 import { useRefreshControl } from '../ui/useRefresh';
 import { useAppState } from '../state/AppState';
-import { pageWrap, styles } from './_shared';
+import { LABELS, pageWrap, styles } from './_shared';
 
 /* Home — greeting, this week, pot, primary CTAs */
 
@@ -94,7 +94,7 @@ export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => v
                   <Eyebrow style={styles.thisWeekHeader}>This week</Eyebrow>
                   {thisWeekIsPractice && <Chip text="Practice" tone="accent" compact />}
                 </View>
-                <Text style={styles.pledgeSubhead}>{thisWeekIsPractice ? 'Practice pledge' : 'Your pledge'}</Text>
+                <Text style={styles.pledgeSubhead}>{thisWeekIsPractice ? 'Practice pledge' : 'Your pledge'} · {LABELS[todayDow]}</Text>
               </View>
               <Ring progress={pct} size={68} thickness={6} label={done} sublabel={`/${pledged || 0}`} />
             </Pressable>
