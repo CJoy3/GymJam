@@ -336,6 +336,38 @@ def list_members(group_id: str) -> list[dict]:
     return out
 
 
+def squad_map(group_id: str, current_user_id: str) -> list[dict]:
+    """Each member of the group, located at their home gym — for plotting on
+    the Squad Map. Members without a home gym (or an un-geocoded gym) are
+    still returned with null coordinates so the client can list them
+    separately rather than dropping them silently."""
+    sb = get_supabase()
+    memberships = (
+        sb.table("group_memberships")
+        .select("user_id, users(display_name, avatar, elo, gym_id, gyms(id, name, latitude, longitude))")
+        .eq("group_id", group_id)
+        .order("joined_at", desc=False)
+        .execute()
+    ).data or []
+
+    out: list[dict] = []
+    for m in memberships:
+        u = m.get("users") or {}
+        gym = u.get("gyms") or {}
+        out.append({
+            "user_id": m["user_id"],
+            "display_name": u.get("display_name") or "Anonymous",
+            "avatar": u.get("avatar"),
+            "elo": u.get("elo") or 0,
+            "is_me": m["user_id"] == current_user_id,
+            "gym_id": gym.get("id"),
+            "gym_name": gym.get("name"),
+            "latitude": gym.get("latitude"),
+            "longitude": gym.get("longitude"),
+        })
+    return out
+
+
 def list_pending_requests(group_id: str, leader_id: str) -> list[dict]:
     group = get_group(group_id)
     if group.get("leader_id") != leader_id:

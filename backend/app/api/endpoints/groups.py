@@ -7,6 +7,7 @@ from app.schemas.group import (
     GroupMemberDetail,
     GroupSummary,
     JoinRequestOut,
+    SquadMapMember,
 )
 from app.schemas.notification import ActivityItem, NudgeResult
 from app.schemas.pot import PotConditionsUpdate, PotDetail
@@ -93,6 +94,12 @@ def update_pot_conditions(
 @router.get("/{group_id}/members", response_model=list[GroupMemberDetail])
 def list_group_members(group_id: str) -> list[dict]:
     return groups_svc.list_members(group_id)
+
+
+@router.get("/{group_id}/squad-map", response_model=list[SquadMapMember])
+def get_squad_map(group_id: str, current: dict = Depends(get_current_user)) -> list[dict]:
+    """Members of the group plotted at their home gyms — the 'Squad Map'."""
+    return groups_svc.squad_map(group_id, current["id"])
 
 
 @router.get("/{group_id}/activity", response_model=list[ActivityItem])

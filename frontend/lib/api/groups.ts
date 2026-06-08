@@ -100,3 +100,19 @@ export interface GroupMemberDetail {
 
 export const listGroupMembers = (group_id: string) =>
   apiGet<GroupMemberDetail[]>(`/groups/${group_id}/members`);
+
+export interface SquadMapMember {
+  user_id: string;
+  display_name: string;
+  avatar: string | null;
+  elo: number;
+  is_me: boolean;
+  gym_id: string | null;
+  gym_name: string | null;
+  latitude: number | null;
+  longitude: number | null;
+}
+
+/** Group members located at their home gyms — for the Squad Map. */
+export const getSquadMap = (group_id: string) =>
+  apiGet<SquadMapMember[]>(`/groups/${group_id}/squad-map`);

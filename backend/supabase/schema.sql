@@ -13,6 +13,11 @@ create table if not exists gyms (
     created_at timestamptz not null default now()
 );
 
+-- Coordinates for the Squad Map (members' home gyms plotted on a map). Nullable
+-- so older rows / un-geocoded gyms simply don't render a pin.
+alter table gyms add column if not exists latitude double precision;
+alter table gyms add column if not exists longitude double precision;
+
 create table if not exists users (
     id uuid primary key default gen_random_uuid(),
     device_id text not null unique,
