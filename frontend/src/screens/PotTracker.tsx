@@ -4,6 +4,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 
 import { C, SPACE } from '../theme/tokens';
 import { Card, Chip, Eyebrow, FadeInItem, H1, H3, Sub } from '../ui/components';
+import { Avatar } from '../ui/Avatar';
 import { BlobBackground } from '../ui/Blob';
 import { useRefreshControl } from '../ui/useRefresh';
 import { useAppState } from '../state/AppState';
@@ -12,8 +13,11 @@ import { pageWrap, styles } from './_shared';
 /* Pot tracker — conditions + member breakdown */
 
 export function PotTracker({ onBack }: { onBack: () => void }) {
-  const { potCurrent } = useAppState();
+  const { potCurrent, groupMembers } = useAppState();
   const refresh = useRefreshControl();
+  // Pot rows don't carry avatars; reuse the group members already in state.
+  const avatarByUser: Record<string, string | null> = {};
+  for (const m of groupMembers) avatarByUser[m.userId] = m.avatar;
 
   if (!potCurrent) {
     return (
@@ -90,9 +94,7 @@ export function PotTracker({ onBack }: { onBack: () => void }) {
                 <Card padding={SPACE.lg}>
                   <View style={styles.rowBetween}>
                     <View style={styles.rowGap}>
-                      <View style={styles.avatar}>
-                        <Text style={styles.avatarText}>{(m.display_name || '?').slice(0, 2).toUpperCase()}</Text>
-                      </View>
+                      <Avatar id={avatarByUser[m.user_id]} name={m.display_name} size={40} />
                       <View>
                         <View style={styles.rowGap}>
                           <Text style={styles.cardTitle}>{m.display_name}</Text>
