@@ -1,20 +1,32 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { C, FONT, RADIUS, SPACE, tierForElo } from '../theme/tokens';
 import { Btn, Card, Chip, Eyebrow, FadeInItem, H1, Stat, Sub } from '../ui/components';
 import { Avatar } from '../ui/Avatar';
 import { BlobBackground } from '../ui/Blob';
+import { SquadMap } from '../ui/SquadMap';
 import { useRefreshControl } from '../ui/useRefresh';
 import { useAppState } from '../state/AppState';
 import { AVATAR_IDS } from '../gymspace';
+import { getSquadMap, type SquadMapMember } from '../../lib/api/groups';
 
 const pageWrap = { padding: SPACE.xl, paddingTop: 56, paddingBottom: 40 } as const;
+const HALO_SIZE = 156;
 
-export function ProfileView({ onSettings }: { onSettings: () => void }) {
-  const { elo, streak, gymName, groupName, displayName, avatar, thisWeek, updateDisplayName, updateAvatar } = useAppState();
+export function ProfileView({ onSettings, onSquadMap }: { onSettings: () => void; onSquadMap: () => void }) {
+  const { elo, streak, gymName, groupName, groupId, displayName, avatar, thisWeek, updateDisplayName, updateAvatar } = useAppState();
   const refresh = useRefreshControl();
   const sessionsDone = thisWeek.filter((d) => d.state === 'checked-in').length;
+
+  // Squad map "halo" peeking out from behind the avatar — a live preview of
+  // where the group's members train, fetched once per group.
+  const [squadMembers, setSquadMembers] = useState<SquadMapMember[]>([]);
+  const loadSquad = useCallback(async () => {
+    if (!groupId) { setSquadMembers([]); return; }
+    try { setSquadMembers(await getSquadMap(groupId)); } catch { setSquadMembers([]); }
+  }, [groupId]);
+  useEffect(() => { loadSquad(); }, [loadSquad]);
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(displayName);
@@ -43,11 +55,20 @@ export function ProfileView({ onSettings }: { onSettings: () => void }) {
 
         <FadeInItem delay={80} style={{ marginTop: 24 }}>
           <Card padding={SPACE.xl} style={{ alignItems: 'center' }}>
-            <Pressable onPress={() => setPickerOpen((o) => !o)} style={styles.avatarWrap}>
-              <Avatar id={avatar} name={displayName} size={96} style={{ borderWidth: 2, borderColor: C.borderHi }} />
-              <View style={styles.editBadge}>
-                <MaterialIcons name={pickerOpen ? 'close' : 'edit'} size={14} color={C.primaryFg} />
-              </View>
+            <View style={styles.haloStage}>
+              <Pressable onPress={onSquadMap} style={styles.mapHalo}>
+                <SquadMap members={squadMembers} width={HALO_SIZE} height={HALO_SIZE} compact />
+              </Pressable>
+              <Pressable onPress={() => setPickerOpen((o) => !o)} style={styles.avatarWrap}>
+                <Avatar id={avatar} name={displayName} size={96} style={{ borderWidth: 2, borderColor: C.borderHi }} />
+                <View style={styles.editBadge}>
+                  <MaterialIcons name={pickerOpen ? 'close' : 'edit'} size={14} color={C.primaryFg} />
+                </View>
+              </Pressable>
+            </View>
+            <Pressable onPress={onSquadMap} style={styles.squadMapLink}>
+              <MaterialIcons name="map" size={13} color={C.mutedFg} />
+              <Text style={styles.squadMapLinkText}>Squad map</Text>
             </Pressable>
 
             {pickerOpen && (
@@ -139,6 +160,22 @@ export function ProfileView({ onSettings }: { onSettings: () => void }) {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.bg },
   rowGap: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+
+  haloStage: {
+    width: HALO_SIZE, height: HALO_SIZE,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  mapHalo: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: HALO_SIZE / 2,
+    overflow: 'hidden',
+    borderWidth: 1, borderColor: C.borderHi,
+  },
+  squadMapLink: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    marginTop: 12,
+  },
+  squadMapLinkText: { fontFamily: FONT.medium, fontSize: 12, color: C.mutedFg },
 
   avatarWrap: { position: 'relative' },
   editBadge: {

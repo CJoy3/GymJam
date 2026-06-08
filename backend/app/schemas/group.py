@@ -56,6 +56,19 @@ class JoinRequestOut(BaseModel):
     created_at: datetime
 
 
+class SquadMapMember(BaseModel):
+    """A group member located at their home gym, for plotting on the Squad Map."""
+    user_id: str
+    display_name: str
+    avatar: Optional[str] = None
+    elo: int
+    is_me: bool
+    gym_id: Optional[str] = None
+    gym_name: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+
+
 class GroupMemberDetail(BaseModel):
     """A group member with their week-by-week pledge state."""
     user_id: str

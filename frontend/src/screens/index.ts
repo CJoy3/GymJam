@@ -11,4 +11,5 @@ export { PotTracker } from './PotTracker';
 export { Progress } from './Progress';
 export { GymSpace } from './GymSpace';
 export { ProfileView } from './Profile';
+export { SquadMapScreen } from './SquadMapScreen';
 export { DevSettings } from './DevSettings';
