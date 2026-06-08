@@ -1,5 +1,5 @@
 import React, {
-  createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode,
+  createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, ReactNode,
 } from 'react';
 
 import * as badgesApi from '../../lib/api/badges';
@@ -12,6 +12,7 @@ import * as potApi from '../../lib/api/pot';
 import * as roomApi from '../../lib/api/room';
 import * as usersApi from '../../lib/api/users';
 import { ApiError } from '../../lib/api/client';
+import { readCache, writeCache } from '../../lib/cache';
 import { getOrCreateUserId } from '../../lib/userId';
 import { showToast } from '../ui/toast';
 import {
@@ -30,6 +31,24 @@ export type {
 } from './types';
 
 const Ctx = createContext<AppStateShape | null>(null);
+
+/** Slices persisted to local storage for instant (stale-while-revalidate) launches. */
+interface CachedSnapshot {
+  me?: usersApi.User | null;
+  mine?: Group | null;
+  groups?: Group[];
+  thisWeek?: DayStatus[];
+  nextWeek?: DayStatus[];
+  thisWeekIsPractice?: boolean;
+  todayDow?: number;
+  pot?: number;
+  potCurrent?: potApi.PotDetail | null;
+  potNext?: potApi.PotDetail | null;
+  members?: GroupMember[];
+  activity?: notificationsApi.ActivityItem[];
+  badges?: badgesApi.Badges;
+  roomItems?: roomApi.RoomItem[];
+}
 
 export function AppStateProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
@@ -237,17 +256,67 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     bootstrap(true);
   }, [bootstrap]);
 
+  /* ----- instant launch: stale-while-revalidate cache -----
+   * Paint the last-known state immediately from local storage so the app feels
+   * instant on warm launches, then let `bootstrap` refresh from the network in
+   * the background. Functional setters (`prev ?? …`) make sure a fast cache read
+   * never clobbers fresher data the network may have already returned. */
+  const hydratedRef = useRef(false);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const snap = await readCache<CachedSnapshot>('snapshot');
+      if (!cancelled && snap) {
+        setMe((prev) => prev ?? snap.me ?? null);
+        setMyGroupSummary((prev) => prev ?? snap.mine ?? null);
+        if (snap.groups?.length) setGroupsAtGym((prev) => (prev.length ? prev : snap.groups!));
+        if (snap.thisWeek) setThisWeek((prev) => (prev.some((d) => d.state !== 'unselected') ? prev : snap.thisWeek!));
+        if (snap.nextWeek) setNextWeek((prev) => (prev.some((d) => d.state !== 'unselected') ? prev : snap.nextWeek!));
+        if (typeof snap.thisWeekIsPractice === 'boolean') setThisWeekIsPractice(snap.thisWeekIsPractice);
+        if (typeof snap.todayDow === 'number') setTodayDow((prev) => prev || snap.todayDow!);
+        if (typeof snap.pot === 'number') setPot((prev) => prev || snap.pot!);
+        setPotCurrent((prev) => prev ?? snap.potCurrent ?? null);
+        setPotNext((prev) => prev ?? snap.potNext ?? null);
+        if (snap.members?.length) setGroupMembers((prev) => (prev.length ? prev : snap.members!));
+        if (snap.activity?.length) setActivity((prev) => (prev.length ? prev : snap.activity!));
+        if (snap.badges) setBadges((prev) => prev ?? snap.badges!);
+        if (snap.roomItems?.length) setRoomItems((prev) => (prev.length ? prev : snap.roomItems!));
+        setReady(true); // show cached UI now; the network refresh continues underneath
+      }
+      hydratedRef.current = true;
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Persist a snapshot whenever the key slices change (after first hydration,
+  // so we never overwrite the cache with the initial empty state).
+  useEffect(() => {
+    if (!hydratedRef.current) return;
+    writeCache('snapshot', {
+      me, mine: myGroupSummary, groups: groupsAtGym, thisWeek, nextWeek, thisWeekIsPractice,
+      todayDow, pot, potCurrent, potNext, members: groupMembers, activity, badges, roomItems,
+    } satisfies CachedSnapshot);
+  }, [
+    me, myGroupSummary, groupsAtGym, thisWeek, nextWeek, thisWeekIsPractice,
+    todayDow, pot, potCurrent, potNext, groupMembers, activity, badges, roomItems,
+  ]);
+
   /* ----- actions ----- */
 
   const setGym = useCallback(async (gymId: string) => {
-    try {
-      const u = await usersApi.updateMe({ gym_id: gymId });
-      setMe(u);
-      const mine = await loadGroupsForGym(gymId, u.id);
-      await refreshGroupContext(mine?.id ?? null, mine?.isLeader);
-    } catch (e) {
-      reportError('Could not set gym', e);
-    }
+    // Optimistic: set the home gym locally so the UI advances instantly, then
+    // persist + refresh in the background.
+    setMe((prev) => (prev ? { ...prev, gym_id: gymId } : prev));
+    void (async () => {
+      try {
+        const u = await usersApi.updateMe({ gym_id: gymId });
+        setMe(u);
+        const mine = await loadGroupsForGym(gymId, u.id);
+        void refreshGroupContext(mine?.id ?? null, mine?.isLeader);
+      } catch (e) {
+        reportError('Could not set gym', e);
+      }
+    })();
   }, [loadGroupsForGym, refreshGroupContext]);
 
   const joinGroup = useCallback(async (groupId: string) => {
@@ -268,20 +337,22 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     setGroupsAtGym(optimistic);
     if (isOpen) setMyGroupSummary({ ...target, isMember: true, members: target.members + 1 });
 
-    try {
-      const res = await groupsApi.joinGroup(groupId);
-      showToast(res.action === 'joined' ? `Joined ${target.name}` : 'Request sent', 'success');
-      const mine = await loadGroupsForGym(me.gym_id, me.id);
-      await refreshGroupContext(mine?.id ?? null, mine?.isLeader);
-      await loadPlans();
-      return true;
-    } catch (e) {
-      // Roll back to the snapshot taken before the optimistic mutation.
-      setGroupsAtGym(snapshot);
-      setMyGroupSummary(prevMine);
-      reportError('Could not join group', e);
-      return false;
-    }
+    // Reconcile with the server in the background so the caller (and any
+    // navigation) proceeds instantly on the optimistic result.
+    void (async () => {
+      try {
+        const res = await groupsApi.joinGroup(groupId);
+        showToast(res.action === 'joined' ? `Joined ${target.name}` : 'Request sent', 'success');
+        const mine = await loadGroupsForGym(me.gym_id, me.id);
+        void refreshGroupContext(mine?.id ?? null, mine?.isLeader);
+        void loadPlans();
+      } catch (e) {
+        setGroupsAtGym(snapshot);
+        setMyGroupSummary(prevMine);
+        reportError('Could not join group', e);
+      }
+    })();
+    return true;
   }, [groupsAtGym, loadGroupsForGym, loadPlans, refreshGroupContext, me, myGroupSummary]);
 
   const leaveGroup = useCallback(async () => {
@@ -303,17 +374,19 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     setMyGroupSummary(null);
     setGroupMembers([]);
 
-    try {
-      const res = await groupsApi.leaveGroup(snapshotMine.id);
-      showToast(res.deleted ? `Deleted ${snapshotMine.name}` : `Left ${snapshotMine.name}`, 'success');
-      const mine = await loadGroupsForGym(me.gym_id, me.id);
-      await refreshGroupContext(mine?.id ?? null, mine?.isLeader);
-      await loadPlans();
-    } catch (e) {
-      setGroupsAtGym(snapshotGroups);
-      setMyGroupSummary(snapshotMine);
-      reportError('Could not leave group', e);
-    }
+    void (async () => {
+      try {
+        const res = await groupsApi.leaveGroup(snapshotMine.id);
+        showToast(res.deleted ? `Deleted ${snapshotMine.name}` : `Left ${snapshotMine.name}`, 'success');
+        const mine = await loadGroupsForGym(me.gym_id, me.id);
+        void refreshGroupContext(mine?.id ?? null, mine?.isLeader);
+        void loadPlans();
+      } catch (e) {
+        setGroupsAtGym(snapshotGroups);
+        setMyGroupSummary(snapshotMine);
+        reportError('Could not leave group', e);
+      }
+    })();
   }, [groupsAtGym, loadGroupsForGym, loadPlans, refreshGroupContext, me, myGroupSummary]);
 
   const refreshGroupsAtGym = useCallback(async () => {
@@ -385,7 +458,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     try {
       await groupsApi.approveRequest(id);
       if (target) showToast(`Approved ${target.userName}`, 'success');
-      await refreshGroupContext(myGroupSummary?.id ?? null, myGroupSummary?.isLeader);
+      void refreshGroupContext(myGroupSummary?.id ?? null, myGroupSummary?.isLeader);
     } catch (e) {
       setJoinRequests(snapshot);
       reportError('Could not approve request', e);
@@ -465,7 +538,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     try {
       const plan = await plansApi.lockNextWeek();
       setNextWeek(planToWeek(plan));
-      await refreshGroupContext(myGroupSummary?.id ?? null, myGroupSummary?.isLeader);
+      void refreshGroupContext(myGroupSummary?.id ?? null, myGroupSummary?.isLeader);
     } catch (e) {
       setNextWeek(snapshotNextWeek);
       reportError('Could not lock the week', e);
@@ -515,7 +588,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
           'info',
         );
       }
-      await refreshGroupContext(myGroupSummary?.id ?? null, myGroupSummary?.isLeader);
+      void refreshGroupContext(myGroupSummary?.id ?? null, myGroupSummary?.isLeader);
     } catch (e) {
       reportError('Could not reschedule', e);
     }
@@ -530,7 +603,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       const u = await usersApi.updateMe({ display_name: trimmed });
       setMe(u);
       // Member list shows display_name, so refresh it.
-      if (myGroupSummary?.id) await loadMembers(myGroupSummary.id);
+      if (myGroupSummary?.id) void loadMembers(myGroupSummary.id);
     } catch (e) {
       setMe(snapshotMe);
       reportError('Could not update name', e);
@@ -544,7 +617,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       const u = await usersApi.updateMe({ avatar });
       setMe(u);
       // The group list shows my avatar, so refresh it.
-      if (myGroupSummary?.id) await loadMembers(myGroupSummary.id);
+      if (myGroupSummary?.id) void loadMembers(myGroupSummary.id);
     } catch (e) {
       setMe(snapshotMe);
       reportError('Could not update avatar', e);
@@ -738,6 +811,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       goToNextDay,
 
       refreshGroupsAtGym,
+      refreshGroup: () => refreshGroupContext(myGroupSummary?.id ?? null, myGroupSummary?.isLeader),
 
       pot,
       potCurrent,
@@ -769,7 +843,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     goToNextDay, goToNextWeek, goToPreviousDay, goToPreviousWeek,
     groupMembers, groupsAtGym, gyms, joinGroup, joinRequests, leaveGroup, loadActivity, loadBadges, loadMembers,
     lockNextWeek, me, myGroupSummary, nextWeek, nudge, nudgeCooldowns, placeRoomItem, pot, potCurrent, potNext,
-    ready, refreshGroupsAtGym, rejectRequest, reloading, rescheduleMissedDay, roomItems, setGym,
+    ready, refreshGroupContext, refreshGroupsAtGym, rejectRequest, reloading, rescheduleMissedDay, roomItems, setGym,
     setPlannedDays, setThisWeekDays, thisWeek, thisWeekIsPractice, todayDow, toggleNextWeekDay,
     setElo, toggleWeek, updateAvatar, updateDisplayName, updatePotConditions, weekOffsetDays,
   ]);

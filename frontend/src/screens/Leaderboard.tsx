@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 
@@ -6,6 +6,7 @@ import { C, FONT, SPACE } from '../theme/tokens';
 import { Card, Chip, Eyebrow, FadeInItem, H1, Sub } from '../ui/components';
 import { BlobBackground } from '../ui/Blob';
 import { useRefreshControl } from '../ui/useRefresh';
+import { usePolling } from '../ui/usePolling';
 import { useAppState } from '../state/AppState';
 import { pageWrap, styles } from './_shared';
 
@@ -20,7 +21,7 @@ const RANK_TONE: Record<number, { bg: string; fg: string }> = {
 export function Leaderboard({ onBack }: { onBack: () => void }) {
   const { groupId, groups, refreshGroupsAtGym } = useAppState();
   const refresh = useRefreshControl();
-  useEffect(() => { refreshGroupsAtGym(); }, [refreshGroupsAtGym]);
+  usePolling(refreshGroupsAtGym, 12000);
 
   const ranked = [...groups].sort((a, b) => b.totalElo - a.totalElo);
 

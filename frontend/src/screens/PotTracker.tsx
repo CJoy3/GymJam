@@ -7,14 +7,17 @@ import { Card, Chip, Eyebrow, FadeInItem, H1, H3, Sub } from '../ui/components';
 import { Avatar } from '../ui/Avatar';
 import { BlobBackground } from '../ui/Blob';
 import { useRefreshControl } from '../ui/useRefresh';
+import { usePolling } from '../ui/usePolling';
 import { useAppState } from '../state/AppState';
 import { pageWrap, styles } from './_shared';
 
 /* Pot tracker — conditions + member breakdown */
 
 export function PotTracker({ onBack }: { onBack: () => void }) {
-  const { potCurrent, groupMembers } = useAppState();
+  const { potCurrent, groupMembers, refreshGroup } = useAppState();
   const refresh = useRefreshControl();
+  // The pot moves as teammates check in / miss — keep it live while viewing.
+  usePolling(refreshGroup, 9000);
   // Pot rows don't carry avatars; reuse the group members already in state.
   const avatarByUser: Record<string, string | null> = {};
   for (const m of groupMembers) avatarByUser[m.userId] = m.avatar;

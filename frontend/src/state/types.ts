@@ -110,6 +110,9 @@ export interface AppStateShape {
 
   // Refresh on demand (used by screens that come back into focus)
   refreshGroupsAtGym: () => Promise<void>;
+  // Lighter refresh of just the current group's live data (members/pot/activity),
+  // for frequent polling on group screens without refetching the whole list.
+  refreshGroup: () => Promise<void>;
 
   // Pot — full breakdown for the current week + simpler aggregate
   pot: number;                              // total_pot_elo for current week (alias)
