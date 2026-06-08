@@ -219,6 +219,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       ]);
       // Only this depends on the resolved group id, so it runs after the batch.
       await refreshGroupContext(mine?.id ?? null, mine?.isLeader);
+      // Loading the pot can settle a finished week as a side effect (paying
+      // shares straight onto personal ELO) — re-sync `me` so a freshly-credited
+      // payout shows up immediately rather than waiting for the next refresh.
+      if (mine?.id) {
+        try { setMe(await usersApi.getMe()); } catch { /* keep the registered snapshot */ }
+      }
     } catch (e) {
       reportError('Failed to start GymJam', e);
     } finally {
