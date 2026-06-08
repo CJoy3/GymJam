@@ -545,6 +545,18 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }
   }, [loadMembers, me, myGroupSummary]);
 
+  const setElo = useCallback(async (elo: number) => {
+    const snapshotMe = me;
+    setMe((prev) => (prev ? { ...prev, elo } : prev));
+    try {
+      const u = await usersApi.updateMe({ elo });
+      setMe(u);
+    } catch (e) {
+      setMe(snapshotMe);
+      reportError('Could not set ELO', e);
+    }
+  }, [me]);
+
   const nudge = useCallback(async (targetUserId: string) => {
     if (!myGroupSummary?.id) return;
     // Optimistically start the hour-long cooldown so the button locks instantly.
@@ -739,6 +751,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
       updateDisplayName,
       updateAvatar,
+      setElo,
 
       roomItems,
       placeRoomItem,
@@ -752,7 +765,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     lockNextWeek, me, myGroupSummary, nextWeek, nudge, nudgeCooldowns, placeRoomItem, pot, potCurrent, potNext,
     ready, refreshGroupsAtGym, rejectRequest, reloading, rescheduleMissedDay, roomItems, setGym,
     setPlannedDays, setThisWeekDays, thisWeek, thisWeekIsPractice, todayDow, toggleNextWeekDay,
-    toggleWeek, updateAvatar, updateDisplayName, updatePotConditions, weekOffsetDays,
+    setElo, toggleWeek, updateAvatar, updateDisplayName, updatePotConditions, weekOffsetDays,
   ]);
 
   // tier is purely a function of elo; expose for callers that want it

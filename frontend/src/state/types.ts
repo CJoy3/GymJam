@@ -138,6 +138,7 @@ export interface AppStateShape {
   // Profile
   updateDisplayName: (name: string) => Promise<void>;
   updateAvatar: (avatar: string) => Promise<void>;
+  setElo: (elo: number) => Promise<void>;
 
   // Gym-space room
   roomItems: roomApi.RoomItem[];
