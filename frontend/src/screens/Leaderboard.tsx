@@ -22,7 +22,7 @@ export function Leaderboard({ onBack }: { onBack: () => void }) {
   const refresh = useRefreshControl();
   useEffect(() => { refreshGroupsAtGym(); }, [refreshGroupsAtGym]);
 
-  const ranked = [...groups].sort((a, b) => b.avgElo - a.avgElo);
+  const ranked = [...groups].sort((a, b) => b.totalElo - a.totalElo);
 
   return (
     <View style={styles.screen}>
@@ -39,7 +39,7 @@ export function Leaderboard({ onBack }: { onBack: () => void }) {
         <FadeInItem delay={60} style={{ marginTop: 18 }}>
           <Eyebrow>All groups · ranked globally</Eyebrow>
           <H1 style={{ marginTop: 6 }}>Leaderboard</H1>
-          <Sub style={{ marginTop: 6 }}>Groups ranked by their members' average ELO.</Sub>
+          <Sub style={{ marginTop: 6 }}>Groups ranked by their members' combined ELO.</Sub>
         </FadeInItem>
 
         <View style={{ gap: 12, marginTop: 22 }}>
@@ -66,7 +66,7 @@ export function Leaderboard({ onBack }: { onBack: () => void }) {
                         <View style={[styles.rowGap, { gap: 8, marginTop: 6, flexWrap: 'wrap' }]}>
                           <Sub>{g.members} {g.members === 1 ? 'member' : 'members'}</Sub>
                           <Text style={styles.dot}>·</Text>
-                          <Sub>{g.avgElo} avg ELO</Sub>
+                          <Sub>{g.totalElo} ELO</Sub>
                         </View>
                       </View>
                     </View>

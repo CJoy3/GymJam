@@ -349,7 +349,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         name: created.name,
         members: 1,
         tier: 'Regular',
-        avgElo: me.elo,
+        totalElo: me.elo,
         joinType: created.join_type,
         isLeader: true,
         isMember: true,

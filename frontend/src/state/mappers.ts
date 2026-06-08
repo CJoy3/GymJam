@@ -93,7 +93,7 @@ export function summaryToGroup(s: groupsApi.GroupSummary): Group {
     name: s.name,
     members: s.member_count,
     tier: 'Regular',
-    avgElo: s.avg_elo,
+    totalElo: s.total_elo,
     joinType: s.join_type,
     isLeader: s.is_leader,
     isMember: s.is_member,

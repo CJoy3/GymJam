@@ -21,7 +21,7 @@ export interface Group {
   name: string;
   members: number;
   tier: string;            // derived: "Beginner" for now (no DB column yet)
-  avgElo: number;          // average ELO across the group's members
+  totalElo: number;        // sum of ELO across the group's members (bigger groups aren't penalised)
   joinType: 'open' | 'request';
   isLeader?: boolean;
   isMember?: boolean;
