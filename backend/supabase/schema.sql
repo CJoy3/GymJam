@@ -17,6 +17,8 @@ create table if not exists users (
     id uuid primary key default gen_random_uuid(),
     device_id text not null unique,
     display_name text not null default 'Anonymous',
+    -- Chosen pixel-art avatar id (see frontend avatar catalog). NULL ⇒ initials.
+    avatar text,
     elo integer not null default 1000 check (elo >= 0),
     streak integer not null default 0 check (streak >= 0),
     gym_id uuid references gyms(id) on delete set null,
@@ -24,9 +26,14 @@ create table if not exists users (
     updated_at timestamptz not null default now()
 );
 
+-- Additive migration for existing deployments.
+alter table users add column if not exists avatar text;
+
 create table if not exists groups (
     id uuid primary key default gen_random_uuid(),
-    gym_id uuid not null references gyms(id) on delete cascade,
+    -- Groups are global (decoupled from gyms). gym_id is retained only as an
+    -- optional "origin" hint and no longer gates group visibility.
+    gym_id uuid references gyms(id) on delete set null,
     name text not null,
     weekly_stake_elo integer not null default 500 check (weekly_stake_elo >= 0),
     join_type text not null default 'open' check (join_type in ('open', 'request')),
@@ -43,6 +50,10 @@ create table if not exists groups (
     current_rule_setter_id uuid references users(id) on delete set null,
     created_at timestamptz not null default now()
 );
+
+-- Decouple groups from gyms on existing deployments: gym_id is now optional so
+-- groups are global and a user's home gym no longer gates eligibility.
+alter table groups alter column gym_id drop not null;
 
 -- Idempotent column additions for existing deployments.
 alter table groups add column if not exists default_required_pledges smallint
@@ -155,6 +166,19 @@ create table if not exists user_room_items (
 create unique index if not exists user_room_items_unique_slot
     on user_room_items(user_id, slot);
 
+-- Nudges: a member pokes another member to get to the gym. Used both to
+-- surface "X nudged you" in the activity feed and to rate-limit the button
+-- (at most one from→to nudge per hour).
+create table if not exists nudges (
+    id uuid primary key default gen_random_uuid(),
+    group_id uuid not null references groups(id) on delete cascade,
+    from_user_id uuid not null references users(id) on delete cascade,
+    to_user_id uuid not null references users(id) on delete cascade,
+    created_at timestamptz not null default now()
+);
+create index if not exists nudges_to_idx   on nudges(to_user_id, created_at desc);
+create index if not exists nudges_pair_idx on nudges(from_user_id, to_user_id, created_at desc);
+
 -- Single-row development clock. `offset_days` shifts the app's notion of "today"
 -- forward (in whole weeks) so the week-by-week flow can be demoed on demand.
 create table if not exists dev_clock (
@@ -234,5 +258,6 @@ alter table weekly_plans        disable row level security;
 alter table plan_days           disable row level security;
 alter table pot_conditions      disable row level security;
 alter table user_room_items     disable row level security;
+alter table nudges              disable row level security;
 alter table dev_clock           disable row level security;
  

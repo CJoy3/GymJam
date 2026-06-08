@@ -12,14 +12,18 @@ is called once at the start of every HTTP request (see main.py middleware), so
 every invocation — on whichever serverless instance — agrees on the offset. The
 module global is only a per-request scratch value, defaulting to 0.
 """
+import time
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 TZ = ZoneInfo("Europe/London")
 
-# Per-request scratch copy of the offset (days). Refreshed from the DB at the
-# start of each request; never trusted as a long-lived cache.
+# Cached copy of the offset (days) plus the monotonic time it was last read.
+# A short TTL keeps the dev clock fresh across serverless instances without
+# paying a DB round-trip on *every* request (which dominated request latency).
 _offset_days: int = 0
+_offset_read_at: float = 0.0
+_OFFSET_TTL_SECONDS = 3.0
 
 
 def _read_offset_from_db() -> int | None:
@@ -36,13 +40,18 @@ def _read_offset_from_db() -> int | None:
         return None
 
 
-def refresh_offset() -> int:
-    """Re-read the shared offset from the DB. Called per-request so separate
-    serverless invocations stay in sync. Keeps the last value if the read fails."""
-    global _offset_days
+def refresh_offset(force: bool = False) -> int:
+    """Return the shared offset, reading the DB at most once per TTL window (so
+    separate serverless invocations stay in sync without a per-request read).
+    Pass force=True to bypass the cache (used when mutating the clock)."""
+    global _offset_days, _offset_read_at
+    now = time.monotonic()
+    if not force and (now - _offset_read_at) < _OFFSET_TTL_SECONDS:
+        return _offset_days
     val = _read_offset_from_db()
     if val is not None:
         _offset_days = val
+    _offset_read_at = now
     return _offset_days
 
 
@@ -59,8 +68,8 @@ def get_offset_days() -> int:
 
 def set_offset_days(days: int) -> int:
     """Persist the offset to the shared table (source of truth) and update the
-    in-process scratch copy. Returns the value confirmed in the DB when possible."""
-    global _offset_days
+    in-process cache. Returns the value confirmed in the DB when possible."""
+    global _offset_days, _offset_read_at
     days = int(days)
     try:
         from app.core.supabase_client import get_supabase
@@ -72,6 +81,7 @@ def set_offset_days(days: int) -> int:
         # Best-effort: keep the in-memory value even if the table is absent.
         pass
     _offset_days = days
+    _offset_read_at = time.monotonic()  # cache is now fresh
     # Re-read so the returned value reflects what actually persisted.
     confirmed = _read_offset_from_db()
     if confirmed is not None:
@@ -81,7 +91,7 @@ def set_offset_days(days: int) -> int:
 
 def advance_weeks(n: int = 1) -> int:
     """Move the simulated clock forward by `n` whole weeks (keeps the weekday)."""
-    return set_offset_days(refresh_offset() + 7 * n)
+    return set_offset_days(refresh_offset(force=True) + 7 * n)
 
 
 def reset_clock() -> int:

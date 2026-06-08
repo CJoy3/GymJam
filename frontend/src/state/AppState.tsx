@@ -6,246 +6,30 @@ import * as badgesApi from '../../lib/api/badges';
 import * as devApi from '../../lib/api/dev';
 import * as gymsApi from '../../lib/api/gyms';
 import * as groupsApi from '../../lib/api/groups';
+import * as notificationsApi from '../../lib/api/notifications';
 import * as plansApi from '../../lib/api/plans';
 import * as potApi from '../../lib/api/pot';
 import * as roomApi from '../../lib/api/room';
 import * as usersApi from '../../lib/api/users';
+import { ApiError } from '../../lib/api/client';
 import { getOrCreateUserId } from '../../lib/userId';
 import { showToast } from '../ui/toast';
+import {
+  AppStateShape, DAYS, DayStatus, Group, GroupMember, Gym, JoinRequest,
+} from './types';
+import {
+  daysToWeek, initialsOf, lockPlannedDays, planToWeek, recalcPotDetail, reportError,
+  setSelectedDays, setSelectedFutureDays, summaryToGroup, tierForElo, todayIndexForWeek,
+  toggleWeekDay,
+} from './mappers';
 
-export type DayState = 'planned' | 'checked-in' | 'missed' | 'locked' | 'unselected' | 'rescheduled';
-export interface DayStatus { day: string; state: DayState; }
-
-export const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
-/* ---- View models exposed to screens ---- */
-
-export interface Gym {
-  id: string;
-  name: string;
-}
-
-export interface Group {
-  id: string;
-  name: string;
-  members: number;
-  tier: string;            // derived: "Beginner" for now (no DB column yet)
-  stake: string;           // "500 ELO"
-  joinType: 'open' | 'request';
-  isLeader?: boolean;
-  isMember?: boolean;
-  requested?: boolean;
-}
-
-export interface JoinRequest {
-  id: string;
-  userName: string;
-  groupName: string;
-}
-
-export interface GroupMember {
-  userId: string;
-  name: string;
-  initials: string;
-  elo: number;
-  isLeader: boolean;
-  thisWeek: DayStatus[];
-  nextWeek: DayStatus[];
-}
-
-interface AppStateShape {
-  // Loading
-  ready: boolean;
-  reloading: boolean;
-
-  // Profile
-  userId: string | null;
-  displayName: string;
-  elo: number;
-  streak: number;
-
-  // Gyms
-  gyms: Gym[];
-  gymName: string;
-  gymId: string | null;
-  setGym: (gymId: string) => Promise<void>;
-
-  // Groups
-  groupName: string;
-  groupId: string | null;
-  isLeader: boolean;
-  groups: Group[];
-  joinGroup: (groupId: string) => Promise<void>;
-  leaveGroup: () => Promise<void>;
-  addGroup: (g: {
-    name: string;
-    weekly_stake_elo: number;
-    join_type: 'open' | 'request';
-    required_pledges: number;
-    stake_per_miss: number;
-  }) => Promise<void>;
-
-  // Requests
-  joinRequests: JoinRequest[];
-  approveRequest: (id: string) => Promise<void>;
-  rejectRequest: (id: string) => Promise<void>;
-
-  // Plans
-  thisWeek: DayStatus[];
-  nextWeek: DayStatus[];
-  todayIndex: number;
-  todayDow: number;                         // 0=Mon … 6=Sun (simulated clock)
-  thisWeekIsPractice: boolean;              // first week after group creation
-  toggleNextWeekDay: (i: number) => Promise<void>;
-  setPlannedDays: (days: number[]) => Promise<void>;
-  setThisWeekDays: (days: number[]) => Promise<void>;
-  lockNextWeek: () => Promise<void>;
-  addNextWeekDay: (i: number) => Promise<void>;
-  checkInToday: () => Promise<void>;
-  rescheduleMissedDay: (dow: number) => Promise<void>;
-
-  // Dev clock — toggle between the real week and one week ahead
-  weekSimulated: boolean;        // true when the clock is shifted into next week
-  toggleWeek: () => Promise<void>;
-
-  // Refresh on demand (used by screens that come back into focus)
-  refreshGroupsAtGym: () => Promise<void>;
-
-  // Pot — full breakdown for the current week + simpler aggregate
-  pot: number;                              // total_pot_elo for current week (alias)
-  potCurrent: potApi.PotDetail | null;      // current week's conditions + member rows
-  potNext: potApi.PotDetail | null;         // next week's pending conditions
-  updatePotConditions: (
-    week: 'current' | 'next',
-    required: number,
-    stake: number,
-  ) => Promise<void>;
-
-  // Group members (this & next week pledges per person)
-  groupMembers: GroupMember[];
-  refreshMembers: () => Promise<void>;
-
-  // Badges (derived flags from real stats)
-  badges: badgesApi.Badges;
-  refreshBadges: () => Promise<void>;
-
-  // Profile
-  updateDisplayName: (name: string) => Promise<void>;
-
-  // Gym-space room
-  roomItems: roomApi.RoomItem[];
-  placeRoomItem: (itemId: string, slot: number | null) => Promise<void>;
-
-  // Refetch hooks
-  refreshAll: () => Promise<void>;
-}
+// Re-exported so existing consumers can keep importing these from '../state/AppState'.
+export { DAYS } from './types';
+export type {
+  AppStateShape, DayState, DayStatus, Group, GroupMember, Gym, JoinRequest,
+} from './types';
 
 const Ctx = createContext<AppStateShape | null>(null);
-
-function tierForElo(elo: number): string {
-  return elo >= 2000 ? 'Mogger' : elo >= 1000 ? 'Regular' : elo >= 500 ? 'Rookie' : 'Beginner';
-}
-
-function planToWeek(plan: plansApi.WeeklyPlan): DayStatus[] {
-  // server returns days sorted by day_of_week 0..6
-  return DAYS.map((day, i) => {
-    const found = plan.days.find((d) => d.day_of_week === i);
-    return { day, state: (found?.state ?? 'unselected') as DayState };
-  });
-}
-
-function daysToWeek(days: plansApi.PlanDay[]): DayStatus[] {
-  return DAYS.map((day, i) => {
-    const found = days.find((d) => d.day_of_week === i);
-    return { day, state: (found?.state ?? 'unselected') as DayState };
-  });
-}
-
-function blankWeek(): DayStatus[] {
-  return DAYS.map((day) => ({ day, state: 'unselected' as DayState }));
-}
-
-function setSelectedDays(week: DayStatus[], selected: number[]): DayStatus[] {
-  const selectedDays = new Set(selected);
-  return week.map((day, i) => ({
-    ...day,
-    state: selectedDays.has(i) ? 'planned' : 'unselected',
-  }));
-}
-
-function setSelectedFutureDays(week: DayStatus[], selected: number[], todayDow: number): DayStatus[] {
-  const selectedDays = new Set(selected);
-  return week.map((day, i) => {
-    if (i <= todayDow) return day;
-    return { ...day, state: selectedDays.has(i) ? 'planned' : 'unselected' };
-  });
-}
-
-function toggleWeekDay(week: DayStatus[], index: number): DayStatus[] {
-  return week.map((day, i) => {
-    if (i !== index) return day;
-    return {
-      ...day,
-      state: day.state === 'planned' || day.state === 'locked' ? 'unselected' : 'planned',
-    };
-  });
-}
-
-function lockPlannedDays(week: DayStatus[]): DayStatus[] {
-  return week.map((day) => (day.state === 'planned' ? { ...day, state: 'locked' } : day));
-}
-
-function recalcPotDetail(
-  detail: potApi.PotDetail | null,
-  required: number,
-  stake: number,
-): potApi.PotDetail | null {
-  if (!detail) return null;
-  const members = detail.members.map((member) => ({
-    ...member,
-    elo_at_risk: member.pledged_count * stake,
-    elo_lost_so_far: member.missed_count * stake,
-  }));
-
-  return {
-    ...detail,
-    required_pledges: required,
-    stake_per_miss: stake,
-    total_pot_elo: members.reduce((sum, member) => sum + member.elo_lost_so_far, 0),
-    members,
-  };
-}
-
-function initialsOf(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  if (!parts[0]) return 'YOU';
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[1][0]).toUpperCase();
-}
-
-function todayIndexForWeek(week: DayStatus[]): number {
-  // matches the original: first 'planned' day in this week
-  return week.findIndex((d) => d.state === 'planned');
-}
-
-function summaryToGroup(s: groupsApi.GroupSummary): Group {
-  return {
-    id: s.id,
-    name: s.name,
-    members: s.member_count,
-    tier: 'Regular',
-    stake: `${s.weekly_stake_elo} ELO`,
-    joinType: s.join_type,
-    isLeader: s.is_leader,
-    isMember: s.is_member,
-    requested: s.join_request_pending,
-  };
-}
-
-function reportError(action: string, e: unknown): void {
-  const msg = e instanceof Error ? e.message : 'Unknown error';
-  showToast(`${action}: ${msg}`, 'error');
-}
 
 export function AppStateProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
@@ -268,6 +52,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [potNext, setPotNext] = useState<potApi.PotDetail | null>(null);
   const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
   const [groupMembers, setGroupMembers] = useState<GroupMember[]>([]);
+  const [activity, setActivity] = useState<notificationsApi.ActivityItem[]>([]);
+  const [nudgeCooldowns, setNudgeCooldowns] = useState<Record<string, number>>({});
   const [badges, setBadges] = useState<badgesApi.Badges>({
     first_week: false,
     streak_master: false,
@@ -285,8 +71,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     setGyms(list.map((g) => ({ id: g.id, name: g.name })));
   }, []);
 
-  const loadGroupsForGym = useCallback(async (gymId: string, currentUserId: string) => {
-    const list = await groupsApi.listGroupsAtGym(gymId);
+  // Groups are global (decoupled from gyms): always load every group on the
+  // platform, regardless of the user's home gym. (Args kept for call-site
+  // compatibility but no longer used for filtering.)
+  const loadGroupsForGym = useCallback(async (gymId?: string | null, _currentUserId?: string | null) => {
+    const list = await groupsApi.listGroups(gymId);
     const mapped = list.map(summaryToGroup);
     setGroupsAtGym(mapped);
     const mine = mapped.find((g) => g.isMember) ?? null;
@@ -335,6 +124,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         userId: m.user_id,
         name: m.display_name,
         initials: initialsOf(m.display_name),
+        avatar: m.avatar,
         elo: m.elo,
         isLeader: m.role === 'leader',
         thisWeek: daysToWeek(m.this_week_days),
@@ -358,15 +148,28 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const loadActivity = useCallback(async (groupId: string | null) => {
+    if (!groupId) {
+      setActivity([]);
+      return;
+    }
+    try {
+      setActivity(await notificationsApi.getGroupActivity(groupId));
+    } catch {
+      setActivity([]);
+    }
+  }, []);
+
   const refreshGroupContext = useCallback(
     async (groupId: string | null, isLeader: boolean | undefined) => {
       await Promise.all([
         loadPot(groupId),
         loadInbox(groupId, isLeader),
         loadMembers(groupId),
+        loadActivity(groupId),
       ]);
     },
-    [loadPot, loadInbox, loadMembers],
+    [loadPot, loadInbox, loadMembers, loadActivity],
   );
 
   const loadBadges = useCallback(async () => {
@@ -387,42 +190,45 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   /* ----- bootstrap ----- */
 
-  const bootstrap = useCallback(async () => {
+  const loadClock = useCallback(async (reset = false) => {
+    try {
+      const clock = reset ? await devApi.resetClock() : await devApi.getClock();
+      setWeekOffsetDays(clock.offset_days);
+      setTodayDow(clock.today_dow);
+    } catch {
+      // dev clock is optional; ignore if unavailable
+    }
+  }, []);
+
+  const bootstrap = useCallback(async (resetClockOnStartup = false) => {
     setReloading(true);
     try {
       const deviceId = await getOrCreateUserId();
       const user = await usersApi.registerUser(deviceId);
       setMe(user);
-      await loadGyms();
-      if (user.gym_id) {
-        const mine = await loadGroupsForGym(user.gym_id, user.id);
-        await refreshGroupContext(mine?.id ?? null, mine?.isLeader);
-      } else {
-        setGroupsAtGym([]);
-        setMyGroupSummary(null);
-        setPot(0);
-        setJoinRequests([]);
-        setGroupMembers([]);
-      }
-      await loadPlans();
-      try {
-        const clock = await devApi.getClock();
-        setWeekOffsetDays(clock.offset_days);
-        setTodayDow(clock.today_dow);
-      } catch {
-        // dev clock is optional; ignore if unavailable
-      }
-      await Promise.all([loadBadges(), loadRoom()]);
+      await loadClock(resetClockOnStartup);
+      // Fire every independent fetch in parallel instead of one-by-one — this
+      // is the single biggest startup latency win against the serverless API.
+      const groupsPromise = loadGroupsForGym(user.gym_id, user.id);
+      const [mine] = await Promise.all([
+        groupsPromise,
+        loadGyms(),
+        loadPlans(),
+        loadBadges(),
+        loadRoom(),
+      ]);
+      // Only this depends on the resolved group id, so it runs after the batch.
+      await refreshGroupContext(mine?.id ?? null, mine?.isLeader);
     } catch (e) {
       reportError('Failed to start GymJam', e);
     } finally {
       setReady(true);
       setReloading(false);
     }
-  }, [loadGyms, loadGroupsForGym, loadPlans, refreshGroupContext, loadBadges, loadRoom]);
+  }, [loadGyms, loadGroupsForGym, loadPlans, loadClock, refreshGroupContext, loadBadges, loadRoom]);
 
   useEffect(() => {
-    bootstrap();
+    bootstrap(true);
   }, [bootstrap]);
 
   /* ----- actions ----- */
@@ -439,11 +245,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   }, [loadGroupsForGym, refreshGroupContext]);
 
   const joinGroup = useCallback(async (groupId: string) => {
-    if (!me?.gym_id) return;
+    if (!me) return false;
     const snapshot = groupsAtGym;
     const prevMine = myGroupSummary;
     const target = snapshot.find((g) => g.id === groupId);
-    if (!target) return;
+    if (!target) return false;
     const isOpen = target.joinType === 'open';
 
     // Optimistic local mutation — UI updates before the network call returns.
@@ -457,21 +263,23 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     if (isOpen) setMyGroupSummary({ ...target, isMember: true, members: target.members + 1 });
 
     try {
-      await groupsApi.joinGroup(groupId);
-      showToast(isOpen ? `Joined ${target.name}` : 'Request sent', 'success');
+      const res = await groupsApi.joinGroup(groupId);
+      showToast(res.action === 'joined' ? `Joined ${target.name}` : 'Request sent', 'success');
       const mine = await loadGroupsForGym(me.gym_id, me.id);
       await refreshGroupContext(mine?.id ?? null, mine?.isLeader);
       await loadPlans();
+      return true;
     } catch (e) {
       // Roll back to the snapshot taken before the optimistic mutation.
       setGroupsAtGym(snapshot);
       setMyGroupSummary(prevMine);
       reportError('Could not join group', e);
+      return false;
     }
   }, [groupsAtGym, loadGroupsForGym, loadPlans, refreshGroupContext, me, myGroupSummary]);
 
   const leaveGroup = useCallback(async () => {
-    if (!myGroupSummary || !me?.gym_id) return;
+    if (!myGroupSummary || !me) return;
     const snapshotGroups = groupsAtGym;
     const snapshotMine = myGroupSummary;
     const willDelete = myGroupSummary.isLeader === true && myGroupSummary.members <= 1;
@@ -503,7 +311,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   }, [groupsAtGym, loadGroupsForGym, loadPlans, refreshGroupContext, me, myGroupSummary]);
 
   const refreshGroupsAtGym = useCallback(async () => {
-    if (!me?.gym_id) return;
+    if (!me) return;
     try {
       const mine = await loadGroupsForGym(me.gym_id, me.id);
       await refreshGroupContext(mine?.id ?? null, mine?.isLeader);
@@ -519,9 +327,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     required_pledges: number;
     stake_per_miss: number;
   }) => {
-    if (!me?.gym_id) return;
+    if (!me) return false;  // groups are global — no home gym required to create one
     try {
-      await groupsApi.createGroup({
+      const created = await groupsApi.createGroup({
         gym_id: me.gym_id,
         name: g.name,
         weekly_stake_elo: g.weekly_stake_elo,
@@ -529,11 +337,38 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         required_pledges: g.required_pledges,
         stake_per_miss: g.stake_per_miss,
       });
-      const mine = await loadGroupsForGym(me.gym_id, me.id);
-      await refreshGroupContext(mine?.id ?? null, mine?.isLeader);
-      await loadPlans();
+
+      const mine: Group = {
+        id: created.id,
+        name: created.name,
+        members: 1,
+        tier: 'Regular',
+        stake: `${created.weekly_stake_elo} ELO`,
+        joinType: created.join_type,
+        isLeader: true,
+        isMember: true,
+        requested: false,
+      };
+      setMyGroupSummary(mine);
+      setGroupsAtGym((prev) => [mine, ...prev.filter((group) => group.id !== mine.id)]);
+      setGroupMembers([]);
+      setPot(0);
+      setPotCurrent(null);
+      setPotNext(null);
+
+      void (async () => {
+        const refreshedMine = await loadGroupsForGym(me.gym_id, me.id);
+        await Promise.all([
+          refreshGroupContext(refreshedMine?.id ?? mine.id, refreshedMine?.isLeader ?? true),
+          loadPlans(),
+        ]);
+      })().catch(() => {
+        // The group already exists; keep the optimistic state and let pull-to-refresh reconcile.
+      });
+      return true;
     } catch (e) {
       reportError('Could not create group', e);
+      return false;
     }
   }, [loadGroupsForGym, loadPlans, refreshGroupContext, me]);
 
@@ -573,7 +408,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     try {
       const plan = await plansApi.toggleNextDay(i);
       setNextWeek(planToWeek(plan));
-      await refreshGroupContext(myGroupSummary?.id ?? null, myGroupSummary?.isLeader);
+      // Refresh pot/members in the background — don't block the interaction.
+      void refreshGroupContext(myGroupSummary?.id ?? null, myGroupSummary?.isLeader);
     } catch (e) {
       setNextWeek(snapshotNextWeek);
       reportError('Could not update plan', e);
@@ -587,7 +423,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     try {
       const plan = await plansApi.setPlannedDays(days);
       setNextWeek(planToWeek(plan));
-      await refreshGroupContext(myGroupSummary?.id ?? null, myGroupSummary?.isLeader);
+      void refreshGroupContext(myGroupSummary?.id ?? null, myGroupSummary?.isLeader);
     } catch (e) {
       setNextWeek(snapshotNextWeek);
       reportError('Could not save plan', e);
@@ -602,7 +438,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       const plan = await plansApi.setCurrentWeekDays(days);
       setThisWeek(planToWeek(plan));
       setThisWeekIsPractice(!!plan.is_practice);
-      await refreshGroupContext(myGroupSummary?.id ?? null, myGroupSummary?.isLeader);
+      void refreshGroupContext(myGroupSummary?.id ?? null, myGroupSummary?.isLeader);
     } catch (e) {
       setThisWeek(snapshotThisWeek);
       reportError('Could not save pledges', e);
@@ -633,8 +469,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const checkInToday = useCallback(async () => {
     const snapshotWeek = thisWeek;
     const snapshotMe = me;
-    // Optimistic: flip today's planned/locked day to checked-in, bump ELO by 10.
-    const todayDow = new Date().getDay() === 0 ? 6 : new Date().getDay() - 1;
+    // Optimistic: flip *today's* (simulated-clock) planned/locked day to
+    // checked-in and bump ELO. Use the server-provided todayDow, not the real
+    // weekday, so it stays correct when the dev clock is shifted.
     const todayState = thisWeek[todayDow]?.state;
     if (todayState === 'planned' || todayState === 'locked') {
       setThisWeek((week) => week.map((d, i) => (i === todayDow ? { ...d, state: 'checked-in' } : d)));
@@ -646,16 +483,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       setThisWeek(planToWeek(res.plan));
       setMe((prev) => (prev ? { ...prev, elo: res.new_elo } : prev));
       showToast('Session counted · +10 ELO', 'success');
-      await Promise.all([
-        refreshGroupContext(myGroupSummary?.id ?? null, myGroupSummary?.isLeader),
-        loadBadges(),
-      ]);
+      void refreshGroupContext(myGroupSummary?.id ?? null, myGroupSummary?.isLeader);
+      void loadBadges();
     } catch (e) {
       setThisWeek(snapshotWeek);
       setMe(snapshotMe);
       reportError('Could not check in', e);
     }
-  }, [thisWeek, me, refreshGroupContext, myGroupSummary, loadBadges]);
+  }, [thisWeek, todayDow, me, refreshGroupContext, myGroupSummary, loadBadges]);
 
   const rescheduleMissedDay = useCallback(async (dow: number) => {
     try {
@@ -695,6 +530,44 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       reportError('Could not update name', e);
     }
   }, [loadMembers, me, myGroupSummary]);
+
+  const updateAvatar = useCallback(async (avatar: string) => {
+    const snapshotMe = me;
+    setMe((prev) => (prev ? { ...prev, avatar } : prev));
+    try {
+      const u = await usersApi.updateMe({ avatar });
+      setMe(u);
+      // The group list shows my avatar, so refresh it.
+      if (myGroupSummary?.id) await loadMembers(myGroupSummary.id);
+    } catch (e) {
+      setMe(snapshotMe);
+      reportError('Could not update avatar', e);
+    }
+  }, [loadMembers, me, myGroupSummary]);
+
+  const nudge = useCallback(async (targetUserId: string) => {
+    if (!myGroupSummary?.id) return;
+    // Optimistically start the hour-long cooldown so the button locks instantly.
+    const oneHour = 60 * 60 * 1000;
+    setNudgeCooldowns((prev) => ({ ...prev, [targetUserId]: Date.now() + oneHour }));
+    try {
+      const res = await notificationsApi.nudgeMember(myGroupSummary.id, targetUserId);
+      setNudgeCooldowns((prev) => ({ ...prev, [targetUserId]: new Date(res.next_allowed_at).getTime() }));
+      showToast('Nudge sent 👟', 'success');
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 429) {
+        // Already nudged recently — keep the cooldown and surface the message.
+        showToast(e.message, 'info');
+      } else {
+        setNudgeCooldowns((prev) => {
+          const next = { ...prev };
+          delete next[targetUserId];
+          return next;
+        });
+        reportError('Could not nudge', e);
+      }
+    }
+  }, [myGroupSummary]);
 
   const updatePotConditions = useCallback(
     async (week: 'current' | 'next', required: number, stake: number) => {
@@ -744,7 +617,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       }
       setWeekOffsetDays(clock.offset_days);
       setTodayDow(clock.today_dow);
-      await bootstrap();
+      await bootstrap(false);
       showToast(goingForward ? 'Jumped to next week' : 'Back to this week', 'success');
     } catch (e) {
       reportError('Could not change week', e);
@@ -768,6 +641,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
       userId: me?.id ?? null,
       displayName: me?.display_name ?? 'You',
+      avatar: me?.avatar ?? null,
       elo: me?.elo ?? 0,
       streak: me?.streak ?? 0,
 
@@ -814,23 +688,29 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       groupMembers,
       refreshMembers: () => loadMembers(myGroupSummary?.id ?? null),
 
+      activity,
+      refreshActivity: () => loadActivity(myGroupSummary?.id ?? null),
+      nudge,
+      nudgeCooldowns,
+
       badges,
       refreshBadges: loadBadges,
 
       updateDisplayName,
+      updateAvatar,
 
       roomItems,
       placeRoomItem,
 
-      refreshAll: bootstrap,
+      refreshAll: () => bootstrap(false),
     };
   }, [
-    addGroup, addNextWeekDay, approveRequest, badges, bootstrap, checkInToday,
-    groupMembers, groupsAtGym, gyms, joinGroup, joinRequests, leaveGroup, loadBadges, loadMembers,
-    lockNextWeek, me, myGroupSummary, nextWeek, placeRoomItem, pot, potCurrent, potNext,
+    activity, addGroup, addNextWeekDay, approveRequest, badges, bootstrap, checkInToday,
+    groupMembers, groupsAtGym, gyms, joinGroup, joinRequests, leaveGroup, loadActivity, loadBadges, loadMembers,
+    lockNextWeek, me, myGroupSummary, nextWeek, nudge, nudgeCooldowns, placeRoomItem, pot, potCurrent, potNext,
     ready, refreshGroupsAtGym, rejectRequest, reloading, rescheduleMissedDay, roomItems, setGym,
     setPlannedDays, setThisWeekDays, thisWeek, thisWeekIsPractice, todayDow, toggleNextWeekDay,
-    toggleWeek, updateDisplayName, updatePotConditions, weekOffsetDays,
+    toggleWeek, updateAvatar, updateDisplayName, updatePotConditions, weekOffsetDays,
   ]);
 
   // tier is purely a function of elo; expose for callers that want it

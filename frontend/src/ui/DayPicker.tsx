@@ -7,32 +7,33 @@ import type { DayStatus } from '../state/AppState';
 const LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
 export function DayPicker({
-  days, editable = false, onToggle, dulledDows, onLongPress,
+  days, editable = false, onToggle, dulledDows, onReschedule,
 }: {
   days: DayStatus[];
   editable?: boolean;
   onToggle?: (i: number) => void;
   dulledDows?: number[];
-  // Long-press a missed day to reschedule it (unforeseen circumstances).
-  onLongPress?: (i: number) => void;
+  // Tap a missed day to reschedule it (unforeseen circumstances).
+  onReschedule?: (i: number) => void;
 }) {
   const dulled = new Set(dulledDows ?? []);
   return (
     <View style={{ flexDirection: 'row', gap: 6 }}>
       {days.map((d, i) => {
         const isDulled = dulled.has(i);
-        const canLongPress = !!onLongPress && d.state === 'missed' && !isDulled;
+        const canReschedule = !!onReschedule && d.state === 'missed' && !isDulled;
         const canToggle = editable && !isDulled
           && d.state !== 'locked' && d.state !== 'checked-in' && d.state !== 'missed' && d.state !== 'rescheduled';
-        const disabled = !canToggle && !canLongPress;
+        const disabled = !canToggle && !canReschedule;
         const s = stateStyle(d.state);
         return (
           <Pressable
             key={i}
             disabled={disabled}
-            onPress={() => { if (canToggle) onToggle?.(i); }}
-            onLongPress={() => { if (canLongPress) onLongPress?.(i); }}
-            delayLongPress={350}
+            onPress={() => {
+              if (canReschedule) onReschedule?.(i);
+              else if (canToggle) onToggle?.(i);
+            }}
             style={({ pressed }) => [{
               flex: 1, minWidth: 38, height: 60, borderRadius: RADIUS.md,
               alignItems: 'center', justifyContent: 'center',
@@ -42,7 +43,8 @@ export function DayPicker({
           >
             <Text style={{ fontFamily: FONT.bold, fontSize: 11, color: s.fg, letterSpacing: 0.6 }}>{LABELS[i]}</Text>
             {d.state === 'checked-in' && <MaterialIcons name="check" size={16} color={s.fg} />}
-            {d.state === 'missed' && <MaterialIcons name="close" size={16} color={s.fg} />}
+            {/* A missed day that can be rescheduled shows a restore hint instead of a plain X. */}
+            {d.state === 'missed' && <MaterialIcons name={canReschedule ? 'restore' : 'close'} size={16} color={s.fg} />}
             {d.state === 'planned' && <View style={{ width: 5, height: 5, borderRadius: 3, backgroundColor: s.fg }} />}
             {d.state === 'locked' && <MaterialIcons name="lock" size={12} color={s.fg} />}
             {d.state === 'rescheduled' && <MaterialIcons name="event-repeat" size={14} color={s.fg} />}

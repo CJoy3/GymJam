@@ -3,26 +3,22 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-
 import { MaterialIcons } from '@expo/vector-icons';
 import { C, FONT, RADIUS, SPACE, tierForElo } from '../theme/tokens';
 import { Btn, Card, Chip, Eyebrow, FadeInItem, H1, Stat, Sub } from '../ui/components';
+import { Avatar } from '../ui/Avatar';
 import { BlobBackground } from '../ui/Blob';
 import { useRefreshControl } from '../ui/useRefresh';
 import { useAppState } from '../state/AppState';
+import { AVATAR_IDS } from '../gymspace';
 
 const pageWrap = { padding: SPACE.xl, paddingTop: 56, paddingBottom: 40 } as const;
 
-function initialsOf(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  if (!parts[0]) return 'YOU';
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[1][0]).toUpperCase();
-}
-
 export function ProfileView({ onBrowse }: { onBrowse: () => void }) {
-  const { elo, streak, gymName, groupName, displayName, thisWeek, updateDisplayName } = useAppState();
+  const { elo, streak, gymName, groupName, displayName, avatar, thisWeek, updateDisplayName, updateAvatar } = useAppState();
   const refresh = useRefreshControl();
   const sessionsDone = thisWeek.filter((d) => d.state === 'checked-in').length;
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(displayName);
+  const [pickerOpen, setPickerOpen] = useState(false);
   useEffect(() => { if (!editing) setDraft(displayName); }, [displayName, editing]);
 
   const save = async () => {
@@ -42,9 +38,33 @@ export function ProfileView({ onBrowse }: { onBrowse: () => void }) {
 
         <FadeInItem delay={80} style={{ marginTop: 24 }}>
           <Card padding={SPACE.xl} style={{ alignItems: 'center' }}>
-            <View style={styles.bigAvatar}>
-              <Text style={styles.bigAvatarText}>{initialsOf(displayName)}</Text>
-            </View>
+            <Pressable onPress={() => setPickerOpen((o) => !o)} style={styles.avatarWrap}>
+              <Avatar id={avatar} name={displayName} size={96} style={{ borderWidth: 2, borderColor: C.borderHi }} />
+              <View style={styles.editBadge}>
+                <MaterialIcons name={pickerOpen ? 'close' : 'edit'} size={14} color={C.primaryFg} />
+              </View>
+            </Pressable>
+
+            {pickerOpen && (
+              <View style={{ width: '100%', marginTop: 16 }}>
+                <Eyebrow style={{ marginBottom: 10, textAlign: 'center' }}>Choose your look</Eyebrow>
+                <View style={styles.avatarGrid}>
+                  {AVATAR_IDS.map((id) => {
+                    const selected = id === avatar;
+                    return (
+                      <Pressable key={id} onPress={() => { updateAvatar(id); setPickerOpen(false); }}>
+                        <Avatar
+                          id={id}
+                          name={displayName}
+                          size={54}
+                          style={{ borderWidth: 2, borderColor: selected ? C.accent : 'transparent' }}
+                        />
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
 
             {editing ? (
               <View style={{ width: '100%', marginTop: 16, gap: 8 }}>
@@ -118,12 +138,18 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.bg },
   rowGap: { flexDirection: 'row', alignItems: 'center', gap: 6 },
 
-  bigAvatar: {
-    width: 96, height: 96, borderRadius: 48,
-    backgroundColor: C.primary,
+  avatarWrap: { position: 'relative' },
+  editBadge: {
+    position: 'absolute', right: -2, bottom: -2,
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: C.accent,
+    borderWidth: 2, borderColor: C.card,
     alignItems: 'center', justifyContent: 'center',
   },
-  bigAvatarText: { fontFamily: FONT.extra, fontSize: 32, color: C.primaryFg, letterSpacing: -0.6 },
+  avatarGrid: {
+    flexDirection: 'row', flexWrap: 'wrap',
+    justifyContent: 'center', gap: 12,
+  },
 
   name: { fontFamily: FONT.bold, fontSize: 22, color: C.ink, letterSpacing: -0.3 },
 

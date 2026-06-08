@@ -1,11 +1,11 @@
-import { apiGet, apiPost } from './client';
+import { ApiError, apiGet, apiPost } from './client';
 import type { PlanDay } from './plans';
 
 export type JoinType = 'open' | 'request';
 
 export interface Group {
   id: string;
-  gym_id: string;
+  gym_id: string | null;
   name: string;
   weekly_stake_elo: number;
   join_type: JoinType;
@@ -36,11 +36,25 @@ export interface Pot {
   contributor_count: number;
 }
 
+/** All groups on the platform — groups are global (not filtered by gym). */
+export const listAllGroups = () => apiGet<GroupSummary[]>('/groups');
+
 export const listGroupsAtGym = (gym_id: string) =>
   apiGet<GroupSummary[]>(`/groups/by-gym/${gym_id}`);
 
+export async function listGroups(gym_id?: string | null) {
+  try {
+    return await listAllGroups();
+  } catch (e) {
+    if (gym_id && e instanceof ApiError && e.status === 405) {
+      return listGroupsAtGym(gym_id);
+    }
+    throw e;
+  }
+}
+
 export const createGroup = (payload: {
-  gym_id: string;
+  gym_id?: string | null;
   name: string;
   weekly_stake_elo: number;
   join_type: JoinType;
@@ -75,6 +89,7 @@ export const getGroupPot = (group_id: string, week: 'current' | 'next' = 'curren
 export interface GroupMemberDetail {
   user_id: string;
   display_name: string;
+  avatar: string | null;
   elo: number;
   role: 'member' | 'leader';
   joined_at: string;

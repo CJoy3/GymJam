@@ -8,16 +8,26 @@ from app.schemas.group import (
     GroupSummary,
     JoinRequestOut,
 )
+from app.schemas.notification import ActivityItem, NudgeResult
 from app.schemas.pot import PotConditionsUpdate, PotDetail
 from app.services import groups as groups_svc
+from app.services import notifications as notifications_svc
 from app.services import pot as pot_svc
 
 router = APIRouter()
 
 
+@router.get("", response_model=list[GroupSummary])
+def list_all_groups(current: dict = Depends(get_current_user)) -> list[dict]:
+    """All groups on the platform — global, not filtered by the user's home gym."""
+    return groups_svc.list_all(current["id"])
+
+
 @router.get("/by-gym/{gym_id}", response_model=list[GroupSummary])
 def list_groups_at_gym(gym_id: str, current: dict = Depends(get_current_user)) -> list[dict]:
-    return groups_svc.list_at_gym(gym_id, current["id"])
+    # Groups are global now; the gym path param is ignored (kept for backward
+    # compatibility with older clients).
+    return groups_svc.list_all(current["id"])
 
 
 @router.post("", response_model=Group, status_code=201)
@@ -83,3 +93,20 @@ def update_pot_conditions(
 @router.get("/{group_id}/members", response_model=list[GroupMemberDetail])
 def list_group_members(group_id: str) -> list[dict]:
     return groups_svc.list_members(group_id)
+
+
+@router.get("/{group_id}/activity", response_model=list[ActivityItem])
+def group_activity(group_id: str, current: dict = Depends(get_current_user)) -> list[dict]:
+    """Personalised group feed: join requests (leader), received nudges, and
+    this week's misses / check-ins / streak milestones."""
+    return notifications_svc.group_activity(group_id, current["id"])
+
+
+@router.post("/{group_id}/nudge/{target_user_id}", response_model=NudgeResult)
+def nudge_member(
+    group_id: str,
+    target_user_id: str,
+    current: dict = Depends(get_current_user),
+) -> dict:
+    """Nudge a teammate to get to the gym. Rate-limited to once per hour per target."""
+    return notifications_svc.send_nudge(group_id, current["id"], target_user_id)
