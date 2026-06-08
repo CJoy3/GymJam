@@ -17,5 +17,5 @@ export const registerUser = (device_id: string, display_name?: string) =>
 
 export const getMe = () => apiGet<User>('/users/me');
 
-export const updateMe = (patch: { display_name?: string; gym_id?: string | null; avatar?: string }) =>
+export const updateMe = (patch: { display_name?: string; gym_id?: string | null; avatar?: string; elo?: number }) =>
   apiPatch<User>('/users/me', patch);

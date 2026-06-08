@@ -11,7 +11,7 @@ import { AVATAR_IDS } from '../gymspace';
 
 const pageWrap = { padding: SPACE.xl, paddingTop: 56, paddingBottom: 40 } as const;
 
-export function ProfileView() {
+export function ProfileView({ onSettings }: { onSettings: () => void }) {
   const { elo, streak, gymName, groupName, displayName, avatar, thisWeek, updateDisplayName, updateAvatar } = useAppState();
   const refresh = useRefreshControl();
   const sessionsDone = thisWeek.filter((d) => d.state === 'checked-in').length;
@@ -33,7 +33,12 @@ export function ProfileView() {
       <ScrollView refreshControl={refresh} contentContainerStyle={pageWrap} showsVerticalScrollIndicator={false}>
         <FadeInItem>
           <Eyebrow>Profile</Eyebrow>
-          <H1 style={{ marginTop: 6 }}>Your space</H1>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 }}>
+            <H1>Your space</H1>
+            <Pressable onPress={onSettings} style={styles.settingsBtn}>
+              <MaterialIcons name="settings" size={20} color={C.ink} />
+            </Pressable>
+          </View>
         </FadeInItem>
 
         <FadeInItem delay={80} style={{ marginTop: 24 }}>
@@ -148,6 +153,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center', gap: 12,
   },
 
+  settingsBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: C.card, borderWidth: 1, borderColor: C.borderHi,
+    alignItems: 'center', justifyContent: 'center',
+  },
   name: { fontFamily: FONT.bold, fontSize: 22, color: C.ink, letterSpacing: -0.3 },
 
   nameInput: {

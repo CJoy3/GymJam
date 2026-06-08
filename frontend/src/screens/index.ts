@@ -10,3 +10,4 @@ export { PotTracker } from './PotTracker';
 export { Progress } from './Progress';
 export { GymSpace } from './GymSpace';
 export { ProfileView } from './Profile';
+export { DevSettings } from './DevSettings';
