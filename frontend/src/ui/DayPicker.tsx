@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, Pressable } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { C, FONT, RADIUS } from '../theme/tokens';
 import type { DayStatus } from '../state/AppState';
 

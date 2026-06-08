@@ -1,8 +1,8 @@
 """Week math in Europe/London. Weeks start Monday.
 
-A development "clock offset" can shift the notion of *today* forward in whole
-weeks so the app can be demoed across week boundaries without waiting for real
-time to pass.
+A development "clock offset" can shift the notion of *today* forward in days
+so the app can be demoed across day and week boundaries without waiting for
+real time to pass.
 
 IMPORTANT — the backend runs on Vercel (serverless): each request may be served
 by a *different* process, so in-process state is NOT shared between the request
@@ -92,6 +92,11 @@ def set_offset_days(days: int) -> int:
 def advance_weeks(n: int = 1) -> int:
     """Move the simulated clock forward by `n` whole weeks (keeps the weekday)."""
     return set_offset_days(refresh_offset(force=True) + 7 * n)
+
+
+def advance_days(n: int = 1) -> int:
+    """Move the simulated clock forward by `n` days."""
+    return set_offset_days(refresh_offset(force=True) + n)
 
 
 def reset_clock() -> int:

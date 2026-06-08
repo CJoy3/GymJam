@@ -1,8 +1,8 @@
 """Development-only clock controls.
 
-These let the app be demoed across week boundaries: `advance-week` shifts the
-simulated "today" forward seven days, so next-week plans and pot conditions
-roll into the current week and the UI updates on refresh.
+These let the app be demoed across day and week boundaries: clock shifts move
+the simulated "today" forward or backward, so plans and pot conditions roll as
+the UI updates on refresh.
 """
 from fastapi import APIRouter
 
@@ -41,6 +41,20 @@ def previous_week() -> dict:
     """Step the simulated clock back one week, clamped at the real current week
     (never goes earlier than offset 0)."""
     time_utils.set_offset_days(max(0, time_utils.get_offset_days() - 7))
+    return _clock_payload()
+
+
+@router.post("/advance-day")
+def advance_day() -> dict:
+    time_utils.advance_days(1)
+    return _clock_payload()
+
+
+@router.post("/previous-day")
+def previous_day() -> dict:
+    """Step the simulated clock back one day, clamped at the real current day
+    (never goes earlier than offset 0)."""
+    time_utils.set_offset_days(max(0, time_utils.get_offset_days() - 1))
     return _clock_payload()
 
 

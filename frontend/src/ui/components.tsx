@@ -6,7 +6,7 @@ import Animated, {
   Easing, FadeIn, useAnimatedProps, useAnimatedStyle, useSharedValue, withTiming,
 } from 'react-native-reanimated';
 import Svg, { Circle } from 'react-native-svg';
-import { MaterialIcons } from '@expo/vector-icons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { C, FONT, RADIUS, SPACE } from '../theme/tokens';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);

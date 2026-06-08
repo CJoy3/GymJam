@@ -10,6 +10,7 @@ import * as plansApi from '../../lib/api/plans';
 import * as potApi from '../../lib/api/pot';
 import * as roomApi from '../../lib/api/room';
 import * as usersApi from '../../lib/api/users';
+import { ApiError } from '../../lib/api/client';
 import { getOrCreateUserId } from '../../lib/userId';
 import { showToast } from '../ui/toast';
 
@@ -104,9 +105,12 @@ interface AppStateShape {
   checkInToday: () => Promise<void>;
   rescheduleMissedDay: (dow: number) => Promise<void>;
 
-  // Dev clock — toggle between the real week and one week ahead
-  weekSimulated: boolean;        // true when the clock is shifted into next week
-  toggleWeek: () => Promise<void>;
+  // Dev clock controls for testing across simulated days/weeks.
+  devClockOffsetDays: number;
+  advanceClockWeek: () => Promise<void>;
+  previousClockWeek: () => Promise<void>;
+  advanceClockDay: () => Promise<void>;
+  previousClockDay: () => Promise<void>;
 
   // Refresh on demand (used by screens that come back into focus)
   refreshGroupsAtGym: () => Promise<void>;
@@ -396,32 +400,49 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const bootstrap = useCallback(async (resetClockOnStartup = false) => {
+  const loadExtendedContext = useCallback(
+    async (groupId: string | null, isLeader: boolean | undefined) => {
+      await Promise.all([
+        refreshGroupContext(groupId, isLeader),
+        loadBadges(),
+        loadRoom(),
+      ]);
+    },
+    [loadBadges, loadRoom, refreshGroupContext],
+  );
+
+  const bootstrap = useCallback(async (resetClockOnStartup = false, waitForExtendedContext = false) => {
     setReloading(true);
     try {
       const deviceId = await getOrCreateUserId();
       const user = await usersApi.registerUser(deviceId);
       setMe(user);
       await loadClock(resetClockOnStartup);
-      // Fire every independent fetch in parallel instead of one-by-one — this
-      // is the single biggest startup latency win against the serverless API.
+      // Keep first paint gated only by data needed to choose and render the
+      // initial screen. Badges, room inventory, members, inbox, and pot hydrate
+      // below without holding the splash screen open.
       const groupsPromise = loadGroupsForGym(user.gym_id, user.id);
       const [mine] = await Promise.all([
         groupsPromise,
         loadGyms(),
         loadPlans(),
-        loadBadges(),
-        loadRoom(),
       ]);
-      // Only this depends on the resolved group id, so it runs after the batch.
-      await refreshGroupContext(mine?.id ?? null, mine?.isLeader);
+
+      const extendedContext = loadExtendedContext(mine?.id ?? null, mine?.isLeader);
+      if (waitForExtendedContext) {
+        await extendedContext;
+      } else {
+        void extendedContext.catch(() => {
+          // Secondary data can be reconciled by pull-to-refresh.
+        });
+      }
     } catch (e) {
       reportError('Failed to start GymJam', e);
     } finally {
       setReady(true);
       setReloading(false);
     }
-  }, [loadGyms, loadGroupsForGym, loadPlans, loadClock, refreshGroupContext, loadBadges, loadRoom]);
+  }, [loadGyms, loadGroupsForGym, loadPlans, loadClock, loadExtendedContext]);
 
   useEffect(() => {
     bootstrap(true);
@@ -759,28 +780,54 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     [myGroupSummary, potCurrent, potNext, refreshGroupContext],
   );
 
-  const toggleWeek = useCallback(async () => {
-    // Two-state dev toggle: real week (offset 0) ⇄ one week ahead. Re-bootstraps
-    // from the server (the source of truth after a clock change) so plans, pot,
-    // and the rotating rule setter all reflect the new week end-to-end.
-    const goingForward = weekOffsetDays === 0;
+  const shiftClock = useCallback(async (
+    fetchClock: () => Promise<devApi.DevClock>,
+    successMessage: string,
+    notFoundMessage?: string,
+  ) => {
     try {
-      // Two-state toggle: forward = +1 week; backward = snap all the way back to
-      // the real week (offset 0) in a single press, even if earlier testing left
-      // the clock several weeks ahead.
-      const clock = goingForward ? await devApi.advanceWeek() : await devApi.resetClock();
+      const clock = await fetchClock();
       if (clock.persisted === false) {
         showToast('Dev clock not saved — run schema.sql (dev_clock table missing)', 'error');
         return;
       }
       setWeekOffsetDays(clock.offset_days);
       setTodayDow(clock.today_dow);
-      await bootstrap(false);
-      showToast(goingForward ? 'Jumped to next week' : 'Back to this week', 'success');
+      await bootstrap(false, true);
+      showToast(successMessage, 'success');
     } catch (e) {
-      reportError('Could not change week', e);
+      if (notFoundMessage && e instanceof ApiError && e.status === 404) {
+        showToast(notFoundMessage, 'error');
+        return;
+      }
+      reportError('Could not change test clock', e);
     }
-  }, [bootstrap, weekOffsetDays]);
+  }, [bootstrap]);
+
+  const advanceClockWeek = useCallback(
+    () => shiftClock(devApi.advanceWeek, 'Jumped to next week'),
+    [shiftClock],
+  );
+  const previousClockWeek = useCallback(
+    () => shiftClock(devApi.previousWeek, 'Back one week'),
+    [shiftClock],
+  );
+  const advanceClockDay = useCallback(
+    () => shiftClock(
+      devApi.advanceDay,
+      'Jumped to next day',
+      'Next day needs the backend day-clock endpoint deployed',
+    ),
+    [shiftClock],
+  );
+  const previousClockDay = useCallback(
+    () => shiftClock(
+      devApi.previousDay,
+      'Back one day',
+      'Previous day needs the backend day-clock endpoint deployed',
+    ),
+    [shiftClock],
+  );
 
   const placeRoomItem = useCallback(async (itemId: string, slot: number | null) => {
     try {
@@ -832,8 +879,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       checkInToday,
       rescheduleMissedDay,
 
-      weekSimulated: weekOffsetDays > 0,
-      toggleWeek,
+      devClockOffsetDays: weekOffsetDays,
+      advanceClockWeek,
+      previousClockWeek,
+      advanceClockDay,
+      previousClockDay,
 
       refreshGroupsAtGym,
 
@@ -853,15 +903,15 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       roomItems,
       placeRoomItem,
 
-      refreshAll: () => bootstrap(false),
+      refreshAll: () => bootstrap(false, true),
     };
   }, [
-    addGroup, addNextWeekDay, approveRequest, badges, bootstrap, checkInToday,
+    addGroup, addNextWeekDay, advanceClockDay, advanceClockWeek, approveRequest, badges, bootstrap, checkInToday,
     groupMembers, groupsAtGym, gyms, joinGroup, joinRequests, leaveGroup, loadBadges, loadMembers,
     lockNextWeek, me, myGroupSummary, nextWeek, placeRoomItem, pot, potCurrent, potNext,
-    ready, refreshGroupsAtGym, rejectRequest, reloading, rescheduleMissedDay, roomItems, setGym,
+    previousClockDay, previousClockWeek, ready, refreshGroupsAtGym, rejectRequest, reloading, rescheduleMissedDay, roomItems, setGym,
     setPlannedDays, setThisWeekDays, thisWeek, thisWeekIsPractice, todayDow, toggleNextWeekDay,
-    toggleWeek, updateDisplayName, updatePotConditions, weekOffsetDays,
+    updateDisplayName, updatePotConditions, weekOffsetDays,
   ]);
 
   // tier is purely a function of elo; expose for callers that want it

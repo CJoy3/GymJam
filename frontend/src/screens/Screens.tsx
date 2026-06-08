@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, Platform, View, Text, ScrollView, Pressable, TextInput, StyleSheet } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import Animated, { Easing, FadeIn } from 'react-native-reanimated';
 
 import { C, FONT, RADIUS, SPACE, tierForElo } from '../theme/tokens';
@@ -83,11 +83,11 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
 export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => void; onPlan: () => void; onPot: () => void; onGroup: () => void }) {
   const {
     thisWeek, nextWeek, elo, streak, pot, potCurrent, checkInToday, displayName,
-    todayDow, thisWeekIsPractice, setThisWeekDays, toggleWeek, weekSimulated, groupId,
-    rescheduleMissedDay,
+    todayDow, thisWeekIsPractice, setThisWeekDays, rescheduleMissedDay,
+    devClockOffsetDays, advanceClockWeek, previousClockWeek, advanceClockDay, previousClockDay,
   } = useAppState();
   const refresh = useRefreshControl();
-  const [advancing, setAdvancing] = useState(false);
+  const [clockMoving, setClockMoving] = useState<'next-week' | 'previous-week' | 'next-day' | 'previous-day' | null>(null);
   const done = thisWeek.filter((d) => d.state === 'checked-in').length;
   const pledged = thisWeek.filter((d) => d.state === 'checked-in' || d.state === 'planned' || d.state === 'locked').length;
   const pct = pledged ? (done / pledged) * 100 : 0;
@@ -108,9 +108,12 @@ export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => v
     setThisWeekDays([...planned]);
   };
 
-  const onAdvance = async () => {
-    setAdvancing(true);
-    try { await toggleWeek(); } finally { setAdvancing(false); }
+  const onShiftClock = async (
+    key: NonNullable<typeof clockMoving>,
+    action: () => Promise<void>,
+  ) => {
+    setClockMoving(key);
+    try { await action(); } finally { setClockMoving(null); }
   };
 
   // Long-press a missed day → reschedule it (unforeseen circumstances). If next
@@ -143,7 +146,15 @@ export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => v
   return (
     <View style={styles.screen}>
       <BlobBackground variant="home" />
-      <ScrollView refreshControl={refresh} contentContainerStyle={pageWrap} showsVerticalScrollIndicator={false}>
+      <DevClockControls
+        moving={clockMoving}
+        canGoBack={devClockOffsetDays > 0}
+        onPreviousWeek={() => onShiftClock('previous-week', previousClockWeek)}
+        onNextWeek={() => onShiftClock('next-week', advanceClockWeek)}
+        onPreviousDay={() => onShiftClock('previous-day', previousClockDay)}
+        onNextDay={() => onShiftClock('next-day', advanceClockDay)}
+      />
+      <ScrollView refreshControl={refresh} contentContainerStyle={[pageWrap, { paddingTop: 136 }]} showsVerticalScrollIndicator={false}>
         <FadeInItem>
           <Eyebrow>Hi, {firstName}</Eyebrow>
           <H1 style={{ marginTop: 6 }}>It's your time</H1>
@@ -243,19 +254,81 @@ export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => v
         </View>
       </View>
 
-      {groupId && (
-        <Pressable onPress={onAdvance} disabled={advancing} style={styles.devFab}>
-          <MaterialIcons
-            name={advancing ? 'hourglass-empty' : weekSimulated ? 'fast-rewind' : 'fast-forward'}
-            size={16}
-            color={C.primaryFg}
-          />
-          <Text style={styles.devFabText}>
-            {advancing ? 'Jumping…' : weekSimulated ? 'Previous week' : 'Next week'}
-          </Text>
-        </Pressable>
-      )}
     </View>
+  );
+}
+
+function DevClockControls({
+  moving, canGoBack, onPreviousWeek, onNextWeek, onPreviousDay, onNextDay,
+}: {
+  moving: 'next-week' | 'previous-week' | 'next-day' | 'previous-day' | null;
+  canGoBack: boolean;
+  onPreviousWeek: () => void;
+  onNextWeek: () => void;
+  onPreviousDay: () => void;
+  onNextDay: () => void;
+}) {
+  const disabled = moving !== null;
+  return (
+    <View style={styles.devControls}>
+      <View style={styles.devControlRow}>
+        <DevClockButton
+          label="Previous week"
+          icon="keyboard-arrow-left"
+          loading={moving === 'previous-week'}
+          disabled={disabled || !canGoBack}
+          onPress={onPreviousWeek}
+        />
+        <DevClockButton
+          label="Next week"
+          icon="keyboard-arrow-right"
+          loading={moving === 'next-week'}
+          disabled={disabled}
+          onPress={onNextWeek}
+        />
+      </View>
+      <View style={styles.devControlRow}>
+        <DevClockButton
+          label="Previous day"
+          icon="keyboard-arrow-left"
+          loading={moving === 'previous-day'}
+          disabled={disabled || !canGoBack}
+          onPress={onPreviousDay}
+        />
+        <DevClockButton
+          label="Next day"
+          icon="keyboard-arrow-right"
+          loading={moving === 'next-day'}
+          disabled={disabled}
+          onPress={onNextDay}
+        />
+      </View>
+    </View>
+  );
+}
+
+function DevClockButton({
+  label, icon, loading, disabled, onPress,
+}: {
+  label: string;
+  icon: keyof typeof MaterialIcons.glyphMap;
+  loading: boolean;
+  disabled: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      style={({ pressed }) => [
+        styles.devClockBtn,
+        disabled && styles.devClockBtnDisabled,
+        pressed && !disabled && { opacity: 0.82 },
+      ]}
+    >
+      <MaterialIcons name={loading ? 'hourglass-empty' : icon} size={15} color={C.primaryFg} />
+      <Text style={styles.devClockBtnText} numberOfLines={1}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -1307,13 +1380,19 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
 
-  devFab: {
-    position: 'absolute', top: 52, right: SPACE.xl,
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 12, height: 34, borderRadius: RADIUS.pill,
-    backgroundColor: C.ink, opacity: 0.9,
+  devControls: {
+    position: 'absolute', top: 48, right: SPACE.xl, zIndex: 5,
+    gap: 6,
   },
-  devFabText: { fontFamily: FONT.semibold, fontSize: 12, color: C.primaryFg, letterSpacing: 0.2 },
+  devControlRow: { flexDirection: 'row', gap: 6, justifyContent: 'flex-end' },
+  devClockBtn: {
+    width: 118, height: 32, borderRadius: RADIUS.pill,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3,
+    backgroundColor: C.ink,
+    paddingHorizontal: 8,
+  },
+  devClockBtnDisabled: { opacity: 0.38 },
+  devClockBtnText: { fontFamily: FONT.semibold, fontSize: 10.5, color: C.primaryFg, letterSpacing: 0 },
 
   iconChip: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   closeBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: C.card, borderWidth: 1, borderColor: C.borderHi, alignItems: 'center', justifyContent: 'center' },
