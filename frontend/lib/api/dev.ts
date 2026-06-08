@@ -18,4 +18,10 @@ export const advanceWeek = () => apiPost<DevClock>('/dev/advance-week');
 /** Step back one simulated week (clamped at the real current week). */
 export const previousWeek = () => apiPost<DevClock>('/dev/previous-week');
 
+/** Step the simulated clock forward one day. */
+export const nextDay = () => apiPost<DevClock>('/dev/next-day');
+
+/** Step back one simulated day (clamped at the real current day). */
+export const previousDay = () => apiPost<DevClock>('/dev/previous-day');
+
 export const resetClock = () => apiPost<DevClock>('/dev/reset-clock');

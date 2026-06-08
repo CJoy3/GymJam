@@ -101,6 +101,13 @@ export interface AppStateShape {
   weekSimulated: boolean;        // true when the clock is shifted into next week
   toggleWeek: () => Promise<void>;
 
+  // Dev clock — fine-grained day/week stepping, for walking through pledge
+  // state transitions one step at a time while testing.
+  goToPreviousWeek: () => Promise<void>;
+  goToNextWeek: () => Promise<void>;
+  goToPreviousDay: () => Promise<void>;
+  goToNextDay: () => Promise<void>;
+
   // Refresh on demand (used by screens that come back into focus)
   refreshGroupsAtGym: () => Promise<void>;
 

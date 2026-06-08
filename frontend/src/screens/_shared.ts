@@ -36,10 +36,16 @@ export const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
 
-  devFab: {
+  // Dev clock controls — four small pills (« week, « day, day », week ») that
+  // step the simulated "today" so testers can walk pledges through their
+  // states without waiting for real time to pass.
+  devClockBar: {
     position: 'absolute', top: 52, right: SPACE.xl,
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 12, height: 34, borderRadius: RADIUS.pill,
+    flexDirection: 'row', gap: 6,
+  },
+  devClockBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    paddingHorizontal: 9, height: 34, borderRadius: RADIUS.pill,
     backgroundColor: C.ink, opacity: 0.9,
   },
   devFabText: { fontFamily: FONT.semibold, fontSize: 12, color: C.primaryFg, letterSpacing: 0.2 },
