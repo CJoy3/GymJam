@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { LayoutChangeEvent, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { C, FONT, RADIUS, SPACE, tierForElo } from '../theme/tokens';
 import { Btn, Card, Chip, Eyebrow, FadeInItem, H1, Stat, Sub } from '../ui/components';
 import { Avatar } from '../ui/Avatar';
@@ -12,21 +13,27 @@ import { AVATAR_IDS } from '../gymspace';
 import { getSquadMap, type SquadMapMember } from '../../lib/api/groups';
 
 const pageWrap = { padding: SPACE.xl, paddingTop: 56, paddingBottom: 40 } as const;
-const HALO_SIZE = 156;
+const HERO_HEIGHT = 200;
 
 export function ProfileView({ onSettings, onSquadMap }: { onSettings: () => void; onSquadMap: () => void }) {
   const { elo, streak, gymName, groupName, groupId, displayName, avatar, thisWeek, updateDisplayName, updateAvatar } = useAppState();
   const refresh = useRefreshControl();
   const sessionsDone = thisWeek.filter((d) => d.state === 'checked-in').length;
 
-  // Squad map "halo" peeking out from behind the avatar — a live preview of
-  // where the group's members train, fetched once per group.
+  // Squad map backdrop — a live preview of where the group's members train,
+  // rendered full-bleed behind the avatar, fetched once per group.
   const [squadMembers, setSquadMembers] = useState<SquadMapMember[]>([]);
   const loadSquad = useCallback(async () => {
     if (!groupId) { setSquadMembers([]); return; }
     try { setSquadMembers(await getSquadMap(groupId)); } catch { setSquadMembers([]); }
   }, [groupId]);
   useEffect(() => { loadSquad(); }, [loadSquad]);
+
+  const [heroWidth, setHeroWidth] = useState(0);
+  const onHeroLayout = (e: LayoutChangeEvent) => {
+    const w = e.nativeEvent.layout.width;
+    setHeroWidth((prev) => (Math.abs(prev - w) > 0.5 ? w : prev));
+  };
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(displayName);
@@ -54,79 +61,91 @@ export function ProfileView({ onSettings, onSquadMap }: { onSettings: () => void
         </FadeInItem>
 
         <FadeInItem delay={80} style={{ marginTop: 24 }}>
-          <Card padding={SPACE.xl} style={{ alignItems: 'center' }}>
-            <View style={styles.haloStage}>
-              <Pressable onPress={onSquadMap} style={styles.mapHalo}>
-                <SquadMap members={squadMembers} width={HALO_SIZE} height={HALO_SIZE} compact />
-              </Pressable>
-              <Pressable onPress={() => setPickerOpen((o) => !o)} style={styles.avatarWrap}>
-                <Avatar id={avatar} name={displayName} size={96} style={{ borderWidth: 2, borderColor: C.borderHi }} />
+          <Card padding={0} style={{ overflow: 'hidden' }}>
+            {/* Squad map — rendered full-bleed as the literal background of the
+                profile pic, like a cover photo. Tapping it opens the full map. */}
+            <Pressable onPress={onSquadMap} onLayout={onHeroLayout} style={styles.hero}>
+              {heroWidth > 0 && (
+                <View style={StyleSheet.absoluteFill} pointerEvents="none">
+                  <SquadMap members={squadMembers} width={heroWidth} height={HERO_HEIGHT} compact />
+                </View>
+              )}
+              <LinearGradient
+                colors={['transparent', 'rgba(42,35,31,0.94)']}
+                locations={[0.35, 1]}
+                style={StyleSheet.absoluteFill}
+                pointerEvents="none"
+              />
+              <View style={styles.heroBadge} pointerEvents="none">
+                <MaterialIcons name="map" size={12} color={C.ink} />
+                <Text style={styles.heroBadgeText}>Squad map</Text>
+              </View>
+              <Pressable onPress={(e) => { e.stopPropagation(); setPickerOpen((o) => !o); }} style={styles.avatarWrap}>
+                <Avatar id={avatar} name={displayName} size={96} style={{ borderWidth: 3, borderColor: C.card }} />
                 <View style={styles.editBadge}>
                   <MaterialIcons name={pickerOpen ? 'close' : 'edit'} size={14} color={C.primaryFg} />
                 </View>
               </Pressable>
-            </View>
-            <Pressable onPress={onSquadMap} style={styles.squadMapLink}>
-              <MaterialIcons name="map" size={13} color={C.mutedFg} />
-              <Text style={styles.squadMapLinkText}>Squad map</Text>
             </Pressable>
 
-            {pickerOpen && (
-              <View style={{ width: '100%', marginTop: 16 }}>
-                <Eyebrow style={{ marginBottom: 10, textAlign: 'center' }}>Choose your look</Eyebrow>
-                <View style={styles.avatarGrid}>
-                  {AVATAR_IDS.map((id) => {
-                    const selected = id === avatar;
-                    return (
-                      <Pressable key={id} onPress={() => { updateAvatar(id); setPickerOpen(false); }}>
-                        <Avatar
-                          id={id}
-                          name={displayName}
-                          size={54}
-                          style={{ borderWidth: 2, borderColor: selected ? C.accent : 'transparent' }}
-                        />
-                      </Pressable>
-                    );
-                  })}
+            <View style={{ alignItems: 'center', padding: SPACE.xl, paddingTop: 14 }}>
+              {pickerOpen && (
+                <View style={{ width: '100%', marginBottom: 16 }}>
+                  <Eyebrow style={{ marginBottom: 10, textAlign: 'center' }}>Choose your look</Eyebrow>
+                  <View style={styles.avatarGrid}>
+                    {AVATAR_IDS.map((id) => {
+                      const selected = id === avatar;
+                      return (
+                        <Pressable key={id} onPress={() => { updateAvatar(id); setPickerOpen(false); }}>
+                          <Avatar
+                            id={id}
+                            name={displayName}
+                            size={54}
+                            style={{ borderWidth: 2, borderColor: selected ? C.accent : 'transparent' }}
+                          />
+                        </Pressable>
+                      );
+                    })}
+                  </View>
                 </View>
-              </View>
-            )}
+              )}
 
-            {editing ? (
-              <View style={{ width: '100%', marginTop: 16, gap: 8 }}>
-                <TextInput
-                  value={draft}
-                  onChangeText={setDraft}
-                  placeholder="Your name"
-                  placeholderTextColor={C.mutedFg}
-                  autoFocus
-                  maxLength={48}
-                  style={styles.nameInput}
-                />
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  <Btn label="Save" size="md" disabled={!draft.trim()} onPress={save} style={{ flex: 1 }} />
-                  <Btn label="Cancel" variant="ghost" size="md" onPress={() => { setEditing(false); setDraft(displayName); }} style={{ flex: 1 }} />
+              {editing ? (
+                <View style={{ width: '100%', gap: 8 }}>
+                  <TextInput
+                    value={draft}
+                    onChangeText={setDraft}
+                    placeholder="Your name"
+                    placeholderTextColor={C.mutedFg}
+                    autoFocus
+                    maxLength={48}
+                    style={styles.nameInput}
+                  />
+                  <View style={{ flexDirection: 'row', gap: 8 }}>
+                    <Btn label="Save" size="md" disabled={!draft.trim()} onPress={save} style={{ flex: 1 }} />
+                    <Btn label="Cancel" variant="ghost" size="md" onPress={() => { setEditing(false); setDraft(displayName); }} style={{ flex: 1 }} />
+                  </View>
                 </View>
-              </View>
-            ) : (
-              <Pressable onPress={() => setEditing(true)} style={{ alignItems: 'center', marginTop: 16 }}>
-                <View style={styles.rowGap}>
-                  <Text style={styles.name}>{displayName}</Text>
-                  <MaterialIcons name="edit" size={16} color={C.mutedFg} />
-                </View>
-              </Pressable>
-            )}
+              ) : (
+                <Pressable onPress={() => setEditing(true)} style={{ alignItems: 'center' }}>
+                  <View style={styles.rowGap}>
+                    <Text style={styles.name}>{displayName}</Text>
+                    <MaterialIcons name="edit" size={16} color={C.mutedFg} />
+                  </View>
+                </Pressable>
+              )}
 
-            <View style={{ marginTop: 8 }}>
-              <Chip text={tierForElo(elo)} tone="accent" icon="emoji-events" />
+              <View style={{ marginTop: 8 }}>
+                <Chip text={tierForElo(elo)} tone="accent" icon="emoji-events" />
+              </View>
+
+              {!!gymName && (
+                <View style={[styles.rowGap, { marginTop: 10 }]}>
+                  <MaterialIcons name="place" size={14} color={C.mutedFg} />
+                  <Sub>{groupName ? `${groupName} · ${gymName}` : gymName}</Sub>
+                </View>
+              )}
             </View>
-
-            {!!gymName && (
-              <View style={[styles.rowGap, { marginTop: 10 }]}>
-                <MaterialIcons name="place" size={14} color={C.mutedFg} />
-                <Sub>{groupName ? `${groupName} · ${gymName}` : gymName}</Sub>
-              </View>
-            )}
           </Card>
         </FadeInItem>
 
@@ -161,21 +180,20 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.bg },
   rowGap: { flexDirection: 'row', alignItems: 'center', gap: 6 },
 
-  haloStage: {
-    width: HALO_SIZE, height: HALO_SIZE,
+  hero: {
+    height: HERO_HEIGHT,
     alignItems: 'center', justifyContent: 'center',
-  },
-  mapHalo: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: HALO_SIZE / 2,
     overflow: 'hidden',
+  },
+  heroBadge: {
+    position: 'absolute', top: 14, right: 14,
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: 10, paddingVertical: 6,
+    borderRadius: RADIUS.pill,
+    backgroundColor: 'rgba(27,23,20,0.55)',
     borderWidth: 1, borderColor: C.borderHi,
   },
-  squadMapLink: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    marginTop: 12,
-  },
-  squadMapLinkText: { fontFamily: FONT.medium, fontSize: 12, color: C.mutedFg },
+  heroBadgeText: { fontFamily: FONT.semibold, fontSize: 11, color: C.ink },
 
   avatarWrap: { position: 'relative' },
   editBadge: {
