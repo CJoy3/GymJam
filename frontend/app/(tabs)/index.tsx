@@ -54,7 +54,7 @@ export default function GymJamApp() {
       case 'pot-tracker':  return <PotTracker onBack={() => setScreen('home')} />;
       case 'progress':     return <Progress onGymSpace={() => setScreen('gym-space')} />;
       case 'gym-space':    return <GymSpace onBack={() => setScreen('progress')} />;
-      case 'profile':      return <ProfileView onBrowse={() => setScreen('gym-browser')} />;
+      case 'profile':      return <ProfileView />;
       default:             return <Home onCheckIn={() => setScreen('check-in')} onPlan={() => setScreen('plan-week')} onPot={() => setScreen('pot-tracker')} onGroup={() => setScreen('group')} />;
     }
   };
