@@ -95,6 +95,10 @@ def get_by_device_id(device_id: str) -> dict:
 def update_profile(user_id: str, patch: dict) -> dict:
     if not patch:
         return get_by_id(user_id)
+    # Stamp when a fresh location fix lands so the squad map can age out stale ones.
+    if "latitude" in patch or "longitude" in patch:
+        from datetime import datetime, timezone
+        patch = {**patch, "location_updated_at": datetime.now(timezone.utc).isoformat()}
     sb = get_supabase()
     res = sb.table("users").update(patch).eq("id", user_id).execute()
     if not res.data:

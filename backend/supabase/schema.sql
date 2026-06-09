@@ -27,12 +27,22 @@ create table if not exists users (
     elo integer not null default 1000 check (elo >= 0),
     streak integer not null default 0 check (streak >= 0),
     gym_id uuid references gyms(id) on delete set null,
+    -- Opt-in live location sharing (Snap-Maps style); broadcast to the user's
+    -- group only while share_location is true and the fix is recent.
+    share_location boolean not null default false,
+    latitude double precision,
+    longitude double precision,
+    location_updated_at timestamptz,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now()
 );
 
--- Additive migration for existing deployments.
+-- Additive migrations for existing deployments.
 alter table users add column if not exists avatar text;
+alter table users add column if not exists share_location boolean not null default false;
+alter table users add column if not exists latitude double precision;
+alter table users add column if not exists longitude double precision;
+alter table users add column if not exists location_updated_at timestamptz;
 
 -- Auth-based account migration: link Supabase auth.users to app users.
 alter table users add column if not exists auth_user_id uuid unique;

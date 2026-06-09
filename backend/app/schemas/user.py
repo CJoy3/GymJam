@@ -15,6 +15,10 @@ class UserUpdate(BaseModel):
     elo: Optional[int] = Field(default=None, ge=0)
     # Mocked wallet balance, in pence. Dev/testing only.
     money: Optional[int] = Field(default=None, ge=0)
+    # Opt-in live location sharing.
+    share_location: Optional[bool] = None
+    latitude: Optional[float] = Field(default=None, ge=-90, le=90)
+    longitude: Optional[float] = Field(default=None, ge=-180, le=180)
 
 
 class TagUpdate(BaseModel):
@@ -35,5 +39,8 @@ class User(BaseModel):
     # recent Sunday money-pot payout.
     money: int = 0
     money_week_change: int = 0
+    share_location: bool = False
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     created_at: datetime
     updated_at: datetime

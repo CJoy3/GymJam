@@ -76,6 +76,8 @@ class SquadMapMember(BaseModel):
     gym_name: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+    # True when the coordinates are a live shared fix rather than the home gym.
+    is_live: bool = False
 
 
 class GroupMemberDetail(BaseModel):

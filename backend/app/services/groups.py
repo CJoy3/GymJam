@@ -370,19 +370,41 @@ def squad_map(group_id: str, current_user_id: str) -> list[dict]:
     the Squad Map. Members without a home gym (or an un-geocoded gym) are
     still returned with null coordinates so the client can list them
     separately rather than dropping them silently."""
+    from datetime import datetime, timedelta, timezone
+
     sb = get_supabase()
+    # `users(*)` so this still works on deployments that haven't run the
+    # location migration yet (the share_location/latitude columns just come back
+    # absent and we fall back to the home gym).
     memberships = (
         sb.table("group_memberships")
-        .select("user_id, users(display_name, avatar, elo, gym_id, gyms(id, name, latitude, longitude))")
+        .select("user_id, users(*, gyms(id, name, latitude, longitude))")
         .eq("group_id", group_id)
         .order("joined_at", desc=False)
         .execute()
     ).data or []
 
+    now = datetime.now(timezone.utc)
+    LIVE_TTL = timedelta(minutes=30)  # a shared fix older than this falls back to the gym
+
+    def _fresh(ts: object) -> bool:
+        if not ts:
+            return False
+        try:
+            return (now - datetime.fromisoformat(str(ts).replace("Z", "+00:00"))) < LIVE_TTL
+        except (ValueError, TypeError):
+            return False
+
     out: list[dict] = []
     for m in memberships:
         u = m.get("users") or {}
         gym = u.get("gyms") or {}
+        live = (
+            bool(u.get("share_location"))
+            and u.get("latitude") is not None
+            and u.get("longitude") is not None
+            and _fresh(u.get("location_updated_at"))
+        )
         out.append({
             "user_id": m["user_id"],
             "display_name": u.get("display_name") or "Anonymous",
@@ -391,8 +413,9 @@ def squad_map(group_id: str, current_user_id: str) -> list[dict]:
             "is_me": m["user_id"] == current_user_id,
             "gym_id": gym.get("id"),
             "gym_name": gym.get("name"),
-            "latitude": gym.get("latitude"),
-            "longitude": gym.get("longitude"),
+            "latitude": u.get("latitude") if live else gym.get("latitude"),
+            "longitude": u.get("longitude") if live else gym.get("longitude"),
+            "is_live": live,
         })
     return out
 
