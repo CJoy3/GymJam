@@ -9,7 +9,7 @@ import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import { LinearGradient } from 'expo-linear-gradient';
 
-import { supabase } from '../../lib/supabase';
+import { ensureSupabase } from '../../lib/supabase';
 import { C, FONT, RADIUS, SPACE } from '../theme/tokens';
 import { BlobBackground } from '../ui/Blob';
 import { showToast } from '../ui/toast';
@@ -27,8 +27,9 @@ export function LoginScreen() {
   const signInWithGoogle = async () => {
     setLoading(true);
     try {
+      const sb = await ensureSupabase();
       const redirectTo = Linking.createURL('auth/callback');
-      const { data, error } = await supabase.auth.signInWithOAuth({
+      const { data, error } = await sb.auth.signInWithOAuth({
         provider: 'google',
         options: { redirectTo, skipBrowserRedirect: true },
       });
@@ -41,7 +42,7 @@ export function LoginScreen() {
         const access_token = params.get('access_token');
         const refresh_token = params.get('refresh_token');
         if (access_token && refresh_token) {
-          await supabase.auth.setSession({ access_token, refresh_token });
+          await sb.auth.setSession({ access_token, refresh_token });
         }
       }
     } catch (e: unknown) {
@@ -54,6 +55,7 @@ export function LoginScreen() {
   const signInWithApple = async () => {
     setLoading(true);
     try {
+      const sb = await ensureSupabase();
       const credential = await AppleAuthentication.signInAsync({
         requestedScopes: [
           AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
@@ -61,7 +63,7 @@ export function LoginScreen() {
         ],
       });
       if (!credential.identityToken) throw new Error('No identity token from Apple');
-      const { error } = await supabase.auth.signInWithIdToken({
+      const { error } = await sb.auth.signInWithIdToken({
         provider: 'apple',
         token: credential.identityToken,
       });
@@ -83,7 +85,8 @@ export function LoginScreen() {
     }
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+      const sb = await ensureSupabase();
+      const { error } = await sb.auth.signInWithPassword({ email: email.trim(), password });
       if (error) throw error;
     } catch (e: unknown) {
       showToast(e instanceof Error ? e.message : 'Could not sign in', 'error');
@@ -103,7 +106,8 @@ export function LoginScreen() {
     }
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signUp({ email: email.trim(), password });
+      const sb = await ensureSupabase();
+      const { error } = await sb.auth.signUp({ email: email.trim(), password });
       if (error) throw error;
       showToast('Check your email to confirm your account', 'success');
     } catch (e: unknown) {

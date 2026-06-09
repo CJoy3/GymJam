@@ -14,7 +14,7 @@ import { useAppState } from '../state/AppState';
 import { AVATAR_IDS } from '../gymspace';
 import { getSquadMap, type SquadMapMember } from '../../lib/api/groups';
 import { checkTagAvailable } from '../../lib/api/users';
-import { supabase } from '../../lib/supabase';
+import { ensureSupabase } from '../../lib/supabase';
 
 const pageWrap = { padding: SPACE.xl, paddingTop: 56, paddingBottom: 40 } as const;
 
@@ -120,7 +120,8 @@ export function ProfileView({ onSettings, onSquadMap }: { onSettings: () => void
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    const sb = await ensureSupabase();
+    await sb.auth.signOut();
   };
 
   return (

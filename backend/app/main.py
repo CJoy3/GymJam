@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.router import api_router
@@ -33,6 +34,16 @@ async def _sync_dev_clock(request: Request, call_next):
 @app.get("/")
 def read_root():
     return {"message": f"Welcome to {settings.PROJECT_NAME}"}
+
+
+@app.get("/config")
+def get_client_config():
+    """Public endpoint — returns the Supabase URL and anon key for the frontend.
+    The anon key is safe to expose publicly (it is controlled by Row Level Security)."""
+    return {
+        "supabase_url": os.environ.get("SUPABASE_URL", ""),
+        "supabase_anon_key": os.environ.get("SUPABASE_ANON_KEY", ""),
+    }
 
 
 app.include_router(api_router, prefix=settings.API_V1_STR)

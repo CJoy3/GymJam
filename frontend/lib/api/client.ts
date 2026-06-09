@@ -1,5 +1,5 @@
 import { API_BASE_URL } from '../config';
-import { supabase } from '../supabase';
+import { ensureSupabase } from '../supabase';
 
 export class ApiError extends Error {
   status: number;
@@ -27,7 +27,8 @@ async function request<T>(
     ...(extra ?? {}),
   };
   if (auth) {
-    const { data: { session } } = await supabase.auth.getSession();
+    const sb = await ensureSupabase();
+    const { data: { session } } = await sb.auth.getSession();
     if (session?.access_token) {
       headers['Authorization'] = `Bearer ${session.access_token}`;
     }

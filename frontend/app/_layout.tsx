@@ -14,7 +14,7 @@ import {
 import 'react-native-reanimated';
 import type { Session } from '@supabase/supabase-js';
 
-import { supabase } from '../lib/supabase';
+import { ensureSupabase } from '../lib/supabase';
 import { AppStateProvider } from '../src/state/AppState';
 import { ToastProvider } from '../src/ui/toast';
 import { LoginScreen } from '../src/screens/Login';
@@ -38,13 +38,19 @@ export default function RootLayout() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session ?? null);
+    let unsub: (() => void) | null = null;
+    ensureSupabase().then((sb) => {
+      sb.auth.getSession().then(({ data }) => {
+        setSession(data.session ?? null);
+      });
+      const { data: { subscription } } = sb.auth.onAuthStateChange((_event, sess) => {
+        setSession(sess ?? null);
+      });
+      unsub = () => subscription.unsubscribe();
+    }).catch(() => {
+      setSession(null);
     });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, sess) => {
-      setSession(sess ?? null);
-    });
-    return () => subscription.unsubscribe();
+    return () => { unsub?.(); };
   }, []);
 
   const ready = fontsLoaded && session !== undefined;
