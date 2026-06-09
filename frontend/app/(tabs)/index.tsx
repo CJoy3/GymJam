@@ -6,7 +6,7 @@ import Animated, { Easing, FadeIn } from 'react-native-reanimated';
 
 import {
   Onboarding, Home, CheckIn, PlanWeek, GroupView, NoGroup,
-  GymBrowser, Leaderboard, PotTracker, Progress, GymSpace, ProfileView, SquadMapScreen, DevSettings,
+  GymBrowser, Leaderboard, PotTracker, Progress, GymSpace, ProfileView, SquadMapScreen, AppSettings,
   AccountSetup,
 } from '../../src/screens';
 import { useAppState } from '../../src/state/AppState';
@@ -18,17 +18,23 @@ const EASE_OUT = Easing.out(Easing.cubic);
 type Screen =
   | 'account-setup' | 'onboarding' | 'home' | 'check-in' | 'plan-week' | 'group'
   | 'gym-browser' | 'leaderboard' | 'pot-tracker' | 'progress' | 'gym-space'
-  | 'profile' | 'squad-map' | 'dev-settings';
+  | 'profile' | 'squad-map' | 'settings';
 
 export default function GymJamApp() {
   const { ready, gymId, groupId, tag } = useAppState();
   const [screen, setScreen] = useState<Screen | null>(null);
 
   useEffect(() => {
-    if (!ready || screen !== null) return;
-    // New accounts: need tag + gym before accessing the app
-    if (!tag || !gymId) setScreen('account-setup');
-    else if (!groupId) setScreen('gym-browser');
+    if (!ready) return;
+    // Always re-assert account-setup when onboarding is incomplete, even if stale
+    // cache already set a screen — this handles the race where cache fires before
+    // bootstrap returns the real (fresh) user record.
+    if (!tag || !gymId) {
+      if (screen !== 'account-setup') setScreen('account-setup');
+      return;
+    }
+    if (screen !== null) return;
+    if (!groupId) setScreen('gym-browser');
     else setScreen('home');
   }, [ready, gymId, groupId, tag, screen]);
 
@@ -59,14 +65,14 @@ export default function GymJamApp() {
       case 'pot-tracker':  return <PotTracker onBack={() => setScreen('home')} />;
       case 'progress':     return <Progress onGymSpace={() => setScreen('gym-space')} />;
       case 'gym-space':    return <GymSpace onBack={() => setScreen('progress')} />;
-      case 'profile':      return <ProfileView onSettings={() => setScreen('dev-settings')} onSquadMap={() => setScreen('squad-map')} />;
+      case 'profile':      return <ProfileView onSettings={() => setScreen('settings')} onSquadMap={() => setScreen('squad-map')} />;
       case 'squad-map':    return <SquadMapScreen onBack={() => setScreen('profile')} />;
-      case 'dev-settings': return <DevSettings onBack={() => setScreen('profile')} />;
+      case 'settings': return <AppSettings onBack={() => setScreen('profile')} />;
       default:             return <Home onCheckIn={() => setScreen('check-in')} onPlan={() => setScreen('plan-week')} onPot={() => setScreen('pot-tracker')} onGroup={() => setScreen('group')} />;
     }
   };
 
-  const showTabs = screen !== 'account-setup' && screen !== 'onboarding' && screen !== 'check-in' && screen !== 'plan-week' && screen !== 'dev-settings';
+  const showTabs = screen !== 'account-setup' && screen !== 'onboarding' && screen !== 'check-in' && screen !== 'plan-week' && screen !== 'settings';
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>

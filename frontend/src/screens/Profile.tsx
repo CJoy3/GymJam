@@ -1,42 +1,31 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
+  Pressable, ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { C, FONT, RADIUS, SPACE, tierForElo } from '../theme/tokens';
-import { Btn, Card, Chip, Eyebrow, FadeInItem, H1, H3, Stat, Sub } from '../ui/components';
+import { Btn, Card, Chip, Eyebrow, FadeInItem, H1, Stat, Sub } from '../ui/components';
 import { Avatar } from '../ui/Avatar';
 import { BlobBackground } from '../ui/Blob';
 import { ProfileMap, type Presence } from '../ui/ProfileMap';
 import { useRefreshControl } from '../ui/useRefresh';
-import { showToast } from '../ui/toast';
 import { useAppState } from '../state/AppState';
 import { AVATAR_IDS } from '../gymspace';
 import { getSquadMap, type SquadMapMember } from '../../lib/api/groups';
-import { checkTagAvailable } from '../../lib/api/users';
 import { ensureSupabase } from '../../lib/supabase';
+import { clearCache } from '../../lib/cache';
 
 const pageWrap = { padding: SPACE.xl, paddingTop: 56, paddingBottom: 40 } as const;
 
-function useDebounce<T>(value: T, delay: number): T {
-  const [d, setD] = useState(value);
-  useEffect(() => {
-    const t = setTimeout(() => setD(value), delay);
-    return () => clearTimeout(t);
-  }, [value, delay]);
-  return d;
-}
-
 export function ProfileView({ onSettings, onSquadMap }: { onSettings: () => void; onSquadMap: () => void }) {
   const {
-    elo, streak, gymName, gymId, gyms, groupName, groupId, displayName, avatar,
+    elo, streak, gymName, groupName, groupId, displayName, avatar,
     thisWeek, todayDow, groupMembers, money, moneyWeekChange,
-    tag, tagChanges, updateDisplayName, updateAvatar, updateTag, setGym,
+    tag, updateDisplayName, updateAvatar,
   } = useAppState();
   const refresh = useRefreshControl();
   const sessionsDone = thisWeek.filter((d) => d.state === 'checked-in').length;
 
-  // Live presence for the map halos, derived from this week's check-ins.
   const statusById: Record<string, Presence> = {};
   for (const m of groupMembers) {
     const s = m.thisWeek[todayDow]?.state;
@@ -61,65 +50,8 @@ export function ProfileView({ onSettings, onSquadMap }: { onSettings: () => void
     setEditing(false);
   };
 
-  // --- Tag editing ---
-  const canChangeTag = tagChanges === 0;
-  const [editingTag, setEditingTag] = useState(false);
-  const [tagDraft, setTagDraft] = useState('');
-  const [tagStatus, setTagStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid'>('idle');
-  const [savingTag, setSavingTag] = useState(false);
-  const abortRef = React.useRef(0);
-  const debouncedTag = useDebounce(tagDraft, 400);
-
-  useEffect(() => {
-    if (!editingTag) return;
-    const clean = debouncedTag.trim();
-    if (!clean) { setTagStatus('idle'); return; }
-    if (!/^[a-zA-Z0-9_-]{3,20}$/.test(clean)) { setTagStatus('invalid'); return; }
-    const id = ++abortRef.current;
-    setTagStatus('checking');
-    checkTagAvailable(clean).then((r) => {
-      if (id !== abortRef.current) return;
-      setTagStatus(r.available ? 'available' : 'taken');
-    }).catch(() => {
-      if (id !== abortRef.current) return;
-      setTagStatus('idle');
-    });
-  }, [debouncedTag, editingTag]);
-
-  const openTagEdit = () => {
-    setTagDraft(tag ?? '');
-    setTagStatus('idle');
-    setEditingTag(true);
-  };
-
-  const saveTag = async () => {
-    if (tagStatus !== 'available') return;
-    setSavingTag(true);
-    try {
-      await updateTag(tagDraft.trim().toLowerCase());
-      setEditingTag(false);
-      showToast('Tag updated', 'success');
-    } catch { /* error shown by updateTag */ } finally {
-      setSavingTag(false);
-    }
-  };
-
-  // --- Gym editing ---
-  const [editingGym, setEditingGym] = useState(false);
-  const [savingGym, setSavingGym] = useState(false);
-
-  const changeGym = async (id: string) => {
-    setSavingGym(true);
-    try {
-      await setGym(id);
-      setEditingGym(false);
-      showToast('Home gym updated', 'success');
-    } catch { /* error shown inside setGym */ } finally {
-      setSavingGym(false);
-    }
-  };
-
   const signOut = async () => {
+    clearCache('snapshot');
     const sb = await ensureSupabase();
     await sb.auth.signOut();
   };
@@ -141,8 +73,6 @@ export function ProfileView({ onSettings, onSquadMap }: { onSettings: () => void
         {/* Profile hero card */}
         <FadeInItem delay={80} style={{ marginTop: 24 }}>
           <Card padding={0} style={{ overflow: 'hidden' }}>
-            {/* Map rectangle behind the profile image — squad members pinned at
-                their gyms with check-in status halos. */}
             <View style={styles.mapBanner}>
               <Pressable onPress={onSquadMap} style={StyleSheet.absoluteFill}>
                 <ProfileMap members={squadMembers} statusById={statusById} />
@@ -205,9 +135,7 @@ export function ProfileView({ onSettings, onSquadMap }: { onSettings: () => void
                 </Pressable>
               )}
 
-              {tag && !editingTag && (
-                <Text style={styles.tagDisplay}>#{tag}</Text>
-              )}
+              {tag && <Text style={styles.tagDisplay}>#{tag}</Text>}
 
               <View style={{ marginTop: 8 }}>
                 <Chip text={tierForElo(elo)} tone="accent" icon="emoji-events" />
@@ -237,133 +165,15 @@ export function ProfileView({ onSettings, onSquadMap }: { onSettings: () => void
           </View>
         </FadeInItem>
 
-        {/* Tag section */}
+        {/* Wallet */}
         <FadeInItem delay={220} style={{ marginTop: 22 }}>
           <Card padding={SPACE.xl}>
-            <View style={[styles.rowGap, { marginBottom: 14 }]}>
-              <View style={[styles.iconChip, { backgroundColor: C.accentSoft }]}>
-                <MaterialIcons name="tag" size={18} color={C.accent} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <H3>Your tag</H3>
-                <Sub style={{ marginTop: 2 }}>Unique handle visible to your group</Sub>
-              </View>
-              {!editingTag && canChangeTag && (
-                <Pressable onPress={openTagEdit} style={styles.smallEditBtn}>
-                  <MaterialIcons name="edit" size={15} color={C.mutedFg} />
-                </Pressable>
-              )}
-            </View>
-
-            {editingTag ? (
-              <View style={{ gap: 10 }}>
-                <View style={styles.tagInputRow}>
-                  <Text style={styles.tagPrefix}>#</Text>
-                  <TextInput
-                    style={styles.tagInput}
-                    value={tagDraft}
-                    onChangeText={(t) => {
-                      setTagDraft(t.toLowerCase().replace(/[^a-z0-9_-]/g, ''));
-                      setTagStatus('idle');
-                    }}
-                    placeholder="newhandle"
-                    placeholderTextColor={C.mutedFg}
-                    autoCapitalize="none"
-                    autoFocus
-                    maxLength={20}
-                  />
-                  {tagStatus === 'checking' && <ActivityIndicator size="small" color={C.mutedFg} style={{ marginRight: 10 }} />}
-                  {tagStatus === 'available' && <MaterialIcons name="check-circle" size={20} color={C.success} style={{ marginRight: 10 }} />}
-                  {tagStatus === 'taken' && <MaterialIcons name="cancel" size={20} color={C.accent} style={{ marginRight: 10 }} />}
-                </View>
-                {tagStatus === 'available' && <Sub style={{ color: C.success }}>#{tagDraft} is available</Sub>}
-                {tagStatus === 'taken' && <Sub style={{ color: C.accent }}>#{tagDraft} is already taken</Sub>}
-                {tagStatus === 'invalid' && <Sub>3–20 characters, letters/numbers/_/- only</Sub>}
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  <Btn
-                    label={savingTag ? 'Saving…' : 'Save tag'}
-                    size="md"
-                    loading={savingTag}
-                    disabled={tagStatus !== 'available' || savingTag}
-                    onPress={saveTag}
-                    style={{ flex: 1 }}
-                  />
-                  <Btn label="Cancel" variant="ghost" size="md" onPress={() => setEditingTag(false)} style={{ flex: 1 }} />
-                </View>
-                <Sub style={{ color: C.mutedFg, fontSize: 11, marginTop: 2 }}>
-                  You can only change your tag once. This is your last change.
-                </Sub>
-              </View>
-            ) : (
-              <View>
-                <Text style={styles.tagValue}>#{tag ?? '—'}</Text>
-                {!canChangeTag && (
-                  <View style={[styles.rowGap, { marginTop: 8 }]}>
-                    <MaterialIcons name="lock" size={13} color={C.mutedFg} />
-                    <Sub style={{ fontSize: 12 }}>Tag cannot be changed again</Sub>
-                  </View>
-                )}
-                {canChangeTag && (
-                  <Sub style={{ marginTop: 6, fontSize: 12 }}>You have 1 tag change remaining.</Sub>
-                )}
-              </View>
-            )}
-          </Card>
-        </FadeInItem>
-
-        {/* Home gym section */}
-        <FadeInItem delay={260} style={{ marginTop: 14 }}>
-          <Card padding={SPACE.xl}>
-            <View style={[styles.rowGap, { marginBottom: 14 }]}>
-              <View style={[styles.iconChip, { backgroundColor: C.accentSoft }]}>
-                <MaterialIcons name="place" size={18} color={C.accent} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <H3>Home gym</H3>
-                <Sub style={{ marginTop: 2 }}>Where you train</Sub>
-              </View>
-              {!editingGym && (
-                <Pressable onPress={() => setEditingGym(true)} style={styles.smallEditBtn}>
-                  <MaterialIcons name="edit" size={15} color={C.mutedFg} />
-                </Pressable>
-              )}
-            </View>
-
-            {editingGym ? (
-              <View style={{ gap: 10 }}>
-                {gyms.map((g) => {
-                  const on = gymId === g.id;
-                  return (
-                    <Pressable
-                      key={g.id}
-                      onPress={() => changeGym(g.id)}
-                      disabled={savingGym}
-                      style={[styles.gymOption, on && styles.gymOptionSelected]}
-                    >
-                      <MaterialIcons name="place" size={18} color={on ? C.primaryFg : C.mutedFg} />
-                      <Text style={[styles.gymOptionText, on && { color: C.primaryFg }]}>{g.name}</Text>
-                      {on && <MaterialIcons name="check" size={18} color={C.primaryFg} style={{ marginLeft: 'auto' }} />}
-                      {savingGym && on && <ActivityIndicator size="small" color={C.primaryFg} />}
-                    </Pressable>
-                  );
-                })}
-                <Btn label="Cancel" variant="ghost" size="md" onPress={() => setEditingGym(false)} />
-              </View>
-            ) : (
-              <Text style={styles.gymValue}>{gymName || 'No gym set'}</Text>
-            )}
-          </Card>
-        </FadeInItem>
-
-        {/* Wallet */}
-        <FadeInItem delay={290} style={{ marginTop: 22 }}>
-          <Card padding={SPACE.xl}>
             <View style={[styles.rowGap, { marginBottom: 16 }]}>
-              <View style={[styles.iconChip, { backgroundColor: C.accentSoft }]}>
+              <View style={styles.iconChip}>
                 <MaterialIcons name="account-balance-wallet" size={18} color={C.accent} />
               </View>
               <View style={{ flex: 1 }}>
-                <H3>Wallet</H3>
+                <Text style={styles.sectionTitle}>Wallet</Text>
                 <Sub style={{ marginTop: 2 }}>Money-pot balance</Sub>
               </View>
             </View>
@@ -381,12 +191,7 @@ export function ProfileView({ onSettings, onSquadMap }: { onSettings: () => void
                     size={16}
                     color={moneyWeekChange > 0 ? C.success : moneyWeekChange < 0 ? C.danger : C.mutedFg}
                   />
-                  <Text
-                    style={[
-                      styles.walletChange,
-                      { color: moneyWeekChange > 0 ? C.success : moneyWeekChange < 0 ? C.danger : C.mutedFg },
-                    ]}
-                  >
+                  <Text style={[styles.walletChange, { color: moneyWeekChange > 0 ? C.success : moneyWeekChange < 0 ? C.danger : C.mutedFg }]}>
                     {moneyWeekChange > 0 ? '+' : moneyWeekChange < 0 ? '−' : ''}£{(Math.abs(moneyWeekChange) / 100).toFixed(2)}
                   </Text>
                 </View>
@@ -396,7 +201,7 @@ export function ProfileView({ onSettings, onSquadMap }: { onSettings: () => void
         </FadeInItem>
 
         {/* Sign out */}
-        <FadeInItem delay={320} style={{ marginTop: 22 }}>
+        <FadeInItem delay={260} style={{ marginTop: 22 }}>
           <Pressable onPress={signOut} style={styles.signOutBtn}>
             <MaterialIcons name="logout" size={18} color={C.danger} />
             <Text style={styles.signOutText}>Sign out</Text>
@@ -410,32 +215,17 @@ export function ProfileView({ onSettings, onSquadMap }: { onSettings: () => void
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.bg },
   rowGap: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  iconChip: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  iconChip: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(199,160,110,0.15)', alignItems: 'center', justifyContent: 'center' },
 
-  mapBanner: {
-    height: 116,
-    width: '100%',
-    backgroundColor: C.bgSoft,
-  },
-  avatarOnMap: {
-    position: 'absolute',
-    bottom: -36,
-    left: '50%',
-    marginLeft: -36,
-  },
+  mapBanner: { height: 116, width: '100%', backgroundColor: C.bgSoft },
+  avatarOnMap: { position: 'absolute', bottom: -36, left: '50%', marginLeft: -36 },
   expandBtn: {
     position: 'absolute', top: 10, right: 10,
     width: 30, height: 30, borderRadius: 15,
     backgroundColor: 'rgba(242,229,210,0.88)',
     alignItems: 'center', justifyContent: 'center',
   },
-  heroBody: {
-    paddingTop: 46,
-    paddingHorizontal: SPACE.xl,
-    paddingBottom: SPACE.lg,
-    alignItems: 'center',
-  },
-
+  heroBody: { paddingTop: 46, paddingHorizontal: SPACE.xl, paddingBottom: SPACE.lg, alignItems: 'center' },
   editBadge: {
     position: 'absolute', right: -2, bottom: -2,
     width: 28, height: 28, borderRadius: 14,
@@ -456,29 +246,7 @@ const styles = StyleSheet.create({
     color: C.ink, fontFamily: FONT.semibold, fontSize: 16, textAlign: 'center',
   },
 
-  smallEditBtn: {
-    width: 34, height: 34, borderRadius: 17,
-    backgroundColor: C.bgSoft, borderWidth: 1, borderColor: C.borderHi,
-    alignItems: 'center', justifyContent: 'center',
-  },
-
-  tagInputRow: {
-    flexDirection: 'row', alignItems: 'center', height: 48,
-    borderRadius: RADIUS.md, backgroundColor: C.bgSoft,
-    borderWidth: 1, borderColor: C.borderHi,
-  },
-  tagPrefix: { fontFamily: FONT.bold, fontSize: 16, color: C.mutedFg, paddingLeft: 12, paddingRight: 2 },
-  tagInput: { flex: 1, height: '100%', fontFamily: FONT.semibold, fontSize: 15, color: C.ink },
-  tagValue: { fontFamily: FONT.bold, fontSize: 18, color: C.ink, letterSpacing: -0.2 },
-
-  gymOption: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    padding: 14, borderRadius: RADIUS.md,
-    backgroundColor: C.bgSoft, borderWidth: 1, borderColor: C.borderHi,
-  },
-  gymOptionSelected: { backgroundColor: C.primary, borderColor: C.primary },
-  gymOptionText: { fontFamily: FONT.semibold, fontSize: 15, color: C.ink, flex: 1 },
-  gymValue: { fontFamily: FONT.bold, fontSize: 18, color: C.ink, letterSpacing: -0.2 },
+  sectionTitle: { fontFamily: FONT.bold, fontSize: 15, color: C.ink },
 
   walletRow: { flexDirection: 'row', alignItems: 'center' },
   walletDivider: { width: 1, alignSelf: 'stretch', backgroundColor: C.border, marginHorizontal: SPACE.lg },
