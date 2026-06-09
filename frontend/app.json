@@ -11,9 +11,6 @@
       "bundleIdentifier": "com.gymjam.drp",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
-      },
-      "config": {
-        "googleMapsApiKey": "AIzaSyB3RZqAciIsFQuYWVPX0V88pGhEtzLnPZQ"
       }
     },
     "android": {
@@ -24,12 +21,7 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false,
-      "config": {
-        "googleMaps": {
-          "apiKey": "AIzaSyB3RZqAciIsFQuYWVPX0V88pGhEtzLnPZQ"
-        }
-      }
+      "predictiveBackGestureEnabled": false
     },
     "web": {
       "favicon": "./assets/favicon.png",
