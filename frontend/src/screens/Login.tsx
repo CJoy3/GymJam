@@ -49,9 +49,12 @@ export function LoginScreen() {
     setLoading(true);
     try {
       const sb = await ensureSupabase();
-      const { error } = await sb.auth.signUp({ email: email.trim(), password });
+      const { data, error } = await sb.auth.signUp({ email: email.trim(), password });
       if (error) throw error;
-      showToast('Check your email to confirm your account', 'success');
+      // If email confirmation is enabled a session won't be returned yet.
+      if (!data.session) {
+        showToast('Check your email to confirm your account', 'success');
+      }
     } catch (e: unknown) {
       showToast(e instanceof Error ? e.message : 'Could not create account', 'error');
     } finally {
