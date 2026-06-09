@@ -2,8 +2,8 @@ import React from 'react';
 import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 
-import { C, SPACE, tierForElo } from '../theme/tokens';
-import { Btn, Card, Chip, Eyebrow, FadeInItem, H1, Ring, Stat, Sub } from '../ui/components';
+import { C, SPACE } from '../theme/tokens';
+import { Btn, Card, Chip, Eyebrow, FadeInItem, H1, Ring, Sub } from '../ui/components';
 import { DayPicker } from '../ui/DayPicker';
 import { BlobBackground } from '../ui/Blob';
 import { useRefreshControl } from '../ui/useRefresh';
@@ -14,10 +14,11 @@ import { LABELS, pageWrap, styles } from './_shared';
 
 export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => void; onPlan: () => void; onPot: () => void; onGroup: () => void }) {
   const {
-    thisWeek, nextWeek, elo, streak, pot, potCurrent, checkInToday, displayName,
-    todayDow, thisWeekIsPractice, setThisWeekDays,
+    thisWeek, nextWeek, pot, potCurrent, checkInToday, displayName,
+    todayDow, thisWeekIsPractice, setThisWeekDays, stakeType, groupId,
     rescheduleMissedDay,
   } = useAppState();
+  const isMoney = stakeType === 'money';
   const refresh = useRefreshControl();
   const done = thisWeek.filter((d) => d.state === 'checked-in').length;
   const pledged = thisWeek.filter((d) => d.state === 'checked-in' || d.state === 'planned' || d.state === 'locked').length;
@@ -75,14 +76,6 @@ export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => v
           <H1 style={{ marginTop: 6 }}>It's your time</H1>
         </FadeInItem>
 
-        {streak > 0 && (
-          <FadeInItem delay={60}>
-            <View style={{ alignSelf: 'flex-start', marginTop: 12 }}>
-              <Chip text={`${streak} week streak`} tone="accent" icon="local-fire-department" />
-            </View>
-          </FadeInItem>
-        )}
-
         <FadeInItem delay={120} style={{ marginTop: 24 }}>
           <Card padding={SPACE.xl}>
             {/* Header navigates to the group; kept separate from the DayPicker so
@@ -128,7 +121,9 @@ export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => v
               <View>
                 <Text style={styles.eyebrowOnCream}>GROUP POT</Text>
                 <Text style={styles.potValue}>
-                  {pot.toLocaleString()} <Text style={styles.potUnit}>ELO</Text>
+                  {isMoney
+                    ? <>£{(pot / 100).toFixed(2)}</>
+                    : <>{pot.toLocaleString()} <Text style={styles.potUnit}>ELO</Text></>}
                 </Text>
               </View>
               <View style={styles.creamArrow}>
@@ -137,21 +132,12 @@ export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => v
             </View>
             <Text style={[styles.subOnCream, { marginTop: 6 }]}>
               {memberCount > 0
-                ? `${onTrack} of ${memberCount} on track · ${totalAtStake.toLocaleString()} at stake`
-                : 'Join a group to start the pot'}
+                ? `${onTrack} of ${memberCount} on track · ${isMoney ? `£${(totalAtStake / 100).toFixed(2)}` : totalAtStake.toLocaleString()} at stake`
+                : groupId
+                  ? 'No stakes yet — pledge sessions to build the pot'
+                  : 'Join a group to start the pot'}
             </Text>
           </Card>
-        </FadeInItem>
-
-        <FadeInItem delay={240} style={{ marginTop: 14 }}>
-          <View style={{ flexDirection: 'row', gap: 12 }}>
-            <Card padding={SPACE.lg} style={{ flex: 1 }}>
-              <Stat label="ELO" value={elo.toLocaleString()} sub={tierForElo(elo)} />
-            </Card>
-            <Card padding={SPACE.lg} style={{ flex: 1 }}>
-              <Stat label="STREAK" value={streak} sub={streak === 1 ? 'week' : 'weeks'} accent />
-            </Card>
-          </View>
         </FadeInItem>
 
         <View style={{ height: 24 }} />

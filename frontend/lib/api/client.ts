@@ -1,5 +1,5 @@
 import { API_BASE_URL } from '../config';
-import { getOrCreateUserId } from '../userId';
+import { ensureSupabase } from '../supabase';
 
 export class ApiError extends Error {
   status: number;
@@ -27,7 +27,11 @@ async function request<T>(
     ...(extra ?? {}),
   };
   if (auth) {
-    headers['X-Device-Id'] = await getOrCreateUserId();
+    const sb = await ensureSupabase();
+    const { data: { session } } = await sb.auth.getSession();
+    if (session?.access_token) {
+      headers['Authorization'] = `Bearer ${session.access_token}`;
+    }
   }
   const res = await fetch(`${API_BASE_URL}${path}`, {
     method,

@@ -27,12 +27,42 @@ create table if not exists users (
     elo integer not null default 1000 check (elo >= 0),
     streak integer not null default 0 check (streak >= 0),
     gym_id uuid references gyms(id) on delete set null,
+    -- Opt-in live location sharing (Snap-Maps style); broadcast to the user's
+    -- group only while share_location is true and the fix is recent.
+    share_location boolean not null default false,
+    latitude double precision,
+    longitude double precision,
+    location_updated_at timestamptz,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now()
 );
 
--- Additive migration for existing deployments.
+-- Additive migrations for existing deployments.
 alter table users add column if not exists avatar text;
+alter table users add column if not exists share_location boolean not null default false;
+alter table users add column if not exists latitude double precision;
+alter table users add column if not exists longitude double precision;
+alter table users add column if not exists location_updated_at timestamptz;
+
+-- Auth-based account migration: link Supabase auth.users to app users.
+alter table users add column if not exists auth_user_id uuid unique;
+create index if not exists users_auth_user_id_idx on users(auth_user_id);
+
+-- Unique username handle (displayed as #tag). Lowercase, 3–20 chars.
+alter table users add column if not exists tag text unique;
+
+-- How many times the user has changed their tag (capped at 1 change after initial set).
+alter table users add column if not exists tag_changes integer not null default 0;
+
+-- Make device_id optional so OAuth-only accounts can be created without it.
+alter table users alter column device_id drop not null;
+
+-- Mocked wallet for money-stake groups. Stored in PENCE (integer) to mirror the
+-- integer ELO math and avoid floating-point drift. `money` is the current
+-- deposited balance; `money_week_change` is the net delta from the most recent
+-- Sunday pot payout (drives the Wallet's "this week" stat).
+alter table users add column if not exists money integer not null default 0;
+alter table users add column if not exists money_week_change integer not null default 0;
 
 create table if not exists groups (
     id uuid primary key default gen_random_uuid(),
@@ -53,12 +83,18 @@ create table if not exists groups (
     -- rules. The role rotates weekly through the membership; this column mirrors
     -- the computed rotation so it is directly queryable.
     current_rule_setter_id uuid references users(id) on delete set null,
+    -- Whether the group's pot is denominated in ELO or real (mocked) money.
+    -- Money groups are private-only. For money groups the per-week stake is
+    -- £1–£20 and `weekly_stake_elo` / pot `stake_per_miss` hold PENCE.
+    stake_type text not null default 'elo' check (stake_type in ('elo', 'money')),
     created_at timestamptz not null default now()
 );
 
 -- Decouple groups from gyms on existing deployments: gym_id is now optional so
 -- groups are global and a user's home gym no longer gates eligibility.
 alter table groups alter column gym_id drop not null;
+alter table groups add column if not exists stake_type text not null default 'elo'
+    check (stake_type in ('elo', 'money'));
 
 -- Idempotent column additions for existing deployments.
 alter table groups add column if not exists default_required_pledges smallint
@@ -144,6 +180,10 @@ create table if not exists pot_conditions (
     stake_per_miss integer not null
         check (stake_per_miss >= 0),
     is_finalized boolean not null default false,
+    -- Pot currency for THIS week ('elo' or 'money'). Stored per-week so changing
+    -- a group's stake type only affects future weeks — the current week keeps the
+    -- type it started with. Defaults to 'elo'; seeded from the group at creation.
+    stake_type text not null default 'elo' check (stake_type in ('elo', 'money')),
     -- The first week after a group is created is a no-stakes "practice" week.
     is_practice boolean not null default false,
     -- Set once the week's pot has been paid out (see settle_due_weeks below),
@@ -161,6 +201,15 @@ alter table pot_conditions
     add column if not exists is_practice boolean not null default false;
 alter table pot_conditions
     add column if not exists is_settled boolean not null default false;
+alter table pot_conditions
+    add column if not exists stake_type text not null default 'elo'
+        check (stake_type in ('elo', 'money'));
+-- Backfill existing per-week rows from the group's current type (one-time; the
+-- column defaults to 'elo' which would otherwise mislabel existing money pots).
+update pot_conditions pc
+    set stake_type = g.stake_type
+    from groups g
+    where pc.group_id = g.id and pc.stake_type = 'elo' and g.stake_type = 'money';
 
 -- (pot_conditions_updated_at trigger is created in the triggers section below,
 --  after set_updated_at() is defined.)
@@ -248,6 +297,25 @@ declare
 begin
     update users
        set elo = elo + p_delta
+     where id = p_user_id
+    returning * into updated;
+    return updated;
+end;
+$$;
+
+------------------------------------------------------------
+-- RPC: atomic money increment (pence) used by money-pot settlement.
+-- Clamps at 0 so a balance can never go negative.
+------------------------------------------------------------
+create or replace function add_money(p_user_id uuid, p_delta integer)
+returns users
+language plpgsql
+as $$
+declare
+    updated users;
+begin
+    update users
+       set money = greatest(0, money + p_delta)
      where id = p_user_id
     returning * into updated;
     return updated;

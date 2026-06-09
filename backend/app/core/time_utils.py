@@ -23,7 +23,7 @@ TZ = ZoneInfo("Europe/London")
 # paying a DB round-trip on *every* request (which dominated request latency).
 _offset_days: int = 0
 _offset_read_at: float = 0.0
-_OFFSET_TTL_SECONDS = 3.0
+_OFFSET_TTL_SECONDS = 0
 
 
 def _read_offset_from_db() -> int | None:

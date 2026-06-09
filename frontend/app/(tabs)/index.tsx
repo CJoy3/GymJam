@@ -6,29 +6,50 @@ import Animated, { Easing, FadeIn } from 'react-native-reanimated';
 
 import {
   Onboarding, Home, CheckIn, PlanWeek, GroupView, NoGroup,
-  GymBrowser, Leaderboard, PotTracker, Progress, GymSpace, ProfileView, SquadMapScreen, DevSettings,
+  GymBrowser, Leaderboard, PotTracker, Progress, GymSpace, ProfileView, SquadMapScreen, AppSettings,
+  AccountSetup,
 } from '../../src/screens';
 import { useAppState } from '../../src/state/AppState';
+import { usePolling } from '../../src/ui/usePolling';
 import { BlobBackground } from '../../src/ui/Blob';
-import { C, FONT } from '../../src/theme/tokens';
+import { C, FONT, RADIUS, SPACE } from '../../src/theme/tokens';
 
 const EASE_OUT = Easing.out(Easing.cubic);
 
 type Screen =
-  | 'onboarding' | 'home' | 'check-in' | 'plan-week' | 'group'
+  | 'account-setup' | 'onboarding' | 'home' | 'check-in' | 'plan-week' | 'group'
   | 'gym-browser' | 'leaderboard' | 'pot-tracker' | 'progress' | 'gym-space'
-  | 'profile' | 'squad-map' | 'dev-settings';
+  | 'profile' | 'squad-map' | 'settings';
 
 export default function GymJamApp() {
-  const { ready, gymId, groupId } = useAppState();
+  const { ready, userId, gymId, groupId, tag, elo, refreshAll } = useAppState();
   const [screen, setScreen] = useState<Screen | null>(null);
 
+  // Keep every device in sync — poll every 30 s and also refresh when the app
+  // returns to the foreground (e.g. user switches back from another app).
+  usePolling(refreshAll, 30000);
+
   useEffect(() => {
-    if (!ready || screen !== null) return;
-    if (!gymId) setScreen('onboarding');
-    else if (!groupId) setScreen('gym-browser');
-    else setScreen('home');
-  }, [ready, gymId, groupId, screen]);
+    if (!ready) return;
+    // Wait until the account itself has loaded before deciding where to route.
+    // Otherwise a warm launch (where `ready` flips true from the cache before
+    // `me` is populated) would briefly see null tag/gym and wrongly show the
+    // account-setup screen — and then get stuck there.
+    if (!userId) return;
+
+    const setUp = !!tag && !!gymId;
+    if (!setUp) {
+      // Genuinely needs to pick a tag + home gym.
+      if (screen !== 'account-setup') setScreen('account-setup');
+      return;
+    }
+
+    // Set up: route in from the splash or off any setup screen. Leave the user
+    // wherever they are once they're inside the app.
+    if (screen === null || screen === 'account-setup' || screen === 'onboarding') {
+      setScreen(groupId ? 'home' : 'gym-browser');
+    }
+  }, [ready, userId, gymId, groupId, tag, screen]);
 
   if (!ready || screen === null) {
     return (
@@ -44,6 +65,7 @@ export default function GymJamApp() {
 
   const render = () => {
     switch (screen) {
+      case 'account-setup': return <AccountSetup onDone={() => setScreen('gym-browser')} />;
       case 'onboarding':   return <Onboarding onDone={() => setScreen('gym-browser')} />;
       case 'home':         return <Home onCheckIn={() => setScreen('check-in')} onPlan={() => setScreen('plan-week')} onPot={() => setScreen('pot-tracker')} onGroup={() => setScreen('group')} />;
       case 'check-in':     return <CheckIn onClose={() => setScreen('home')} />;
@@ -56,18 +78,30 @@ export default function GymJamApp() {
       case 'pot-tracker':  return <PotTracker onBack={() => setScreen('home')} />;
       case 'progress':     return <Progress onGymSpace={() => setScreen('gym-space')} />;
       case 'gym-space':    return <GymSpace onBack={() => setScreen('progress')} />;
-      case 'profile':      return <ProfileView onSettings={() => setScreen('dev-settings')} onSquadMap={() => setScreen('squad-map')} />;
+      case 'profile':      return <ProfileView onSettings={() => setScreen('settings')} onSquadMap={() => setScreen('squad-map')} />;
       case 'squad-map':    return <SquadMapScreen onBack={() => setScreen('profile')} />;
-      case 'dev-settings': return <DevSettings onBack={() => setScreen('profile')} />;
+      case 'settings':     return <AppSettings onBack={() => setScreen('profile')} />;
       default:             return <Home onCheckIn={() => setScreen('check-in')} onPlan={() => setScreen('plan-week')} onPot={() => setScreen('pot-tracker')} onGroup={() => setScreen('group')} />;
     }
   };
 
-  const showTabs = screen !== 'onboarding' && screen !== 'check-in' && screen !== 'plan-week' && screen !== 'dev-settings';
+  const showTabs = screen !== 'account-setup' && screen !== 'onboarding' && screen !== 'check-in' && screen !== 'plan-week' && screen !== 'settings';
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
+      {/* Persistent ELO bar — a fixed top header, part of the layout (not an
+          overlay), so it stays put while the content below scrolls. */}
+      {showTabs && (
+        <View style={styles.statHeader}>
+          <View style={styles.statBadge}>
+            <MaterialIcons name="emoji-events" size={13} color={C.accent} />
+            <Text style={styles.statText}>{elo.toLocaleString()}</Text>
+          </View>
+        </View>
+      )}
+
       <View style={{ flex: 1 }}>{render()}</View>
+
       {showTabs && (
         <View style={styles.tabBar}>
           <Tab label="Home"     icon="home"          active={screen === 'home'} onPress={() => setScreen('home')} />
@@ -96,6 +130,23 @@ const styles = StyleSheet.create({
   splash: { flex: 1, backgroundColor: C.bg, alignItems: 'center', justifyContent: 'center' },
   splashCenter: { alignItems: 'center' },
   splashBrand: { fontFamily: FONT.extra, fontSize: 44, color: C.ink, letterSpacing: -1.2 },
+
+  statHeader: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    height: 44,
+    paddingHorizontal: SPACE.xl,
+    backgroundColor: C.bg,
+  },
+  statBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 10, paddingVertical: 5,
+    borderRadius: RADIUS.pill,
+    backgroundColor: C.card,
+    borderWidth: 1, borderColor: C.borderHi,
+  },
+  statText: { fontFamily: FONT.semibold, fontSize: 13, color: C.ink },
 
   tabBar: {
     flexDirection: 'row',

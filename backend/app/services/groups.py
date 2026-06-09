@@ -127,6 +127,59 @@ def get_group(group_id: str) -> dict:
     return res.data[0]
 
 
+def update_stake_type(group_id: str, user_id: str, stake_type: str) -> dict:
+    """Switch a private group's pot between ELO and money — leader only.
+
+    The change only takes effect from NEXT week: the current week keeps the
+    currency it started with. We freeze the current week's pot_conditions to its
+    existing type, update the group baseline (so future weeks inherit the new
+    type), and stamp next week's pot_conditions with the new type explicitly.
+    """
+    if stake_type not in ("elo", "money"):
+        raise HTTPException(status_code=400, detail="stake_type must be 'elo' or 'money'")
+    sb = get_supabase()
+    grp = get_group(group_id)
+    mem = (
+        sb.table("group_memberships")
+        .select("role")
+        .eq("group_id", group_id)
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    if not mem.data or mem.data[0]["role"] != "leader":
+        raise HTTPException(status_code=403, detail="Only the group leader can change the stake type")
+    if grp.get("join_type") != "request":
+        raise HTTPException(status_code=400, detail="Stake type can only be changed for private groups")
+
+    from app.services import pot as pot_svc
+    from app.core.time_utils import current_week_start, next_week_start
+
+    prev_type = grp.get("stake_type") or "elo"
+    # 1) Freeze the current week to its existing currency so it doesn't drift
+    #    when we change the group baseline below.
+    cur = pot_svc.get_conditions(group_id, week="current")
+    if not cur.get("stake_type"):
+        _freeze_week_stake_type(group_id, current_week_start(), prev_type)
+    # 2) Group baseline drives weeks beyond next.
+    sb.table("groups").update({"stake_type": stake_type}).eq("id", group_id).execute()
+    # 3) Apply the new currency to next week explicitly.
+    pot_svc.get_conditions(group_id, week="next")  # ensure the row exists
+    _freeze_week_stake_type(group_id, next_week_start(), stake_type)
+    return {**grp, "stake_type": stake_type}
+
+
+def _freeze_week_stake_type(group_id: str, week_start, stake_type: str) -> None:
+    """Best-effort stamp of a week's pot currency onto its pot_conditions row."""
+    sb = get_supabase()
+    try:
+        sb.table("pot_conditions").update({"stake_type": stake_type}).eq(
+            "group_id", group_id
+        ).eq("week_start", week_start.isoformat()).execute()
+    except Exception:
+        pass
+
+
 def current_membership(user_id: str) -> dict | None:
     sb = get_supabase()
     res = (
@@ -147,12 +200,17 @@ def create_group(
     required_pledges: int,
     stake_per_miss: int,
     gym_id: str | None = None,
+    stake_type: str = "elo",
 ) -> dict:
     if current_membership(creator_id):
         raise HTTPException(status_code=409, detail="Leave your current group first")
     # Validate caller-supplied pot defaults so we fail loud, not via DB-side check.
     required_pledges = max(1, min(7, int(required_pledges or 3)))
     stake_per_miss = max(0, int(stake_per_miss or 100))
+    stake_type = stake_type if stake_type in ("elo", "money") else "elo"
+    # Money pots involve real stakes, so they must be private (approval-gated).
+    if stake_type == "money" and join_type != "request":
+        raise HTTPException(status_code=400, detail="Money-stake groups must be private")
 
     sb = get_supabase()
     # Try inserting WITH the new columns first; if the schema is old, retry
@@ -169,6 +227,7 @@ def create_group(
         **base_payload,
         "default_required_pledges": required_pledges,
         "default_stake_per_miss": stake_per_miss,
+        "stake_type": stake_type,
     }
     grp = None
     try:
@@ -203,12 +262,14 @@ def create_group(
             stake_per_miss=0,
             is_finalized=True,
             is_practice=True,
+            stake_type=stake_type,
         )
         pot_svc.seed_conditions(
             group["id"], next_week_start(),
             setter_user_id=creator_id,
             required_pledges=required_pledges,
             stake_per_miss=stake_per_miss,
+            stake_type=stake_type,
         )
     except Exception:
         sb.table("group_memberships").delete().eq("group_id", group["id"]).execute()
@@ -341,19 +402,41 @@ def squad_map(group_id: str, current_user_id: str) -> list[dict]:
     the Squad Map. Members without a home gym (or an un-geocoded gym) are
     still returned with null coordinates so the client can list them
     separately rather than dropping them silently."""
+    from datetime import datetime, timedelta, timezone
+
     sb = get_supabase()
+    # `users(*)` so this still works on deployments that haven't run the
+    # location migration yet (the share_location/latitude columns just come back
+    # absent and we fall back to the home gym).
     memberships = (
         sb.table("group_memberships")
-        .select("user_id, users(display_name, avatar, elo, gym_id, gyms(id, name, latitude, longitude))")
+        .select("user_id, users(*, gyms(id, name, latitude, longitude))")
         .eq("group_id", group_id)
         .order("joined_at", desc=False)
         .execute()
     ).data or []
 
+    now = datetime.now(timezone.utc)
+    LIVE_TTL = timedelta(minutes=30)  # a shared fix older than this falls back to the gym
+
+    def _fresh(ts: object) -> bool:
+        if not ts:
+            return False
+        try:
+            return (now - datetime.fromisoformat(str(ts).replace("Z", "+00:00"))) < LIVE_TTL
+        except (ValueError, TypeError):
+            return False
+
     out: list[dict] = []
     for m in memberships:
         u = m.get("users") or {}
         gym = u.get("gyms") or {}
+        live = (
+            bool(u.get("share_location"))
+            and u.get("latitude") is not None
+            and u.get("longitude") is not None
+            and _fresh(u.get("location_updated_at"))
+        )
         out.append({
             "user_id": m["user_id"],
             "display_name": u.get("display_name") or "Anonymous",
@@ -362,8 +445,9 @@ def squad_map(group_id: str, current_user_id: str) -> list[dict]:
             "is_me": m["user_id"] == current_user_id,
             "gym_id": gym.get("id"),
             "gym_name": gym.get("name"),
-            "latitude": gym.get("latitude"),
-            "longitude": gym.get("longitude"),
+            "latitude": u.get("latitude") if live else gym.get("latitude"),
+            "longitude": u.get("longitude") if live else gym.get("longitude"),
+            "is_live": live,
         })
     return out
 

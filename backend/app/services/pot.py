@@ -61,8 +61,8 @@ def _insert_conditions(payload: dict) -> Any | None:
     inserted = _safe_exec(sb.table("pot_conditions").insert(payload))
     if inserted and inserted.data:
         return inserted
-    if "is_practice" in payload:
-        fallback = {k: v for k, v in payload.items() if k != "is_practice"}
+    if "is_practice" in payload or "stake_type" in payload:
+        fallback = {k: v for k, v in payload.items() if k not in ("is_practice", "stake_type")}
         return _safe_exec(sb.table("pot_conditions").insert(fallback))
     return inserted
 
@@ -182,6 +182,17 @@ def _ensure_conditions(group_id: str, week_start: date) -> dict:
                 .eq("week_start", week_start.isoformat())
             )
             row["setter_user_id"] = setter
+        # A row that predates the per-week stake_type column reads back as null —
+        # freeze it to the group's current type so it doesn't drift later.
+        if not row.get("stake_type"):
+            gst = _group_stake_type(group_id)
+            _safe_exec(
+                sb.table("pot_conditions")
+                .update({"stake_type": gst})
+                .eq("group_id", group_id)
+                .eq("week_start", week_start.isoformat())
+            )
+            row["stake_type"] = gst
         return row
 
     payload = {
@@ -192,6 +203,8 @@ def _ensure_conditions(group_id: str, week_start: date) -> dict:
         "stake_per_miss": defaults["stake_per_miss"],
         "is_finalized": False,
         "is_practice": False,
+        # Freeze the currency for this week to the group's current type.
+        "stake_type": _group_stake_type(group_id),
     }
     inserted = _insert_conditions(payload)
     if inserted and inserted.data:
@@ -222,6 +235,7 @@ def seed_conditions(
     stake_per_miss: int,
     is_finalized: bool = False,
     is_practice: bool = False,
+    stake_type: str = "elo",
 ) -> dict:
     """Persist initial pot conditions for a group's week.
 
@@ -240,6 +254,7 @@ def seed_conditions(
         "stake_per_miss": stake_per_miss,
         "is_finalized": is_finalized,
         "is_practice": is_practice,
+        "stake_type": stake_type if stake_type in ("elo", "money") else "elo",
         "updated_at": _utc_now_iso(),
     }
 
@@ -256,8 +271,8 @@ def seed_conditions(
     if row is not None:
         return row
 
-    # Older deployments may be missing the `is_practice` column — retry without it.
-    fallback = {k: v for k, v in payload.items() if k != "is_practice"}
+    # Older deployments may be missing newer columns — retry without them.
+    fallback = {k: v for k, v in payload.items() if k not in ("is_practice", "stake_type")}
     row = _try(fallback)
     if row is not None:
         return row
@@ -418,13 +433,82 @@ def _claim_for_settlement(group_id: str, week_start: date) -> dict | None:
     return rows[0] if rows else None
 
 
+def _group_stake_type(group_id: str) -> str:
+    """'money' or 'elo' (default) — which currency the group's pot is in."""
+    sb = get_supabase()
+    res = _safe_exec(sb.table("groups").select("stake_type").eq("id", group_id).limit(1))
+    if not res or not res.data:
+        return "elo"
+    return res.data[0].get("stake_type") or "elo"
+
+
+def _money_breakdown(group_id: str, week_start: date, stake: int) -> tuple[int, list[tuple[str, int]]]:
+    """For a money week: the pot total (pence) and per-participant amount each
+    one staked (missed_count × stake). A member only participates if they pledged
+    at least one day; the money they lose to the pot is their missed sessions."""
+    sb = get_supabase()
+    plans_res = _safe_exec(
+        sb.table("weekly_plans")
+        .select("user_id, plan_days(state)")
+        .eq("group_id", group_id)
+        .eq("week_start", week_start.isoformat())
+    )
+    plans = (plans_res.data if plans_res else None) or []
+    pot_total = 0
+    participants: list[tuple[str, int]] = []
+    for plan in plans:
+        days = plan.get("plan_days") or []
+        pledged = sum(1 for d in days if d["state"] in ("planned", "locked", "checked-in", "missed"))
+        if pledged == 0:
+            continue  # sat the week out — no claim on the pot
+        contributed = sum(1 for d in days if d["state"] == "missed") * stake
+        pot_total += contributed
+        participants.append((plan["user_id"], contributed))
+    return pot_total, participants
+
+
+def _settle_money_week(group_id: str, week_start: date, stake: int) -> None:
+    """Settle a money week: missers' stakes fund the pot, which is then split
+    evenly across everyone who pledged. Each member's net delta (share received
+    minus what they staked) is applied to their wallet and recorded as
+    `money_week_change` so the Wallet's "this week" stat reflects the payout."""
+    sb = get_supabase()
+    pot_total, participants = _money_breakdown(group_id, week_start, stake)
+    participant_ids = {uid for uid, _ in participants}
+
+    # Reset the weekly stat for everyone in the group first, so members who sat
+    # this week out show £0.00 rather than a stale value from an earlier week.
+    for uid in _ordered_member_ids(group_id):
+        if uid not in participant_ids:
+            _safe_exec(sb.table("users").update({"money_week_change": 0}).eq("id", uid))
+
+    if not participants:
+        return
+    share = pot_total // len(participants)
+    for user_id, contributed in participants:
+        net = share - contributed
+        if net != 0:
+            users_svc.add_money(user_id, net)
+        # Record the net payout for this user so the Wallet can show it.
+        _safe_exec(
+            sb.table("users").update({"money_week_change": net}).eq("id", user_id)
+        )
+
+
 def _settle_week(group_id: str, week_start: date) -> None:
-    """Pay out a single finished week's pot, evenly split across participants,
-    straight onto their personal ELO. No-op if it's already been settled."""
+    """Pay out a single finished week's pot, evenly split across participants.
+    ELO groups pay onto personal ELO; money groups move (mocked) money and
+    record each member's weekly delta. No-op if already settled."""
     cond = _claim_for_settlement(group_id, week_start)
     if not cond:
         return
     stake = cond.get("stake_per_miss", 0)
+    # Settle in the currency the week was actually run in (frozen per-week), not
+    # whatever the group's current type happens to be now.
+    week_stake_type = cond.get("stake_type") or _group_stake_type(group_id)
+    if week_stake_type == "money":
+        _settle_money_week(group_id, week_start, stake)
+        return
     pot_total, participants = _settlement_inputs(group_id, week_start, stake)
     if not participants or pot_total <= 0:
         return
@@ -463,6 +547,7 @@ def pot_detail(group_id: str, week: str = "current") -> dict:
     required = cond.get("required_pledges", 1)
     stake = cond.get("stake_per_miss", 0)
     is_practice = bool(cond.get("is_practice"))
+    stake_type = cond.get("stake_type") or _group_stake_type(group_id)
 
     sb = get_supabase()
 
@@ -552,6 +637,7 @@ def pot_detail(group_id: str, week: str = "current") -> dict:
         "stake_per_miss": stake,
         "is_finalized": bool(cond.get("is_finalized")),
         "is_practice": is_practice,
+        "stake_type": stake_type,
         "total_pot_elo": pot_total,
         "members": member_rows,
     }

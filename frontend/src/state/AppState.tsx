@@ -1,6 +1,8 @@
 import React, {
   createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, ReactNode,
 } from 'react';
+import { AppState as RNAppState } from 'react-native';
+import * as Location from 'expo-location';
 
 import * as badgesApi from '../../lib/api/badges';
 import * as devApi from '../../lib/api/dev';
@@ -13,7 +15,6 @@ import * as roomApi from '../../lib/api/room';
 import * as usersApi from '../../lib/api/users';
 import { ApiError } from '../../lib/api/client';
 import { readCache, writeCache } from '../../lib/cache';
-import { getOrCreateUserId } from '../../lib/userId';
 import { showToast } from '../ui/toast';
 import {
   AppStateShape, DAYS, DayStatus, Group, GroupMember, Gym, JoinRequest,
@@ -222,8 +223,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const bootstrap = useCallback(async (resetClockOnStartup = false) => {
     setReloading(true);
     try {
-      const deviceId = await getOrCreateUserId();
-      const user = await usersApi.registerUser(deviceId);
+      const user = await usersApi.registerViaAuth();
       setMe(user);
       await loadClock(resetClockOnStartup);
       // Fire every independent fetch in parallel instead of one-by-one — this
@@ -403,6 +403,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     name: string;
     weekly_stake_elo: number;
     join_type: 'open' | 'request';
+    stake_type?: 'elo' | 'money';
     required_pledges: number;
     stake_per_miss: number;
   }) => {
@@ -413,6 +414,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         name: g.name,
         weekly_stake_elo: g.weekly_stake_elo,
         join_type: g.join_type,
+        stake_type: g.stake_type ?? 'elo',
         required_pledges: g.required_pledges,
         stake_per_miss: g.stake_per_miss,
       });
@@ -424,6 +426,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         tier: 'Regular',
         totalElo: me.elo,
         joinType: created.join_type,
+        stakeType: created.stake_type ?? 'elo',
         isLeader: true,
         isMember: true,
         requested: false,
@@ -594,6 +597,18 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }
   }, [myGroupSummary, refreshGroupContext]);
 
+  const updateTag = useCallback(async (tag: string) => {
+    const snapshotMe = me;
+    try {
+      const u = await usersApi.updateTag(tag);
+      setMe(u);
+    } catch (e) {
+      setMe(snapshotMe);
+      reportError('Could not update tag', e);
+      throw e;
+    }
+  }, [me]);
+
   const updateDisplayName = useCallback(async (name: string) => {
     const trimmed = name.trim();
     if (!trimmed) return;
@@ -624,6 +639,53 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }
   }, [loadMembers, me, myGroupSummary]);
 
+  // Push the current GPS fix to the backend (only meaningful while sharing).
+  const pushLocation = useCallback(async () => {
+    try {
+      const perm = await Location.getForegroundPermissionsAsync();
+      if (perm.status !== 'granted') return;
+      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      setMe(await usersApi.updateMe({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }));
+    } catch {
+      // best-effort; keep prior location
+    }
+  }, []);
+
+  const setShareLocation = useCallback(async (on: boolean) => {
+    const snapshotMe = me;
+    setMe((prev) => (prev ? { ...prev, share_location: on } : prev)); // optimistic
+    try {
+      if (on) {
+        const perm = await Location.requestForegroundPermissionsAsync();
+        if (perm.status !== 'granted') {
+          setMe(snapshotMe);
+          showToast('Location permission is needed to share your spot', 'error');
+          return;
+        }
+        const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        setMe(await usersApi.updateMe({ share_location: true, latitude: pos.coords.latitude, longitude: pos.coords.longitude }));
+        showToast('Sharing your location with your squad', 'success');
+      } else {
+        setMe(await usersApi.updateMe({ share_location: false }));
+        showToast('Location sharing turned off', 'info');
+      }
+    } catch (e) {
+      setMe(snapshotMe);
+      reportError('Could not update location sharing', e);
+    }
+  }, [me]);
+
+  // While sharing, refresh my location on a gentle cadence + whenever the app
+  // returns to the foreground — never while backgrounded.
+  const sharing = me?.share_location ?? false;
+  useEffect(() => {
+    if (!sharing) return;
+    pushLocation();
+    const id = setInterval(() => { if (RNAppState.currentState === 'active') pushLocation(); }, 60000);
+    const sub = RNAppState.addEventListener('change', (s) => { if (s === 'active') pushLocation(); });
+    return () => { clearInterval(id); sub.remove(); };
+  }, [sharing, pushLocation]);
+
   const setElo = useCallback(async (elo: number) => {
     const snapshotMe = me;
     setMe((prev) => (prev ? { ...prev, elo } : prev));
@@ -633,6 +695,18 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       setMe(snapshotMe);
       reportError('Could not set ELO', e);
+    }
+  }, [me]);
+
+  const setMoney = useCallback(async (pence: number) => {
+    const snapshotMe = me;
+    setMe((prev) => (prev ? { ...prev, money: pence } : prev));
+    try {
+      const u = await usersApi.updateMe({ money: pence });
+      setMe(u);
+    } catch (e) {
+      setMe(snapshotMe);
+      reportError('Could not set wallet balance', e);
     }
   }, [me]);
 
@@ -752,6 +826,24 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     [stepClock],
   );
 
+  const updateStakeType = useCallback(async (stakeType: 'elo' | 'money') => {
+    if (!myGroupSummary?.id) return;
+    const groupId = myGroupSummary.id;
+    // Only NEXT week changes — optimistically reflect it on potNext; leave
+    // potCurrent (and the group's current-week display) untouched.
+    const snapshotNext = potNext;
+    setPotNext((prev) => (prev ? { ...prev, stake_type: stakeType } : prev));
+    try {
+      await groupsApi.updateStakeType(groupId, stakeType);
+      showToast(`Pot type set to ${stakeType === 'money' ? 'money' : 'ELO'} from next week`, 'success');
+      // Re-pull pot detail so potCurrent/potNext reflect the server's frozen types.
+      void loadPot(groupId);
+    } catch (e) {
+      setPotNext(snapshotNext);
+      reportError('Could not change stake type', e);
+    }
+  }, [myGroupSummary, potNext, loadPot]);
+
   const placeRoomItem = useCallback(async (itemId: string, slot: number | null) => {
     try {
       const items = await roomApi.setItemPlacement(itemId, slot);
@@ -770,8 +862,14 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       userId: me?.id ?? null,
       displayName: me?.display_name ?? 'You',
       avatar: me?.avatar ?? null,
+      shareLocation: me?.share_location ?? false,
+      setShareLocation,
       elo: me?.elo ?? 0,
       streak: me?.streak ?? 0,
+      tag: me?.tag ?? null,
+      tagChanges: me?.tag_changes ?? 0,
+      money: me?.money ?? 0,
+      moneyWeekChange: me?.money_week_change ?? 0,
 
       gyms,
       gymName,
@@ -781,6 +879,13 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       groupName: myGroupSummary?.name ?? '',
       groupId: myGroupSummary?.id ?? null,
       isLeader: myGroupSummary?.isLeader === true,
+      joinType: myGroupSummary?.joinType ?? 'open',
+      // Per-week currency: current week is frozen on potCurrent; next week (what
+      // the leader's toggle changes) lives on potNext. Fall back to the group's
+      // baseline type when the pot detail hasn't loaded yet.
+      stakeType: potCurrent?.stake_type ?? myGroupSummary?.stakeType ?? 'elo',
+      nextStakeType: potNext?.stake_type ?? myGroupSummary?.stakeType ?? 'elo',
+      updateStakeType,
       groups: groupsAtGym,
       joinGroup,
       leaveGroup,
@@ -829,9 +934,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       badges,
       refreshBadges: loadBadges,
 
+      updateTag,
       updateDisplayName,
       updateAvatar,
       setElo,
+      setMoney,
 
       roomItems,
       placeRoomItem,
@@ -845,7 +952,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     lockNextWeek, me, myGroupSummary, nextWeek, nudge, nudgeCooldowns, placeRoomItem, pot, potCurrent, potNext,
     ready, refreshGroupContext, refreshGroupsAtGym, rejectRequest, reloading, rescheduleMissedDay, roomItems, setGym,
     setPlannedDays, setThisWeekDays, thisWeek, thisWeekIsPractice, todayDow, toggleNextWeekDay,
-    setElo, toggleWeek, updateAvatar, updateDisplayName, updatePotConditions, weekOffsetDays,
+    setElo, setMoney, setShareLocation, toggleWeek, updateAvatar, updateDisplayName, updatePotConditions, updateStakeType, updateTag, weekOffsetDays,
   ]);
 
   // tier is purely a function of elo; expose for callers that want it

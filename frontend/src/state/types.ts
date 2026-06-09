@@ -23,6 +23,7 @@ export interface Group {
   tier: string;            // derived: "Beginner" for now (no DB column yet)
   totalElo: number;        // sum of ELO across the group's members (bigger groups aren't penalised)
   joinType: 'open' | 'request';
+  stakeType: 'elo' | 'money';  // whether the pot is denominated in ELO or (mocked) money
   isLeader?: boolean;
   isMember?: boolean;
   requested?: boolean;
@@ -56,6 +57,15 @@ export interface AppStateShape {
   avatar: string | null;
   elo: number;
   streak: number;
+  tag: string | null;
+  tagChanges: number;
+  // Mocked wallet (pence). moneyWeekChange = net delta from last Sunday payout.
+  money: number;
+  moneyWeekChange: number;
+
+  // Opt-in live location sharing
+  shareLocation: boolean;
+  setShareLocation: (on: boolean) => Promise<void>;
 
   // Gyms
   gyms: Gym[];
@@ -67,6 +77,10 @@ export interface AppStateShape {
   groupName: string;
   groupId: string | null;
   isLeader: boolean;
+  joinType: 'open' | 'request';
+  stakeType: 'elo' | 'money';     // CURRENT week's pot currency (frozen until rollover)
+  nextStakeType: 'elo' | 'money'; // next week's currency — what the leader's toggle changes
+  updateStakeType: (stakeType: 'elo' | 'money') => Promise<void>;
   groups: Group[];
   joinGroup: (groupId: string) => Promise<boolean>;
   leaveGroup: () => Promise<void>;
@@ -74,6 +88,7 @@ export interface AppStateShape {
     name: string;
     weekly_stake_elo: number;
     join_type: 'open' | 'request';
+    stake_type?: 'elo' | 'money';
     required_pledges: number;
     stake_per_miss: number;
   }) => Promise<boolean>;
@@ -139,9 +154,11 @@ export interface AppStateShape {
   refreshBadges: () => Promise<void>;
 
   // Profile
+  updateTag: (tag: string) => Promise<void>;
   updateDisplayName: (name: string) => Promise<void>;
   updateAvatar: (avatar: string) => Promise<void>;
   setElo: (elo: number) => Promise<void>;
+  setMoney: (pence: number) => Promise<void>;
 
   // Gym-space room
   roomItems: roomApi.RoomItem[];

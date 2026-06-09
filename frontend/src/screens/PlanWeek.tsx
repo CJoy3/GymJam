@@ -6,6 +6,7 @@ import { C, FONT, RADIUS, SPACE } from '../theme/tokens';
 import { Btn, Card, Chip, Eyebrow, FadeInItem, H1, H3, Num, Sub } from '../ui/components';
 import { Avatar } from '../ui/Avatar';
 import { DayPicker } from '../ui/DayPicker';
+import { Slider } from '../ui/Slider';
 import { BlobBackground } from '../ui/Blob';
 import { showToast } from '../ui/toast';
 import { useAppState, DayStatus } from '../state/AppState';
@@ -16,8 +17,18 @@ import { LABELS, pageWrap, styles } from './_shared';
 export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: () => void }) {
   const {
     nextWeek, setPlannedDays, groupName, potNext, updatePotConditions,
-    userId, groupMembers,
+    userId, groupMembers, todayDow, nextStakeType, isLeader, joinType, updateStakeType,
   } = useAppState();
+  // PlanWeek is about NEXT week, so it shows/edits next week's currency.
+  const isMoney = nextStakeType === 'money';
+  const [changingStakeType, setChangingStakeType] = useState(false);
+  const canChangeStakeType = isLeader && joinType === 'request';
+  // The pot type, like the pot rules, can only be changed on Monday — after
+  // that it's locked in for next week.
+  const isMonday = todayDow === 0;
+  // For money groups stake_per_miss is pence; show it as £. For ELO it's points.
+  const fmtStake = (amount: number) =>
+    isMoney ? `£${(amount / 100).toFixed(2)}` : `${amount.toLocaleString()} ELO`;
   // The rule setter rotates weekly — only the setter for next week may edit it.
   const isNextSetter = !!potNext && potNext.setter_user_id != null && potNext.setter_user_id === userId;
   const [local, setLocal] = useState<DayStatus['state'][]>(() => nextWeek.map((d) => d.state));
@@ -81,7 +92,7 @@ export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: (
 
         {isNextSetter && (
           <FadeInItem delay={80} style={{ marginTop: 24 }}>
-            <PotConditionsEditor potNext={potNext} onSave={updatePotConditions} />
+            <PotConditionsEditor potNext={potNext} onSave={updatePotConditions} isMonday={todayDow === 0} isMoney={isMoney} />
           </FadeInItem>
         )}
         {!isNextSetter && potNext && (
@@ -94,10 +105,76 @@ export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: (
                 <View style={{ flex: 1 }}>
                   <H3>Next week's pot rules</H3>
                   <Sub style={{ marginTop: 2 }}>
-                    {potNext.setter_display_name || 'A group member'} is this week's rule setter (the role rotates weekly): {potNext.required_pledges} {potNext.required_pledges === 1 ? 'pledge' : 'pledges'} · {(potNext.required_pledges * potNext.stake_per_miss).toLocaleString()} ELO at stake ({potNext.stake_per_miss} per miss).
+                    {potNext.setter_display_name || 'A group member'} is this week's rule setter (the role rotates weekly): {potNext.required_pledges} {potNext.required_pledges === 1 ? 'pledge' : 'pledges'} · {fmtStake(potNext.required_pledges * potNext.stake_per_miss)} at stake ({fmtStake(potNext.stake_per_miss)} per miss).
                   </Sub>
                 </View>
               </View>
+            </Card>
+          </FadeInItem>
+        )}
+
+        {canChangeStakeType && (
+          <FadeInItem delay={120} style={{ marginTop: 14 }}>
+            <Card padding={SPACE.lg}>
+              <View style={[styles.rowGap, { marginBottom: 12 }]}>
+                <View style={[styles.iconChip, { backgroundColor: isMoney ? 'rgba(156,181,143,0.15)' : 'rgba(199,160,110,0.15)' }]}>
+                  <MaterialIcons
+                    name={isMoney ? 'account-balance-wallet' : 'emoji-events'}
+                    size={18}
+                    color={isMoney ? C.success : C.accent}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <H3>Pot type</H3>
+                  <Sub style={{ marginTop: 2 }}>
+                    {isMonday ? 'Takes effect from next week' : 'Locked — can only be changed on Monday'}
+                  </Sub>
+                </View>
+                {!isMonday && <MaterialIcons name="lock" size={18} color={C.mutedFg} />}
+              </View>
+              {isMonday ? (
+                /* Editable — Monday only */
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <Pressable
+                    style={[stakeToggleBtn, !isMoney && stakeToggleBtnOn]}
+                    disabled={changingStakeType}
+                    onPress={async () => {
+                      if (isMoney) {
+                        setChangingStakeType(true);
+                        try { await updateStakeType('elo'); } finally { setChangingStakeType(false); }
+                      }
+                    }}
+                  >
+                    <MaterialIcons name="emoji-events" size={15} color={!isMoney ? C.primaryFg : C.mutedFg} />
+                    <Text style={[stakeToggleText, { color: !isMoney ? C.primaryFg : C.mutedFg }]}>ELO</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[stakeToggleBtn, isMoney && stakeToggleBtnOn]}
+                    disabled={changingStakeType}
+                    onPress={async () => {
+                      if (!isMoney) {
+                        setChangingStakeType(true);
+                        try { await updateStakeType('money'); } finally { setChangingStakeType(false); }
+                      }
+                    }}
+                  >
+                    <MaterialIcons name="account-balance-wallet" size={15} color={isMoney ? C.primaryFg : C.mutedFg} />
+                    <Text style={[stakeToggleText, { color: isMoney ? C.primaryFg : C.mutedFg }]}>Money</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                /* Locked — read-only display of next week's chosen type */
+                <View style={[styles.input, { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 0 }]}>
+                  <MaterialIcons
+                    name={isMoney ? 'account-balance-wallet' : 'emoji-events'}
+                    size={16}
+                    color={isMoney ? C.success : C.accent}
+                  />
+                  <Text style={{ fontFamily: FONT.semibold, fontSize: 15, color: C.ink }}>
+                    {isMoney ? 'Money pot' : 'ELO pot'}
+                  </Text>
+                </View>
+              )}
             </Card>
           </FadeInItem>
         )}
@@ -116,11 +193,11 @@ export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: (
             )}
             <View style={styles.divider} />
             <Eyebrow>Your stake</Eyebrow>
-            <Num style={{ marginTop: 6 }}>{(sel * stakePerMiss).toLocaleString()} ELO</Num>
+            <Num style={{ marginTop: 6 }}>{fmtStake(sel * stakePerMiss)}</Num>
             <Sub style={{ marginTop: 4 }}>
               {sel === 0
                 ? 'Pledge any number of days to enter the pot.'
-                : `${stakePerMiss.toLocaleString()} ELO lost per missed session.`}
+                : `${fmtStake(stakePerMiss)} lost per missed session.`}
             </Sub>
           </Card>
         </FadeInItem>
@@ -219,32 +296,47 @@ function MemberPlanRow({ days, highlightDows }: { days: DayStatus[]; highlightDo
 
 /**
  * Editor for next-week pot rules, shown only to the current rotational rule
- * setter. Visibility is controlled by the caller (PlanWeek renders this only
- * when the logged-in user is next week's setter).
+ * setter. Only editable on Monday — after that the conditions are locked.
  */
 function PotConditionsEditor({
-  potNext, onSave,
+  potNext, onSave, isMonday, isMoney,
 }: {
   potNext: import('../../lib/api/pot').PotDetail | null;
   onSave: (week: 'current' | 'next', required: number, stake: number) => Promise<void>;
+  isMonday: boolean;
+  isMoney: boolean;
 }) {
   const initialRequired = potNext && potNext.required_pledges > 0 ? potNext.required_pledges : 3;
   const initialTotal = potNext && potNext.required_pledges > 0
     ? potNext.required_pledges * potNext.stake_per_miss
-    : 300;
+    : (isMoney ? 500 : 300);  // money: pence (£5 default); elo: 300
   const [required, setRequired] = useState(String(initialRequired));
   const [total, setTotal] = useState(String(initialTotal));
+  // Money weekly stake in whole £ (1–20), kept in sync with `total` (pence).
+  const [moneyStake, setMoneyStake] = useState(Math.max(1, Math.min(20, Math.round(initialTotal / 100))));
+  const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
   useEffect(() => {
     setRequired(String(initialRequired));
     setTotal(String(initialTotal));
+    setMoneyStake(Math.max(1, Math.min(20, Math.round(initialTotal / 100))));
+    setSaved(false);
   }, [initialRequired, initialTotal]);
 
   const reqNum = Math.max(1, Math.min(7, parseInt(required, 10) || 1));
-  const perMiss = Math.round((parseInt(total, 10) || 0) / reqNum);
+  const weeklyTotal = isMoney ? moneyStake * 100 : (parseInt(total, 10) || 0);
+  const perMiss = Math.round(weeklyTotal / reqNum);
+  const fmtStake = (amount: number) =>
+    isMoney ? `£${(amount / 100).toFixed(2)}` : `${amount.toLocaleString()} ELO`;
 
-  const save = () => {
-    // Stake per missed session is derived from the full weekly amount / sessions.
-    onSave('next', reqNum, perMiss);
+  const save = async () => {
+    setSaving(true);
+    try {
+      await onSave('next', reqNum, perMiss);
+      setSaved(true);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -253,23 +345,98 @@ function PotConditionsEditor({
         <View style={{ flex: 1 }}>
           <Eyebrow>Your turn this week</Eyebrow>
           <H3 style={{ marginTop: 4 }}>Next week's pot rules</H3>
-          <Sub style={{ marginTop: 4 }}>The rule setter rotates weekly — it's your turn to set next week's conditions.</Sub>
+          <Sub style={{ marginTop: 4 }}>
+            {isMonday
+              ? "The rule setter rotates weekly — it's your turn to set next week's conditions."
+              : 'Rules can only be set on Monday. These conditions are now locked for next week.'}
+          </Sub>
         </View>
         <Chip text="Rule setter" tone="success" icon="autorenew" compact />
       </View>
-      <View style={{ flexDirection: 'row', gap: 12 }}>
-        <View style={{ flex: 1 }}>
-          <Eyebrow>Sessions / week</Eyebrow>
-          <TextInput value={required} onChangeText={(t) => setRequired(t.replace(/[^0-9]/g, ''))} keyboardType="number-pad" style={styles.input} />
-          <Sub style={{ marginTop: 4, fontSize: 11 }}>1–7 days</Sub>
+
+      {!isMonday ? (
+        /* Locked — read-only display */
+        <View style={{ flexDirection: 'row', gap: 12 }}>
+          <View style={{ flex: 1 }}>
+            <Eyebrow>Sessions / week</Eyebrow>
+            <View style={[styles.input, { justifyContent: 'center' }]}>
+              <Text style={{ fontFamily: FONT.semibold, fontSize: 15, color: C.ink }}>{reqNum}</Text>
+            </View>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Eyebrow>Weekly stake</Eyebrow>
+            <View style={[styles.input, { justifyContent: 'center' }]}>
+              <Text style={{ fontFamily: FONT.semibold, fontSize: 15, color: C.ink }}>{fmtStake(reqNum * perMiss)}</Text>
+            </View>
+          </View>
         </View>
-        <View style={{ flex: 1 }}>
-          <Eyebrow>Weekly stake</Eyebrow>
-          <TextInput value={total} onChangeText={(t) => setTotal(t.replace(/[^0-9]/g, ''))} keyboardType="number-pad" style={styles.input} />
-          <Sub style={{ marginTop: 4, fontSize: 11 }}>Total ELO · {perMiss} per miss</Sub>
-        </View>
-      </View>
-      <Btn label="Save rules" size="md" onPress={save} style={{ marginTop: 14 }} />
+      ) : (
+        /* Editable — Monday only */
+        <>
+          <View>
+            <Eyebrow>Sessions / week</Eyebrow>
+            <TextInput
+              value={required}
+              onChangeText={(t) => { setRequired(t.replace(/[^0-9]/g, '')); setSaved(false); }}
+              keyboardType="number-pad"
+              style={styles.input}
+            />
+            <Sub style={{ marginTop: 4, fontSize: 11 }}>1–7 days</Sub>
+          </View>
+          <View style={{ marginTop: 14 }}>
+            <View style={styles.rowBetween}>
+              <Eyebrow>Weekly stake</Eyebrow>
+              {isMoney && <Text style={{ fontFamily: FONT.bold, fontSize: 16, color: C.ink }}>£{moneyStake}</Text>}
+            </View>
+            {isMoney ? (
+              <>
+                <Slider min={1} max={20} value={moneyStake} onChange={(v) => { setMoneyStake(v); setSaved(false); }} />
+                <Sub style={{ fontSize: 11 }}>£1–£20 for the week · {fmtStake(perMiss)} per miss</Sub>
+              </>
+            ) : (
+              <>
+                <TextInput
+                  value={total}
+                  onChangeText={(t) => { setTotal(t.replace(/[^0-9]/g, '')); setSaved(false); }}
+                  keyboardType="number-pad"
+                  style={styles.input}
+                />
+                <Sub style={{ marginTop: 4, fontSize: 11 }}>Total ELO · {perMiss} per miss</Sub>
+              </>
+            )}
+          </View>
+          {saved ? (
+            <View style={savedBtnStyle}>
+              <MaterialIcons name="check-circle" size={18} color={C.success} />
+              <Text style={savedBtnText}>Rules saved</Text>
+            </View>
+          ) : (
+            <Btn label={saving ? 'Saving…' : 'Save rules'} size="md" loading={saving} disabled={saving} onPress={save} style={{ marginTop: 14 }} />
+          )}
+        </>
+      )}
     </Card>
   );
 }
+
+const stakeToggleBtn: import('react-native').ViewStyle = {
+  flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+  paddingVertical: 10, borderRadius: RADIUS.md,
+  backgroundColor: C.bgSoft, borderWidth: 1, borderColor: C.borderHi,
+};
+const stakeToggleBtnOn: import('react-native').ViewStyle = {
+  backgroundColor: C.primary, borderColor: C.primary,
+};
+const stakeToggleText: import('react-native').TextStyle = {
+  fontFamily: FONT.semibold, fontSize: 14,
+};
+
+const savedBtnStyle: import('react-native').ViewStyle = {
+  flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+  marginTop: 14, height: 44, borderRadius: RADIUS.md,
+  backgroundColor: 'rgba(156,181,143,0.18)',
+  borderWidth: 1, borderColor: 'rgba(156,181,143,0.35)',
+};
+const savedBtnText: import('react-native').TextStyle = {
+  fontFamily: FONT.semibold, fontSize: 14, color: C.success,
+};

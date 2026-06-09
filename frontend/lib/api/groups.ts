@@ -1,7 +1,8 @@
-import { ApiError, apiGet, apiPost } from './client';
+import { ApiError, apiGet, apiPatch, apiPost } from './client';
 import type { PlanDay } from './plans';
 
 export type JoinType = 'open' | 'request';
+export type StakeType = 'elo' | 'money';
 
 export interface Group {
   id: string;
@@ -9,6 +10,7 @@ export interface Group {
   name: string;
   weekly_stake_elo: number;
   join_type: JoinType;
+  stake_type: StakeType;
   leader_id: string | null;
   created_at: string;
 }
@@ -59,6 +61,7 @@ export const createGroup = (payload: {
   name: string;
   weekly_stake_elo: number;
   join_type: JoinType;
+  stake_type?: StakeType;
   required_pledges: number;
   stake_per_miss: number;
 }) => apiPost<Group>('/groups', payload);
@@ -111,8 +114,12 @@ export interface SquadMapMember {
   gym_name: string | null;
   latitude: number | null;
   longitude: number | null;
+  is_live?: boolean;
 }
 
 /** Group members located at their home gyms — for the Squad Map. */
 export const getSquadMap = (group_id: string) =>
   apiGet<SquadMapMember[]>(`/groups/${group_id}/squad-map`);
+
+export const updateStakeType = (group_id: string, stake_type: StakeType) =>
+  apiPatch<Group>(`/groups/${group_id}/stake-type`, { stake_type });

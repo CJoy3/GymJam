@@ -14,7 +14,11 @@ import { pageWrap, styles } from './_shared';
 /* Pot tracker — conditions + member breakdown */
 
 export function PotTracker({ onBack }: { onBack: () => void }) {
-  const { potCurrent, groupMembers, refreshGroup } = useAppState();
+  const { potCurrent, groupMembers, refreshGroup, stakeType } = useAppState();
+  const isMoney = stakeType === 'money';
+  // Money pots store stake_per_miss in pence; ELO pots store points.
+  const fmtStake = (amount: number) =>
+    isMoney ? `£${(amount / 100).toFixed(2)}` : `${amount.toLocaleString()} ELO`;
   const refresh = useRefreshControl();
   // The pot moves as teammates check in / miss — keep it live while viewing.
   usePolling(refreshGroup, 9000);
@@ -56,8 +60,12 @@ export function PotTracker({ onBack }: { onBack: () => void }) {
 
         <FadeInItem delay={60} style={{ marginTop: 18 }}>
           <Eyebrow>Weekly pot</Eyebrow>
-          <Text style={styles.megaNumber}>{potCurrent.total_pot_elo.toLocaleString()}</Text>
-          <Sub style={{ marginTop: -4 }}>ELO in the pot · {totalAtStake.toLocaleString()} at stake</Sub>
+          <Text style={styles.megaNumber}>
+            {isMoney ? `£${(potCurrent.total_pot_elo / 100).toFixed(2)}` : potCurrent.total_pot_elo.toLocaleString()}
+          </Text>
+          <Sub style={{ marginTop: -4 }}>
+            {isMoney ? 'in the money pot' : 'ELO in the pot'} · {fmtStake(totalAtStake)} at stake
+          </Sub>
         </FadeInItem>
 
         <FadeInItem delay={120} style={{ marginTop: 22 }}>
@@ -70,12 +78,12 @@ export function PotTracker({ onBack }: { onBack: () => void }) {
             </View>
             <View style={{ marginTop: 18, gap: 14 }}>
               <RuleRow label="Required pledges" value={String(potCurrent.required_pledges)} />
-              <RuleRow label="Stake per miss" value={`${potCurrent.stake_per_miss} ELO`} />
-              <RuleRow label="Total at risk / person" value={`${(potCurrent.required_pledges * potCurrent.stake_per_miss).toLocaleString()} ELO`} accent />
+              <RuleRow label="Stake per miss" value={fmtStake(potCurrent.stake_per_miss)} />
+              <RuleRow label="Total at risk / person" value={fmtStake(potCurrent.required_pledges * potCurrent.stake_per_miss)} accent />
             </View>
             <Sub style={{ marginTop: 18 }}>
               {potCurrent.is_practice
-                ? 'Practice week — no ELO at stake. The real pot starts next week.'
+                ? `Practice week — no ${isMoney ? 'money' : 'ELO'} at stake. The real pot starts next week.`
                 : `${potCurrent.setter_display_name || 'A member'} set these conditions as this week's rule setter (the role rotates weekly).`}
             </Sub>
           </Card>
@@ -110,7 +118,7 @@ export function PotTracker({ onBack }: { onBack: () => void }) {
                       </View>
                     </View>
                     <Chip
-                      text={m.is_on_track ? 'On track' : `${m.elo_lost_so_far.toLocaleString()}`}
+                      text={m.is_on_track ? 'On track' : `-${fmtStake(m.elo_lost_so_far)}`}
                       tone={m.is_on_track ? 'success' : 'accent'}
                     />
                   </View>

@@ -17,6 +17,9 @@ export async function readCache<T>(key: string): Promise<T | null> {
 }
 
 export function writeCache(key: string, value: unknown): void {
-  // Fire-and-forget — never block the UI on persistence.
   AsyncStorage.setItem(PREFIX + key, JSON.stringify(value)).catch(() => {});
+}
+
+export function clearCache(key: string): void {
+  AsyncStorage.removeItem(PREFIX + key).catch(() => {});
 }

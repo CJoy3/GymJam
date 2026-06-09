@@ -1,4 +1,5 @@
 /** Barrel for all GymJam screens. One file per screen lives alongside this. */
+export { AccountSetup } from './AccountSetup';
 export { Onboarding } from './Onboarding';
 export { Home } from './Home';
 export { CheckIn } from './CheckIn';
@@ -12,4 +13,4 @@ export { Progress } from './Progress';
 export { GymSpace } from './GymSpace';
 export { ProfileView } from './Profile';
 export { SquadMapScreen } from './SquadMapScreen';
-export { DevSettings } from './DevSettings';
+export { AppSettings, DevSettings } from './DevSettings';
