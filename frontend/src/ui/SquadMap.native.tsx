@@ -1,18 +1,14 @@
 /**
- * Squad Map (native) — a real, interactive Google Maps view (the same engine
- * Citymapper/TfL Go use on Android, and react-native-maps' default on iOS is
- * actual Apple Maps via PROVIDER_DEFAULT) with member pins placed at their
- * real home-gym coordinates. Requires a custom dev client / EAS build — this
- * native module isn't available in Expo Go. See app.json for the Google Maps
- * API key fields that must be filled in before building.
+ * Squad Map (native) — Apple Maps via PROVIDER_DEFAULT (no API key required).
+ * On iOS this renders real Apple Maps; on Android it falls back to the OS
+ * default map provider. Requires a custom dev client / EAS build.
  */
 import React, { useMemo } from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
-import MapView, { Marker, PROVIDER_DEFAULT, PROVIDER_GOOGLE, type Region } from 'react-native-maps';
+import { StyleSheet, View } from 'react-native';
+import MapView, { Marker, PROVIDER_DEFAULT, type Region } from 'react-native-maps';
 
 import { C } from '../theme/tokens';
 import { Avatar } from './Avatar';
-import { DARK_MAP_STYLE } from './mapStyle';
 import type { SquadMapMember } from '../../lib/api/groups';
 
 // Loose box around Great Britain — used as the fallback view when no member
@@ -45,10 +41,6 @@ export interface SquadMapProps {
   selectedUserId?: string | null;
 }
 
-// iOS renders Apple Maps via the platform's default provider; Android has no
-// Apple Maps so it (and web's fallback bundle) use Google Maps.
-const provider = Platform.OS === 'ios' ? PROVIDER_DEFAULT : PROVIDER_GOOGLE;
-
 export function SquadMap({ members, width, height, compact = false, onSelect, selectedUserId }: SquadMapProps) {
   const located = useMemo(() => members.filter((m) => m.latitude != null && m.longitude != null), [members]);
   const initialRegion = useMemo(() => regionFromMembers(located) ?? UK_REGION, [located]);
@@ -56,10 +48,9 @@ export function SquadMap({ members, width, height, compact = false, onSelect, se
   return (
     <View style={{ width, height, borderRadius: compact ? 0 : 16, overflow: 'hidden' }}>
       <MapView
-        provider={provider}
+        provider={PROVIDER_DEFAULT}
         style={StyleSheet.absoluteFill}
         initialRegion={initialRegion}
-        customMapStyle={provider === PROVIDER_GOOGLE ? DARK_MAP_STYLE : undefined}
         userInterfaceStyle="dark"
         pointerEvents={compact ? 'none' : 'auto'}
         scrollEnabled={!compact}

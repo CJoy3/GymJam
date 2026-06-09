@@ -8,10 +8,7 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.gymjam.drp",
-      "config": {
-        "googleMapsApiKey": "REPLACE_WITH_YOUR_GOOGLE_MAPS_IOS_API_KEY"
-      }
+      "bundleIdentifier": "com.gymjam.drp"
     },
     "android": {
       "package": "com.gymjam.drp",
