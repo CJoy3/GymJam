@@ -209,7 +209,8 @@ const styles = StyleSheet.create({
   expandBtn: {
     position: 'absolute', top: 10, right: 10,
     width: 30, height: 30, borderRadius: 15,
-    backgroundColor: 'rgba(242,229,210,0.88)',
+    backgroundColor: 'rgba(27,23,20,0.82)',
+    borderWidth: 1, borderColor: C.borderHi,
     alignItems: 'center', justifyContent: 'center',
     zIndex: 2,
   },

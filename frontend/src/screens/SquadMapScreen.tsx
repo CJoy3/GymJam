@@ -4,7 +4,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 
 import { C, FONT, RADIUS, SPACE } from '../theme/tokens';
 import { Avatar } from '../ui/Avatar';
-import { FullMap } from '../ui/FullMap';
+import { FullMap, gymInitials } from '../ui/FullMap';
 import { type Presence } from '../ui/ProfileMap';
 import { useAppState } from '../state/AppState';
 import { getSquadMap, type SquadMapMember } from '../../lib/api/groups';
@@ -17,6 +17,7 @@ export function SquadMapScreen({ onBack }: { onBack: () => void }) {
   const [members, setMembers] = useState<SquadMapMember[]>([]);
   const [gyms, setGyms] = useState<GymMapPoint[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
+  const [selectedGym, setSelectedGym] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     getGymsMap().then(setGyms).catch(() => setGyms([]));
@@ -33,6 +34,7 @@ export function SquadMapScreen({ onBack }: { onBack: () => void }) {
 
   const located = members.filter((m) => m.latitude != null && m.longitude != null);
   const selectedMember = members.find((m) => m.user_id === selected) ?? null;
+  const selectedGymPoint = gyms.find((g) => g.id === selectedGym) ?? null;
   const activeNow = members.filter((m) => statusById[m.user_id] === 'in').length;
 
   return (
@@ -42,7 +44,9 @@ export function SquadMapScreen({ onBack }: { onBack: () => void }) {
         gyms={gyms}
         statusById={statusById}
         selected={selected}
-        onSelect={(id) => setSelected((cur) => (cur === id ? null : id))}
+        onSelect={(id) => { setSelectedGym(null); setSelected((cur) => (cur === id ? null : id)); }}
+        selectedGymId={selectedGym}
+        onSelectGym={(id) => { setSelected(null); setSelectedGym((cur) => (cur === id ? null : id)); }}
       />
 
       {/* Header overlay */}
@@ -71,6 +75,26 @@ export function SquadMapScreen({ onBack }: { onBack: () => void }) {
               </Text>
             </View>
             <StatusChip presence={statusById[selectedMember.user_id]} />
+          </View>
+        </View>
+      )}
+
+      {/* Selected gym stats card */}
+      {selectedGymPoint && (
+        <View style={styles.sheet} pointerEvents="box-none">
+          <View style={styles.sheetCard}>
+            <View style={styles.gymBadge}>
+              <Text style={styles.gymBadgeText}>{gymInitials(selectedGymPoint.name)}</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.sheetName} numberOfLines={1}>{selectedGymPoint.name}</Text>
+              <Text style={styles.sheetMeta}>
+                {selectedGymPoint.member_count} {selectedGymPoint.member_count === 1 ? 'member' : 'members'}
+                {selectedGymPoint.avg_elo > 0 ? ` · ${selectedGymPoint.avg_elo.toLocaleString()} avg ELO` : ''}
+                {selectedGymPoint.active_today > 0 ? ` · ${selectedGymPoint.active_today} today` : ''}
+              </Text>
+            </View>
+            <MaterialIcons name="fitness-center" size={20} color={C.success} />
           </View>
         </View>
       )}
@@ -108,7 +132,8 @@ const styles = StyleSheet.create({
   },
   backBtn: {
     width: 40, height: 40, borderRadius: 20,
-    backgroundColor: 'rgba(242,229,210,0.92)',
+    backgroundColor: 'rgba(27,23,20,0.82)',
+    borderWidth: 1, borderColor: C.borderHi,
     alignItems: 'center', justifyContent: 'center',
   },
   titlePill: {
@@ -127,6 +152,12 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.lg, borderWidth: 1, borderColor: C.borderHi,
     padding: SPACE.lg,
   },
+  gymBadge: {
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: 'rgba(156,181,143,0.28)', borderWidth: 1.5, borderColor: 'rgba(156,181,143,0.7)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  gymBadgeText: { fontFamily: FONT.bold, fontSize: 15, color: C.ink },
   sheetName: { fontFamily: FONT.bold, fontSize: 16, color: C.ink },
   sheetMeta: { fontFamily: FONT.medium, fontSize: 12, color: C.mutedFg, marginTop: 2 },
 

@@ -21,6 +21,8 @@ export function FullMap({
   statusById?: Record<string, Presence>;
   selected?: string | null;
   onSelect?: (id: string) => void;
+  selectedGymId?: string | null;
+  onSelectGym?: (id: string) => void;
   style?: StyleProp<ViewStyle>;
 }) {
   const [size, setSize] = useState({ w: 0, h: 0 });

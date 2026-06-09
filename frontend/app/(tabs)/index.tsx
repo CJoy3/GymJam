@@ -86,12 +86,15 @@ export default function GymJamApp() {
   };
 
   const showTabs = screen !== 'account-setup' && screen !== 'onboarding' && screen !== 'check-in' && screen !== 'plan-week' && screen !== 'settings';
+  // The squad map is a full-bleed map: no top safe-area inset (extends under the
+  // status bar) and no ELO ribbon, so it reads like a real map app.
+  const fullBleed = screen === 'squad-map';
 
   return (
-    <SafeAreaView style={styles.root} edges={['top']}>
+    <SafeAreaView style={styles.root} edges={fullBleed ? [] : ['top']}>
       {/* Persistent ELO bar — a fixed top header, part of the layout (not an
           overlay), so it stays put while the content below scrolls. */}
-      {showTabs && (
+      {showTabs && !fullBleed && (
         <View style={styles.statHeader}>
           <View style={styles.statBadge}>
             <MaterialIcons name="emoji-events" size={13} color={C.accent} />
@@ -131,13 +134,16 @@ const styles = StyleSheet.create({
   splashCenter: { alignItems: 'center' },
   splashBrand: { fontFamily: FONT.extra, fontSize: 44, color: C.ink, letterSpacing: -1.2 },
 
+  // Floating ELO badge — absolutely positioned so it overlays the top-right
+  // corner without adding any vertical buffer to the screen, and stays put
+  // while content scrolls underneath.
   statHeader: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-    height: 44,
-    paddingHorizontal: SPACE.xl,
-    backgroundColor: C.bg,
+    position: 'absolute',
+    // Aligned with each screen's header row (the eyebrow / "Hi, name" line,
+    // which sits at pageWrap.paddingTop = 56).
+    top: 50,
+    right: SPACE.xl,
+    zIndex: 10,
   },
   statBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
