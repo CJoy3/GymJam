@@ -7,6 +7,7 @@ import { LayoutChangeEvent, StyleProp, View, ViewStyle } from 'react-native';
 
 import { SquadMap } from './SquadMap';
 import type { SquadMapMember } from '../../lib/api/groups';
+import type { GymMapPoint } from '../../lib/api/gyms';
 import type { Presence } from './ProfileMap';
 
 export function FullMap({
@@ -16,6 +17,7 @@ export function FullMap({
   style,
 }: {
   members: SquadMapMember[];
+  gyms?: GymMapPoint[];
   statusById?: Record<string, Presence>;
   selected?: string | null;
   onSelect?: (id: string) => void;

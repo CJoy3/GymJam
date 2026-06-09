@@ -12,6 +12,7 @@ import { useRefreshControl } from '../ui/useRefresh';
 import { useAppState } from '../state/AppState';
 import { AVATAR_IDS } from '../gymspace';
 import { getSquadMap, type SquadMapMember } from '../../lib/api/groups';
+import { getGymsMap, type GymMapPoint } from '../../lib/api/gyms';
 import { ensureSupabase } from '../../lib/supabase';
 import { clearCache } from '../../lib/cache';
 
@@ -32,7 +33,9 @@ export function ProfileView({ onSettings, onSquadMap }: { onSettings: () => void
   }
 
   const [squadMembers, setSquadMembers] = useState<SquadMapMember[]>([]);
+  const [gyms, setGyms] = useState<GymMapPoint[]>([]);
   const loadSquad = useCallback(async () => {
+    getGymsMap().then(setGyms).catch(() => setGyms([]));
     if (!groupId) { setSquadMembers([]); return; }
     try { setSquadMembers(await getSquadMap(groupId)); } catch { setSquadMembers([]); }
   }, [groupId]);
@@ -74,7 +77,7 @@ export function ProfileView({ onSettings, onSquadMap }: { onSettings: () => void
           <Card padding={0} style={{ overflow: 'hidden' }}>
             {/* The whole hero is the map; identity is overlaid on top of it. */}
             <Pressable onPress={onSquadMap} style={StyleSheet.absoluteFill}>
-              <ProfileMap members={squadMembers} statusById={statusById} />
+              <ProfileMap members={squadMembers} gyms={gyms} statusById={statusById} />
             </Pressable>
             <Pressable onPress={onSquadMap} style={styles.expandBtn}>
               <MaterialIcons name="open-in-full" size={15} color={C.ink} />

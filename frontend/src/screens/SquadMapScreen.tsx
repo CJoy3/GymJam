@@ -8,15 +8,18 @@ import { FullMap } from '../ui/FullMap';
 import { type Presence } from '../ui/ProfileMap';
 import { useAppState } from '../state/AppState';
 import { getSquadMap, type SquadMapMember } from '../../lib/api/groups';
+import { getGymsMap, type GymMapPoint } from '../../lib/api/gyms';
 
 /* Squad Map — group members on a real map, by their home gym + today's status */
 
 export function SquadMapScreen({ onBack }: { onBack: () => void }) {
   const { groupId, groupName, groupMembers, todayDow } = useAppState();
   const [members, setMembers] = useState<SquadMapMember[]>([]);
+  const [gyms, setGyms] = useState<GymMapPoint[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    getGymsMap().then(setGyms).catch(() => setGyms([]));
     if (!groupId) { setMembers([]); return; }
     try { setMembers(await getSquadMap(groupId)); } catch { setMembers([]); }
   }, [groupId]);
@@ -36,6 +39,7 @@ export function SquadMapScreen({ onBack }: { onBack: () => void }) {
     <View style={styles.screen}>
       <FullMap
         members={members}
+        gyms={gyms}
         statusById={statusById}
         selected={selected}
         onSelect={(id) => setSelected((cur) => (cur === id ? null : id))}

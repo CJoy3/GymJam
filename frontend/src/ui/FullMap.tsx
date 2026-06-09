@@ -5,13 +5,17 @@
  * Tapping a pin selects it. Web has no native map — see FullMap.web.tsx.
  */
 import React, { useEffect, useRef, useState } from 'react';
-import { LayoutChangeEvent, Pressable, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
+import { LayoutChangeEvent, Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import MapView, { PROVIDER_DEFAULT, type Region } from 'react-native-maps';
 
-import { C } from '../theme/tokens';
+import { C, FONT } from '../theme/tokens';
 import { Avatar } from './Avatar';
 import type { SquadMapMember } from '../../lib/api/groups';
+import type { GymMapPoint } from '../../lib/api/gyms';
 import type { Presence } from './ProfileMap';
+
+/** Turf radius (px) grows with a gym's average ELO; default ~18px. */
+export const turfRadius = (avgElo: number) => 18 + Math.min(avgElo / 50, 48);
 
 const DEFAULT_REGION: Region = { latitude: 51.5072, longitude: -0.1276, latitudeDelta: 0.6, longitudeDelta: 0.6 };
 
@@ -34,12 +38,14 @@ const ring = (p?: Presence) => (p === 'in' ? C.success : p === 'pledged' ? C.acc
 
 export function FullMap({
   members,
+  gyms,
   statusById,
   selected,
   onSelect,
   style,
 }: {
   members: SquadMapMember[];
+  gyms?: GymMapPoint[];
   statusById?: Record<string, Presence>;
   selected?: string | null;
   onSelect?: (id: string) => void;
@@ -76,6 +82,21 @@ export function FullMap({
         initialRegion={DEFAULT_REGION}
         onRegionChange={setRegion}
       />
+
+      {/* Gym "turf" — radius grows with the gym's average ELO. Drawn under pins. */}
+      {size.w > 0 && (gyms ?? []).map((g) => {
+        const { x, y } = project(g.latitude, g.longitude);
+        if (x < -80 || y < -80 || x > size.w + 80 || y > size.h + 80) return null;
+        const r = turfRadius(g.avg_elo);
+        return (
+          <View key={g.id} pointerEvents="none" style={{ position: 'absolute', left: x - r, top: y - r, width: r * 2, height: r * 2, alignItems: 'center', justifyContent: 'center' }}>
+            <View style={[StyleSheet.absoluteFill, { borderRadius: r, backgroundColor: 'rgba(156,181,143,0.16)', borderWidth: 1.5, borderColor: 'rgba(156,181,143,0.55)' }]} />
+            <Text style={styles.turfName} numberOfLines={1}>{g.name}</Text>
+            <Text style={styles.turfMeta}>{g.member_count} · {g.active_today} today</Text>
+          </View>
+        );
+      })}
+
       {size.w > 0 && located.map((m) => {
         const { x, y } = project(m.latitude as number, m.longitude as number);
         if (x < -60 || y < -60 || x > size.w + 60 || y > size.h + 60) return null;
@@ -108,4 +129,6 @@ const styles = StyleSheet.create({
     width: 12, height: 12, borderRadius: 6,
     backgroundColor: C.success, borderWidth: 2, borderColor: C.bg,
   },
+  turfName: { fontFamily: FONT.bold, fontSize: 10, color: C.ink, textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 3, maxWidth: 90, textAlign: 'center' },
+  turfMeta: { fontFamily: FONT.semibold, fontSize: 9, color: C.success, textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 3 },
 });

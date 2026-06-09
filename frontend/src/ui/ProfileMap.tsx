@@ -16,6 +16,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { C } from '../theme/tokens';
 import { Avatar } from './Avatar';
 import type { SquadMapMember } from '../../lib/api/groups';
+import type { GymMapPoint } from '../../lib/api/gyms';
+import { turfRadius } from './FullMap';
 
 export type Presence = 'in' | 'pledged' | 'rest';
 
@@ -41,10 +43,12 @@ const ringColor = (p?: Presence) =>
 
 export function ProfileMap({
   members,
+  gyms,
   statusById,
   style,
 }: {
   members: SquadMapMember[];
+  gyms?: GymMapPoint[];
   statusById?: Record<string, Presence>;
   style?: StyleProp<ViewStyle>;
 }) {
@@ -79,6 +83,19 @@ export function ProfileMap({
         colors={['rgba(27,23,20,0.30)', 'rgba(27,23,20,0.80)']}
         style={StyleSheet.absoluteFill}
       />
+      {/* Gym turf blobs (no labels in the compact header), sized by avg ELO. */}
+      {size.w > 0 && (gyms ?? []).map((g) => {
+        const { x, y } = project(g.latitude, g.longitude);
+        const r = turfRadius(g.avg_elo) * 0.7;
+        if (x < -r || y < -r || x > size.w + r || y > size.h + r) return null;
+        return (
+          <View
+            key={g.id}
+            pointerEvents="none"
+            style={{ position: 'absolute', left: x - r, top: y - r, width: r * 2, height: r * 2, borderRadius: r, backgroundColor: 'rgba(156,181,143,0.16)', borderWidth: 1, borderColor: 'rgba(156,181,143,0.5)' }}
+          />
+        );
+      })}
       {size.w > 0 && located.map((m) => {
         const { x, y } = project(m.latitude as number, m.longitude as number);
         const p = statusById?.[m.user_id];

@@ -9,6 +9,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 import { SquadMap } from './SquadMap';
 import type { SquadMapMember } from '../../lib/api/groups';
+import type { GymMapPoint } from '../../lib/api/gyms';
 import type { Presence } from './ProfileMap';
 
 export function ProfileMap({
@@ -16,6 +17,7 @@ export function ProfileMap({
   style,
 }: {
   members: SquadMapMember[];
+  gyms?: GymMapPoint[];
   statusById?: Record<string, Presence>;
   style?: StyleProp<ViewStyle>;
 }) {
