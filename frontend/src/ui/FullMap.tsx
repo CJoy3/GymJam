@@ -89,6 +89,7 @@ export function FullMap({
             style={[styles.pin, { left: x - sz / 2 - 3, top: y - sz / 2 - 3, borderWidth: sel ? 3 : 2, borderColor: ring(p), backgroundColor: p === 'in' ? 'rgba(156,181,143,0.30)' : 'rgba(27,23,20,0.40)' }]}
           >
             <Avatar id={m.avatar} name={m.display_name} size={sz} accent={m.is_me} />
+            {m.is_live && <View style={styles.liveDot} />}
           </Pressable>
         );
       })}
@@ -101,5 +102,10 @@ const styles = StyleSheet.create({
     position: 'absolute',
     padding: 3,
     borderRadius: 28,
+  },
+  liveDot: {
+    position: 'absolute', top: 0, right: 0,
+    width: 12, height: 12, borderRadius: 6,
+    backgroundColor: C.success, borderWidth: 2, borderColor: C.bg,
   },
 });

@@ -63,6 +63,10 @@ export interface AppStateShape {
   money: number;
   moneyWeekChange: number;
 
+  // Opt-in live location sharing
+  shareLocation: boolean;
+  setShareLocation: (on: boolean) => Promise<void>;
+
   // Gyms
   gyms: Gym[];
   gymName: string;

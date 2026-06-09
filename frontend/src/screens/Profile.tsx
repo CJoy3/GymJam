@@ -72,22 +72,22 @@ export function ProfileView({ onSettings, onSquadMap }: { onSettings: () => void
         {/* Profile hero card */}
         <FadeInItem delay={80} style={{ marginTop: 24 }}>
           <Card padding={0} style={{ overflow: 'hidden' }}>
-            <View style={styles.mapBanner}>
-              <Pressable onPress={onSquadMap} style={StyleSheet.absoluteFill}>
-                <ProfileMap members={squadMembers} statusById={statusById} />
-              </Pressable>
-              <Pressable onPress={onSquadMap} style={styles.expandBtn}>
-                <MaterialIcons name="open-in-full" size={15} color={C.ink} />
-              </Pressable>
-              <Pressable onPress={() => setPickerOpen((o) => !o)} style={styles.avatarOnMap}>
-                <Avatar id={avatar} name={displayName} size={72} style={{ borderWidth: 3, borderColor: C.bg }} />
+            {/* The whole hero is the map; identity is overlaid on top of it. */}
+            <Pressable onPress={onSquadMap} style={StyleSheet.absoluteFill}>
+              <ProfileMap members={squadMembers} statusById={statusById} />
+            </Pressable>
+            <Pressable onPress={onSquadMap} style={styles.expandBtn}>
+              <MaterialIcons name="open-in-full" size={15} color={C.ink} />
+            </Pressable>
+
+            <View style={styles.heroContent}>
+              <Pressable onPress={() => setPickerOpen((o) => !o)} style={styles.avatarWrap}>
+                <Avatar id={avatar} name={displayName} size={84} style={{ borderWidth: 3, borderColor: C.bg }} />
                 <View style={styles.editBadge}>
                   <MaterialIcons name={pickerOpen ? 'close' : 'edit'} size={14} color={C.primaryFg} />
                 </View>
               </Pressable>
-            </View>
 
-            <View style={styles.heroBody}>
               {pickerOpen && (
                 <View style={{ width: '100%', marginBottom: 16 }}>
                   <Eyebrow style={{ marginBottom: 10, textAlign: 'center' }}>Choose your look</Eyebrow>
@@ -202,15 +202,17 @@ const styles = StyleSheet.create({
   rowGap: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   iconChip: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(199,160,110,0.15)', alignItems: 'center', justifyContent: 'center' },
 
-  mapBanner: { height: 116, width: '100%', backgroundColor: C.bgSoft },
-  avatarOnMap: { position: 'absolute', bottom: -36, left: '50%', marginLeft: -36 },
+  avatarWrap: { position: 'relative' },
   expandBtn: {
     position: 'absolute', top: 10, right: 10,
     width: 30, height: 30, borderRadius: 15,
     backgroundColor: 'rgba(242,229,210,0.88)',
     alignItems: 'center', justifyContent: 'center',
+    zIndex: 2,
   },
-  heroBody: { paddingTop: 46, paddingHorizontal: SPACE.xl, paddingBottom: SPACE.lg, alignItems: 'center' },
+  // The map fills the whole card; this padding leaves the upper band of the map
+  // visible above the avatar, with identity content overlaid on the darker base.
+  heroContent: { paddingTop: 96, paddingHorizontal: SPACE.xl, paddingBottom: SPACE.xl, alignItems: 'center' },
   editBadge: {
     position: 'absolute', right: -2, bottom: -2,
     width: 28, height: 28, borderRadius: 14,

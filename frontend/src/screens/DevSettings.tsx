@@ -24,7 +24,7 @@ export function AppSettings({ onBack }: { onBack: () => void }) {
     tag, tagChanges, updateTag,
     gyms, gymId, setGym,
     goToPreviousWeek, goToNextWeek, goToPreviousDay, goToNextDay,
-    setElo, setMoney,
+    setElo, setMoney, shareLocation, setShareLocation,
   } = useAppState();
 
   // ── Tag ──────────────────────────────────────────────────────────────────
@@ -230,6 +230,27 @@ export function AppSettings({ onBack }: { onBack: () => void }) {
           </Card>
         </FadeInItem>
 
+        {/* ── Location sharing ── */}
+        <FadeInItem delay={150} style={{ marginTop: 14 }}>
+          <Card padding={SPACE.xl}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <View style={sectionIcon}>
+                <MaterialIcons name="my-location" size={16} color={shareLocation ? C.accent : C.mutedFg} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={rowTitle}>Share my location</Text>
+                <Text style={subText}>Show your live spot to your squad on the map.</Text>
+              </View>
+              <Pressable
+                onPress={() => setShareLocation(!shareLocation)}
+                style={[toggleTrack, shareLocation && { backgroundColor: C.accent, borderColor: C.accent }]}
+              >
+                <View style={[toggleKnob, shareLocation && { alignSelf: 'flex-end' }]} />
+              </Pressable>
+            </View>
+          </Card>
+        </FadeInItem>
+
         {/* ── Dev Tools ── */}
         <FadeInItem delay={160} style={{ marginTop: 32 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 }}>
@@ -333,6 +354,15 @@ const clockBtn = {
 const clockBtnText = { fontFamily: FONT.semibold, fontSize: 12, color: C.primaryFg, letterSpacing: 0.2 };
 
 const subText = { fontFamily: FONT.medium, fontSize: 13, color: C.mutedFg, marginBottom: 10 };
+const rowTitle = { fontFamily: FONT.bold, fontSize: 15, color: C.ink, marginBottom: 2 };
+const toggleTrack = {
+  width: 46, height: 28, borderRadius: 14, padding: 3,
+  backgroundColor: C.bgSoft, borderWidth: 1, borderColor: C.borderHi,
+  justifyContent: 'center' as const,
+};
+const toggleKnob = {
+  width: 20, height: 20, borderRadius: 10, backgroundColor: C.ink, alignSelf: 'flex-start' as const,
+};
 const numInput = {
   height: 48, paddingHorizontal: 14, marginTop: 4,
   borderRadius: RADIUS.md, backgroundColor: C.bgSoft,

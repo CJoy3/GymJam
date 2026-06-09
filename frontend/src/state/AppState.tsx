@@ -1,6 +1,8 @@
 import React, {
   createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, ReactNode,
 } from 'react';
+import { AppState as RNAppState } from 'react-native';
+import * as Location from 'expo-location';
 
 import * as badgesApi from '../../lib/api/badges';
 import * as devApi from '../../lib/api/dev';
@@ -637,6 +639,53 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }
   }, [loadMembers, me, myGroupSummary]);
 
+  // Push the current GPS fix to the backend (only meaningful while sharing).
+  const pushLocation = useCallback(async () => {
+    try {
+      const perm = await Location.getForegroundPermissionsAsync();
+      if (perm.status !== 'granted') return;
+      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      setMe(await usersApi.updateMe({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }));
+    } catch {
+      // best-effort; keep prior location
+    }
+  }, []);
+
+  const setShareLocation = useCallback(async (on: boolean) => {
+    const snapshotMe = me;
+    setMe((prev) => (prev ? { ...prev, share_location: on } : prev)); // optimistic
+    try {
+      if (on) {
+        const perm = await Location.requestForegroundPermissionsAsync();
+        if (perm.status !== 'granted') {
+          setMe(snapshotMe);
+          showToast('Location permission is needed to share your spot', 'error');
+          return;
+        }
+        const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        setMe(await usersApi.updateMe({ share_location: true, latitude: pos.coords.latitude, longitude: pos.coords.longitude }));
+        showToast('Sharing your location with your squad', 'success');
+      } else {
+        setMe(await usersApi.updateMe({ share_location: false }));
+        showToast('Location sharing turned off', 'info');
+      }
+    } catch (e) {
+      setMe(snapshotMe);
+      reportError('Could not update location sharing', e);
+    }
+  }, [me]);
+
+  // While sharing, refresh my location on a gentle cadence + whenever the app
+  // returns to the foreground — never while backgrounded.
+  const sharing = me?.share_location ?? false;
+  useEffect(() => {
+    if (!sharing) return;
+    pushLocation();
+    const id = setInterval(() => { if (RNAppState.currentState === 'active') pushLocation(); }, 60000);
+    const sub = RNAppState.addEventListener('change', (s) => { if (s === 'active') pushLocation(); });
+    return () => { clearInterval(id); sub.remove(); };
+  }, [sharing, pushLocation]);
+
   const setElo = useCallback(async (elo: number) => {
     const snapshotMe = me;
     setMe((prev) => (prev ? { ...prev, elo } : prev));
@@ -810,6 +859,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       userId: me?.id ?? null,
       displayName: me?.display_name ?? 'You',
       avatar: me?.avatar ?? null,
+      shareLocation: me?.share_location ?? false,
+      setShareLocation,
       elo: me?.elo ?? 0,
       streak: me?.streak ?? 0,
       tag: me?.tag ?? null,
@@ -894,7 +945,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     lockNextWeek, me, myGroupSummary, nextWeek, nudge, nudgeCooldowns, placeRoomItem, pot, potCurrent, potNext,
     ready, refreshGroupContext, refreshGroupsAtGym, rejectRequest, reloading, rescheduleMissedDay, roomItems, setGym,
     setPlannedDays, setThisWeekDays, thisWeek, thisWeekIsPractice, todayDow, toggleNextWeekDay,
-    setElo, setMoney, toggleWeek, updateAvatar, updateDisplayName, updatePotConditions, updateStakeType, updateTag, weekOffsetDays,
+    setElo, setMoney, setShareLocation, toggleWeek, updateAvatar, updateDisplayName, updatePotConditions, updateStakeType, updateTag, weekOffsetDays,
   ]);
 
   // tier is purely a function of elo; expose for callers that want it

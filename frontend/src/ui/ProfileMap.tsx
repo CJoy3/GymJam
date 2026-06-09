@@ -95,6 +95,7 @@ export function ProfileMap({
             ]}
           >
             <Avatar id={m.avatar} name={m.display_name} size={sz} />
+            {m.is_live && <View style={styles.liveDot} />}
           </View>
         );
       })}
@@ -108,5 +109,10 @@ const styles = StyleSheet.create({
     padding: 2,
     borderRadius: 18,
     borderWidth: 2,
+  },
+  liveDot: {
+    position: 'absolute', top: -1, right: -1,
+    width: 9, height: 9, borderRadius: 5,
+    backgroundColor: C.success, borderWidth: 1.5, borderColor: C.bg,
   },
 });

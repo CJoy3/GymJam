@@ -114,6 +114,7 @@ export interface SquadMapMember {
   gym_name: string | null;
   latitude: number | null;
   longitude: number | null;
+  is_live?: boolean;
 }
 
 /** Group members located at their home gyms — for the Squad Map. */
