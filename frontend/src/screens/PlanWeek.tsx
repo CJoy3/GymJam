@@ -17,11 +17,15 @@ import { LABELS, pageWrap, styles } from './_shared';
 export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: () => void }) {
   const {
     nextWeek, setPlannedDays, groupName, potNext, updatePotConditions,
-    userId, groupMembers, todayDow, stakeType, isLeader, joinType, updateStakeType,
+    userId, groupMembers, todayDow, nextStakeType, isLeader, joinType, updateStakeType,
   } = useAppState();
-  const isMoney = stakeType === 'money';
+  // PlanWeek is about NEXT week, so it shows/edits next week's currency.
+  const isMoney = nextStakeType === 'money';
   const [changingStakeType, setChangingStakeType] = useState(false);
   const canChangeStakeType = isLeader && joinType === 'request';
+  // The pot type, like the pot rules, can only be changed on Monday — after
+  // that it's locked in for next week.
+  const isMonday = todayDow === 0;
   // For money groups stake_per_miss is pence; show it as £. For ELO it's points.
   const fmtStake = (amount: number) =>
     isMoney ? `£${(amount / 100).toFixed(2)}` : `${amount.toLocaleString()} ELO`;
@@ -122,37 +126,55 @@ export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: (
                 </View>
                 <View style={{ flex: 1 }}>
                   <H3>Pot type</H3>
-                  <Sub style={{ marginTop: 2 }}>Switch between ELO and money stakes</Sub>
+                  <Sub style={{ marginTop: 2 }}>
+                    {isMonday ? 'Takes effect from next week' : 'Locked — can only be changed on Monday'}
+                  </Sub>
                 </View>
+                {!isMonday && <MaterialIcons name="lock" size={18} color={C.mutedFg} />}
               </View>
-              <View style={{ flexDirection: 'row', gap: 8 }}>
-                <Pressable
-                  style={[stakeToggleBtn, !isMoney && stakeToggleBtnOn]}
-                  disabled={changingStakeType}
-                  onPress={async () => {
-                    if (isMoney) {
-                      setChangingStakeType(true);
-                      try { await updateStakeType('elo'); } finally { setChangingStakeType(false); }
-                    }
-                  }}
-                >
-                  <MaterialIcons name="emoji-events" size={15} color={!isMoney ? C.primaryFg : C.mutedFg} />
-                  <Text style={[stakeToggleText, { color: !isMoney ? C.primaryFg : C.mutedFg }]}>ELO</Text>
-                </Pressable>
-                <Pressable
-                  style={[stakeToggleBtn, isMoney && stakeToggleBtnOn]}
-                  disabled={changingStakeType}
-                  onPress={async () => {
-                    if (!isMoney) {
-                      setChangingStakeType(true);
-                      try { await updateStakeType('money'); } finally { setChangingStakeType(false); }
-                    }
-                  }}
-                >
-                  <MaterialIcons name="account-balance-wallet" size={15} color={isMoney ? C.primaryFg : C.mutedFg} />
-                  <Text style={[stakeToggleText, { color: isMoney ? C.primaryFg : C.mutedFg }]}>Money</Text>
-                </Pressable>
-              </View>
+              {isMonday ? (
+                /* Editable — Monday only */
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <Pressable
+                    style={[stakeToggleBtn, !isMoney && stakeToggleBtnOn]}
+                    disabled={changingStakeType}
+                    onPress={async () => {
+                      if (isMoney) {
+                        setChangingStakeType(true);
+                        try { await updateStakeType('elo'); } finally { setChangingStakeType(false); }
+                      }
+                    }}
+                  >
+                    <MaterialIcons name="emoji-events" size={15} color={!isMoney ? C.primaryFg : C.mutedFg} />
+                    <Text style={[stakeToggleText, { color: !isMoney ? C.primaryFg : C.mutedFg }]}>ELO</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[stakeToggleBtn, isMoney && stakeToggleBtnOn]}
+                    disabled={changingStakeType}
+                    onPress={async () => {
+                      if (!isMoney) {
+                        setChangingStakeType(true);
+                        try { await updateStakeType('money'); } finally { setChangingStakeType(false); }
+                      }
+                    }}
+                  >
+                    <MaterialIcons name="account-balance-wallet" size={15} color={isMoney ? C.primaryFg : C.mutedFg} />
+                    <Text style={[stakeToggleText, { color: isMoney ? C.primaryFg : C.mutedFg }]}>Money</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                /* Locked — read-only display of next week's chosen type */
+                <View style={[styles.input, { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 0 }]}>
+                  <MaterialIcons
+                    name={isMoney ? 'account-balance-wallet' : 'emoji-events'}
+                    size={16}
+                    color={isMoney ? C.success : C.accent}
+                  />
+                  <Text style={{ fontFamily: FONT.semibold, fontSize: 15, color: C.ink }}>
+                    {isMoney ? 'Money pot' : 'ELO pot'}
+                  </Text>
+                </View>
+              )}
             </Card>
           </FadeInItem>
         )}

@@ -15,7 +15,7 @@ import { LABELS, pageWrap, styles } from './_shared';
 export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => void; onPlan: () => void; onPot: () => void; onGroup: () => void }) {
   const {
     thisWeek, nextWeek, pot, potCurrent, checkInToday, displayName,
-    todayDow, thisWeekIsPractice, setThisWeekDays, stakeType,
+    todayDow, thisWeekIsPractice, setThisWeekDays, stakeType, groupId,
     rescheduleMissedDay,
   } = useAppState();
   const isMoney = stakeType === 'money';
@@ -133,7 +133,9 @@ export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => v
             <Text style={[styles.subOnCream, { marginTop: 6 }]}>
               {memberCount > 0
                 ? `${onTrack} of ${memberCount} on track · ${isMoney ? `£${(totalAtStake / 100).toFixed(2)}` : totalAtStake.toLocaleString()} at stake`
-                : 'Join a group to start the pot'}
+                : groupId
+                  ? 'No stakes yet — pledge sessions to build the pot'
+                  : 'Join a group to start the pot'}
             </Text>
           </Card>
         </FadeInItem>

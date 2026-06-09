@@ -22,7 +22,7 @@ type Screen =
   | 'profile' | 'squad-map' | 'settings';
 
 export default function GymJamApp() {
-  const { ready, gymId, groupId, tag, elo, streak, money, stakeType, refreshAll } = useAppState();
+  const { ready, gymId, groupId, tag, elo, refreshAll } = useAppState();
   const [screen, setScreen] = useState<Screen | null>(null);
 
   // Keep every device in sync — poll every 30 s and also refresh when the app
@@ -75,33 +75,21 @@ export default function GymJamApp() {
   };
 
   const showTabs = screen !== 'account-setup' && screen !== 'onboarding' && screen !== 'check-in' && screen !== 'plan-week' && screen !== 'settings';
-  const showMoney = stakeType === 'money' && !!groupId;
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
-      <View style={{ flex: 1 }}>{render()}</View>
-
-      {/* Persistent ELO / streak / wallet bar — sits at content-header level */}
+      {/* Persistent ELO bar — a fixed top header, part of the layout (not an
+          overlay), so it stays put while the content below scrolls. */}
       {showTabs && (
-        <View style={styles.statOverlay} pointerEvents="none">
+        <View style={styles.statHeader}>
           <View style={styles.statBadge}>
             <MaterialIcons name="emoji-events" size={13} color={C.accent} />
             <Text style={styles.statText}>{elo.toLocaleString()}</Text>
           </View>
-          {streak > 0 && (
-            <View style={[styles.statBadge, styles.streakBadge]}>
-              <MaterialIcons name="local-fire-department" size={13} color={C.accent} />
-              <Text style={styles.statText}>{streak}w</Text>
-            </View>
-          )}
-          {showMoney && (
-            <View style={[styles.statBadge, styles.walletBadge]}>
-              <MaterialIcons name="account-balance-wallet" size={13} color={C.success} />
-              <Text style={[styles.statText, { color: C.success }]}>£{(money / 100).toFixed(2)}</Text>
-            </View>
-          )}
         </View>
       )}
+
+      <View style={{ flex: 1 }}>{render()}</View>
 
       {showTabs && (
         <View style={styles.tabBar}>
@@ -132,13 +120,13 @@ const styles = StyleSheet.create({
   splashCenter: { alignItems: 'center' },
   splashBrand: { fontFamily: FONT.extra, fontSize: 44, color: C.ink, letterSpacing: -1.2 },
 
-  statOverlay: {
-    position: 'absolute',
-    top: 50,
-    right: SPACE.xl,
+  statHeader: {
     flexDirection: 'row',
-    gap: 6,
-    zIndex: 10,
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    height: 44,
+    paddingHorizontal: SPACE.xl,
+    backgroundColor: C.bg,
   },
   statBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
@@ -147,8 +135,6 @@ const styles = StyleSheet.create({
     backgroundColor: C.card,
     borderWidth: 1, borderColor: C.borderHi,
   },
-  streakBadge: { backgroundColor: 'rgba(199,160,110,0.12)', borderColor: 'rgba(199,160,110,0.3)' },
-  walletBadge: { backgroundColor: 'rgba(156,181,143,0.12)', borderColor: 'rgba(156,181,143,0.3)' },
   statText: { fontFamily: FONT.semibold, fontSize: 13, color: C.ink },
 
   tabBar: {

@@ -180,6 +180,10 @@ create table if not exists pot_conditions (
     stake_per_miss integer not null
         check (stake_per_miss >= 0),
     is_finalized boolean not null default false,
+    -- Pot currency for THIS week ('elo' or 'money'). Stored per-week so changing
+    -- a group's stake type only affects future weeks — the current week keeps the
+    -- type it started with. Defaults to 'elo'; seeded from the group at creation.
+    stake_type text not null default 'elo' check (stake_type in ('elo', 'money')),
     -- The first week after a group is created is a no-stakes "practice" week.
     is_practice boolean not null default false,
     -- Set once the week's pot has been paid out (see settle_due_weeks below),
@@ -197,6 +201,15 @@ alter table pot_conditions
     add column if not exists is_practice boolean not null default false;
 alter table pot_conditions
     add column if not exists is_settled boolean not null default false;
+alter table pot_conditions
+    add column if not exists stake_type text not null default 'elo'
+        check (stake_type in ('elo', 'money'));
+-- Backfill existing per-week rows from the group's current type (one-time; the
+-- column defaults to 'elo' which would otherwise mislabel existing money pots).
+update pot_conditions pc
+    set stake_type = g.stake_type
+    from groups g
+    where pc.group_id = g.id and pc.stake_type = 'elo' and g.stake_type = 'money';
 
 -- (pot_conditions_updated_at trigger is created in the triggers section below,
 --  after set_updated_at() is defined.)

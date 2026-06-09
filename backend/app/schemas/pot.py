@@ -29,5 +29,6 @@ class PotDetail(BaseModel):
     stake_per_miss: int
     is_finalized: bool
     is_practice: bool = False
+    stake_type: str = "elo"
     total_pot_elo: int
     members: list[PotMember]

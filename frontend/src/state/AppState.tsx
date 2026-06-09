@@ -828,18 +828,21 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   const updateStakeType = useCallback(async (stakeType: 'elo' | 'money') => {
     if (!myGroupSummary?.id) return;
-    const snapshot = myGroupSummary;
-    setMyGroupSummary((prev) => prev ? { ...prev, stakeType } : prev);
-    setGroupsAtGym((prev) => prev.map((g) => g.id === snapshot.id ? { ...g, stakeType } : g));
+    const groupId = myGroupSummary.id;
+    // Only NEXT week changes — optimistically reflect it on potNext; leave
+    // potCurrent (and the group's current-week display) untouched.
+    const snapshotNext = potNext;
+    setPotNext((prev) => (prev ? { ...prev, stake_type: stakeType } : prev));
     try {
-      await groupsApi.updateStakeType(snapshot.id, stakeType);
-      showToast(`Switched to ${stakeType === 'money' ? 'money pot' : 'ELO pot'}`, 'success');
+      await groupsApi.updateStakeType(groupId, stakeType);
+      showToast(`Pot type set to ${stakeType === 'money' ? 'money' : 'ELO'} from next week`, 'success');
+      // Re-pull pot detail so potCurrent/potNext reflect the server's frozen types.
+      void loadPot(groupId);
     } catch (e) {
-      setMyGroupSummary(snapshot);
-      setGroupsAtGym((prev) => prev.map((g) => g.id === snapshot.id ? { ...g, stakeType: snapshot.stakeType } : g));
+      setPotNext(snapshotNext);
       reportError('Could not change stake type', e);
     }
-  }, [myGroupSummary]);
+  }, [myGroupSummary, potNext, loadPot]);
 
   const placeRoomItem = useCallback(async (itemId: string, slot: number | null) => {
     try {
@@ -877,7 +880,11 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       groupId: myGroupSummary?.id ?? null,
       isLeader: myGroupSummary?.isLeader === true,
       joinType: myGroupSummary?.joinType ?? 'open',
-      stakeType: myGroupSummary?.stakeType ?? 'elo',
+      // Per-week currency: current week is frozen on potCurrent; next week (what
+      // the leader's toggle changes) lives on potNext. Fall back to the group's
+      // baseline type when the pot detail hasn't loaded yet.
+      stakeType: potCurrent?.stake_type ?? myGroupSummary?.stakeType ?? 'elo',
+      nextStakeType: potNext?.stake_type ?? myGroupSummary?.stakeType ?? 'elo',
       updateStakeType,
       groups: groupsAtGym,
       joinGroup,

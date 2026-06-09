@@ -61,8 +61,8 @@ def _insert_conditions(payload: dict) -> Any | None:
     inserted = _safe_exec(sb.table("pot_conditions").insert(payload))
     if inserted and inserted.data:
         return inserted
-    if "is_practice" in payload:
-        fallback = {k: v for k, v in payload.items() if k != "is_practice"}
+    if "is_practice" in payload or "stake_type" in payload:
+        fallback = {k: v for k, v in payload.items() if k not in ("is_practice", "stake_type")}
         return _safe_exec(sb.table("pot_conditions").insert(fallback))
     return inserted
 
@@ -182,6 +182,17 @@ def _ensure_conditions(group_id: str, week_start: date) -> dict:
                 .eq("week_start", week_start.isoformat())
             )
             row["setter_user_id"] = setter
+        # A row that predates the per-week stake_type column reads back as null —
+        # freeze it to the group's current type so it doesn't drift later.
+        if not row.get("stake_type"):
+            gst = _group_stake_type(group_id)
+            _safe_exec(
+                sb.table("pot_conditions")
+                .update({"stake_type": gst})
+                .eq("group_id", group_id)
+                .eq("week_start", week_start.isoformat())
+            )
+            row["stake_type"] = gst
         return row
 
     payload = {
@@ -192,6 +203,8 @@ def _ensure_conditions(group_id: str, week_start: date) -> dict:
         "stake_per_miss": defaults["stake_per_miss"],
         "is_finalized": False,
         "is_practice": False,
+        # Freeze the currency for this week to the group's current type.
+        "stake_type": _group_stake_type(group_id),
     }
     inserted = _insert_conditions(payload)
     if inserted and inserted.data:
@@ -222,6 +235,7 @@ def seed_conditions(
     stake_per_miss: int,
     is_finalized: bool = False,
     is_practice: bool = False,
+    stake_type: str = "elo",
 ) -> dict:
     """Persist initial pot conditions for a group's week.
 
@@ -240,6 +254,7 @@ def seed_conditions(
         "stake_per_miss": stake_per_miss,
         "is_finalized": is_finalized,
         "is_practice": is_practice,
+        "stake_type": stake_type if stake_type in ("elo", "money") else "elo",
         "updated_at": _utc_now_iso(),
     }
 
@@ -256,8 +271,8 @@ def seed_conditions(
     if row is not None:
         return row
 
-    # Older deployments may be missing the `is_practice` column — retry without it.
-    fallback = {k: v for k, v in payload.items() if k != "is_practice"}
+    # Older deployments may be missing newer columns — retry without them.
+    fallback = {k: v for k, v in payload.items() if k not in ("is_practice", "stake_type")}
     row = _try(fallback)
     if row is not None:
         return row
@@ -488,7 +503,10 @@ def _settle_week(group_id: str, week_start: date) -> None:
     if not cond:
         return
     stake = cond.get("stake_per_miss", 0)
-    if _group_stake_type(group_id) == "money":
+    # Settle in the currency the week was actually run in (frozen per-week), not
+    # whatever the group's current type happens to be now.
+    week_stake_type = cond.get("stake_type") or _group_stake_type(group_id)
+    if week_stake_type == "money":
         _settle_money_week(group_id, week_start, stake)
         return
     pot_total, participants = _settlement_inputs(group_id, week_start, stake)
@@ -529,6 +547,7 @@ def pot_detail(group_id: str, week: str = "current") -> dict:
     required = cond.get("required_pledges", 1)
     stake = cond.get("stake_per_miss", 0)
     is_practice = bool(cond.get("is_practice"))
+    stake_type = cond.get("stake_type") or _group_stake_type(group_id)
 
     sb = get_supabase()
 
@@ -618,6 +637,7 @@ def pot_detail(group_id: str, week: str = "current") -> dict:
         "stake_per_miss": stake,
         "is_finalized": bool(cond.get("is_finalized")),
         "is_practice": is_practice,
+        "stake_type": stake_type,
         "total_pot_elo": pot_total,
         "members": member_rows,
     }
