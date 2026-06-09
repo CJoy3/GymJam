@@ -8,6 +8,7 @@ module.exports = {
     scheme: 'gymjam',
     ios: {
       ...appJson.expo.ios,
+      usesAppleSignIn: true,
       config: {
         googleMapsApiKey,
       },
