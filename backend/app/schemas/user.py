@@ -13,6 +13,8 @@ class UserUpdate(BaseModel):
     gym_id: Optional[str] = None
     avatar: Optional[str] = Field(default=None, max_length=32)
     elo: Optional[int] = Field(default=None, ge=0)
+    # Mocked wallet balance, in pence. Dev/testing only.
+    money: Optional[int] = Field(default=None, ge=0)
 
 
 class TagUpdate(BaseModel):
@@ -29,5 +31,9 @@ class User(BaseModel):
     gym_id: Optional[str]
     tag: Optional[str] = None
     tag_changes: int = 0
+    # Mocked wallet, in pence. money_week_change is the net delta from the most
+    # recent Sunday money-pot payout.
+    money: int = 0
+    money_week_change: int = 0
     created_at: datetime
     updated_at: datetime

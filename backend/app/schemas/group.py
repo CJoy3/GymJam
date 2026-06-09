@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 from app.schemas.plan import PlanDay
 
 JoinType = Literal["open", "request"]
+StakeType = Literal["elo", "money"]
 Role = Literal["member", "leader"]
 RequestStatus = Literal["pending", "approved", "rejected"]
 
@@ -15,6 +16,9 @@ class GroupCreate(BaseModel):
     name: str = Field(min_length=1, max_length=64)
     weekly_stake_elo: int = Field(default=500, ge=0, le=100000)
     join_type: JoinType = "open"
+    # 'elo' or 'money'. Money groups are private-only; for them weekly_stake_elo
+    # and stake_per_miss are expressed in PENCE (£1–£20 weekly).
+    stake_type: StakeType = "elo"
     # Initial pot conditions for the current AND next week.
     required_pledges: int = Field(ge=1, le=7)
     stake_per_miss: int = Field(ge=0, le=100000)
@@ -26,6 +30,7 @@ class Group(BaseModel):
     name: str
     weekly_stake_elo: int
     join_type: JoinType
+    stake_type: StakeType = "elo"
     leader_id: Optional[str]
     created_at: datetime
 

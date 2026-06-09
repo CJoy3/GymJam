@@ -47,6 +47,13 @@ alter table users add column if not exists tag_changes integer not null default 
 -- Make device_id optional so OAuth-only accounts can be created without it.
 alter table users alter column device_id drop not null;
 
+-- Mocked wallet for money-stake groups. Stored in PENCE (integer) to mirror the
+-- integer ELO math and avoid floating-point drift. `money` is the current
+-- deposited balance; `money_week_change` is the net delta from the most recent
+-- Sunday pot payout (drives the Wallet's "this week" stat).
+alter table users add column if not exists money integer not null default 0;
+alter table users add column if not exists money_week_change integer not null default 0;
+
 create table if not exists groups (
     id uuid primary key default gen_random_uuid(),
     -- Groups are global (decoupled from gyms). gym_id is retained only as an
@@ -66,12 +73,18 @@ create table if not exists groups (
     -- rules. The role rotates weekly through the membership; this column mirrors
     -- the computed rotation so it is directly queryable.
     current_rule_setter_id uuid references users(id) on delete set null,
+    -- Whether the group's pot is denominated in ELO or real (mocked) money.
+    -- Money groups are private-only. For money groups the per-week stake is
+    -- £1–£20 and `weekly_stake_elo` / pot `stake_per_miss` hold PENCE.
+    stake_type text not null default 'elo' check (stake_type in ('elo', 'money')),
     created_at timestamptz not null default now()
 );
 
 -- Decouple groups from gyms on existing deployments: gym_id is now optional so
 -- groups are global and a user's home gym no longer gates eligibility.
 alter table groups alter column gym_id drop not null;
+alter table groups add column if not exists stake_type text not null default 'elo'
+    check (stake_type in ('elo', 'money'));
 
 -- Idempotent column additions for existing deployments.
 alter table groups add column if not exists default_required_pledges smallint
@@ -261,6 +274,25 @@ declare
 begin
     update users
        set elo = elo + p_delta
+     where id = p_user_id
+    returning * into updated;
+    return updated;
+end;
+$$;
+
+------------------------------------------------------------
+-- RPC: atomic money increment (pence) used by money-pot settlement.
+-- Clamps at 0 so a balance can never go negative.
+------------------------------------------------------------
+create or replace function add_money(p_user_id uuid, p_delta integer)
+returns users
+language plpgsql
+as $$
+declare
+    updated users;
+begin
+    update users
+       set money = greatest(0, money + p_delta)
      where id = p_user_id
     returning * into updated;
     return updated;

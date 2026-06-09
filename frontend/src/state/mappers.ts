@@ -95,6 +95,7 @@ export function summaryToGroup(s: groupsApi.GroupSummary): Group {
     tier: 'Regular',
     totalElo: s.total_elo,
     joinType: s.join_type,
+    stakeType: s.stake_type ?? 'elo',
     isLeader: s.is_leader,
     isMember: s.is_member,
     requested: s.join_request_pending,

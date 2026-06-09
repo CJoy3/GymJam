@@ -147,12 +147,17 @@ def create_group(
     required_pledges: int,
     stake_per_miss: int,
     gym_id: str | None = None,
+    stake_type: str = "elo",
 ) -> dict:
     if current_membership(creator_id):
         raise HTTPException(status_code=409, detail="Leave your current group first")
     # Validate caller-supplied pot defaults so we fail loud, not via DB-side check.
     required_pledges = max(1, min(7, int(required_pledges or 3)))
     stake_per_miss = max(0, int(stake_per_miss or 100))
+    stake_type = stake_type if stake_type in ("elo", "money") else "elo"
+    # Money pots involve real stakes, so they must be private (approval-gated).
+    if stake_type == "money" and join_type != "request":
+        raise HTTPException(status_code=400, detail="Money-stake groups must be private")
 
     sb = get_supabase()
     # Try inserting WITH the new columns first; if the schema is old, retry
@@ -169,6 +174,7 @@ def create_group(
         **base_payload,
         "default_required_pledges": required_pledges,
         "default_stake_per_miss": stake_per_miss,
+        "stake_type": stake_type,
     }
     grp = None
     try:

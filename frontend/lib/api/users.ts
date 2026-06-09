@@ -10,6 +10,10 @@ export interface User {
   gym_id: string | null;
   tag: string | null;
   tag_changes: number;
+  // Mocked wallet, in pence. money_week_change is the net delta from the most
+  // recent Sunday money-pot payout.
+  money: number;
+  money_week_change: number;
   created_at: string;
   updated_at: string;
 }
@@ -20,7 +24,7 @@ export const registerViaAuth = () =>
 
 export const getMe = () => apiGet<User>('/users/me');
 
-export const updateMe = (patch: { display_name?: string; gym_id?: string | null; avatar?: string; elo?: number }) =>
+export const updateMe = (patch: { display_name?: string; gym_id?: string | null; avatar?: string; elo?: number; money?: number }) =>
   apiPatch<User>('/users/me', patch);
 
 export const updateTag = (tag: string) =>

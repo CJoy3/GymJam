@@ -153,3 +153,12 @@ def add_elo(user_id: str, delta: int) -> dict:
     if not res.data:
         raise HTTPException(status_code=500, detail="Failed to award ELO")
     return res.data[0] if isinstance(res.data, list) else res.data
+
+
+def add_money(user_id: str, delta: int) -> dict:
+    """Atomically add delta (pence) to user.money via Postgres RPC. Clamps at 0."""
+    sb = get_supabase()
+    res = sb.rpc("add_money", {"p_user_id": user_id, "p_delta": delta}).execute()
+    if not res.data:
+        raise HTTPException(status_code=500, detail="Failed to update money")
+    return res.data[0] if isinstance(res.data, list) else res.data

@@ -418,13 +418,71 @@ def _claim_for_settlement(group_id: str, week_start: date) -> dict | None:
     return rows[0] if rows else None
 
 
+def _group_stake_type(group_id: str) -> str:
+    """'money' or 'elo' (default) — which currency the group's pot is in."""
+    sb = get_supabase()
+    res = _safe_exec(sb.table("groups").select("stake_type").eq("id", group_id).limit(1))
+    if not res or not res.data:
+        return "elo"
+    return res.data[0].get("stake_type") or "elo"
+
+
+def _money_breakdown(group_id: str, week_start: date, stake: int) -> tuple[int, list[tuple[str, int]]]:
+    """For a money week: the pot total (pence) and per-participant amount each
+    one staked (missed_count × stake). A member only participates if they pledged
+    at least one day; the money they lose to the pot is their missed sessions."""
+    sb = get_supabase()
+    plans_res = _safe_exec(
+        sb.table("weekly_plans")
+        .select("user_id, plan_days(state)")
+        .eq("group_id", group_id)
+        .eq("week_start", week_start.isoformat())
+    )
+    plans = (plans_res.data if plans_res else None) or []
+    pot_total = 0
+    participants: list[tuple[str, int]] = []
+    for plan in plans:
+        days = plan.get("plan_days") or []
+        pledged = sum(1 for d in days if d["state"] in ("planned", "locked", "checked-in", "missed"))
+        if pledged == 0:
+            continue  # sat the week out — no claim on the pot
+        contributed = sum(1 for d in days if d["state"] == "missed") * stake
+        pot_total += contributed
+        participants.append((plan["user_id"], contributed))
+    return pot_total, participants
+
+
+def _settle_money_week(group_id: str, week_start: date, stake: int) -> None:
+    """Settle a money week: missers' stakes fund the pot, which is then split
+    evenly across everyone who pledged. Each member's net delta (share received
+    minus what they staked) is applied to their wallet and recorded as
+    `money_week_change` so the Wallet's "this week" stat reflects the payout."""
+    sb = get_supabase()
+    pot_total, participants = _money_breakdown(group_id, week_start, stake)
+    if not participants:
+        return
+    share = pot_total // len(participants)
+    for user_id, contributed in participants:
+        net = share - contributed
+        if net != 0:
+            users_svc.add_money(user_id, net)
+        # Record the net payout for this user so the Wallet can show it.
+        _safe_exec(
+            sb.table("users").update({"money_week_change": net}).eq("id", user_id)
+        )
+
+
 def _settle_week(group_id: str, week_start: date) -> None:
-    """Pay out a single finished week's pot, evenly split across participants,
-    straight onto their personal ELO. No-op if it's already been settled."""
+    """Pay out a single finished week's pot, evenly split across participants.
+    ELO groups pay onto personal ELO; money groups move (mocked) money and
+    record each member's weekly delta. No-op if already settled."""
     cond = _claim_for_settlement(group_id, week_start)
     if not cond:
         return
     stake = cond.get("stake_per_miss", 0)
+    if _group_stake_type(group_id) == "money":
+        _settle_money_week(group_id, week_start, stake)
+        return
     pot_total, participants = _settlement_inputs(group_id, week_start, stake)
     if not participants or pot_total <= 0:
         return

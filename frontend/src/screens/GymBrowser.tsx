@@ -4,6 +4,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 
 import { C, FONT, SPACE } from '../theme/tokens';
 import { Btn, Card, Chip, Eyebrow, FadeInItem, H1, H3, Sub } from '../ui/components';
+import { Slider } from '../ui/Slider';
 import { BlobBackground } from '../ui/Blob';
 import { useRefreshControl } from '../ui/useRefresh';
 import { usePolling } from '../ui/usePolling';
@@ -19,9 +20,22 @@ export function GymBrowser({ onBack, onJoined, onCreated }: { onBack: () => void
   const [name, setName] = useState('');
   const [freq, setFreq] = useState('3');           // required_pledges per week, 1..7
   const [weeklyStake, setWeeklyStake] = useState('300');  // full ELO at stake for the week
+  const [stakeType, setStakeType] = useState<'elo' | 'money'>('elo');
+  const [moneyStake, setMoneyStake] = useState(5); // £ at stake for the whole week, 1..20
   const [jt, setJt] = useState<'open' | 'request'>('open');
   const inGroup = groupId !== null;
   usePolling(refreshGroupsAtGym, 12000);
+
+  // Money pots are real stakes → private groups only. Choosing money forces the
+  // group private; choosing Open reverts to ELO stakes.
+  const pickStakeType = (t: 'elo' | 'money') => {
+    setStakeType(t);
+    if (t === 'money') setJt('request');
+  };
+  const pickJoinType = (opt: 'open' | 'request') => {
+    setJt(opt);
+    if (opt === 'open') setStakeType('elo');
+  };
 
   const join = async (g: Group) => {
     if (inGroup) return;
@@ -31,13 +45,18 @@ export function GymBrowser({ onBack, onJoined, onCreated }: { onBack: () => void
   const create = async () => {
     if (!name.trim()) return;
     const requiredPledges = Math.max(1, Math.min(7, parseInt(freq, 10) || 3));
-    const weeklyTotal = Math.max(0, parseInt(weeklyStake, 10) || 0);
-    // Stake per missed session is derived from the full weekly amount / sessions.
+    // Money pots store pence; the weekly figure is the £1–£20 slider value.
+    // ELO pots store the raw ELO total typed in. Either way, the per-miss stake
+    // is the weekly total spread across the pledged sessions.
+    const weeklyTotal = stakeType === 'money'
+      ? moneyStake * 100
+      : Math.max(0, parseInt(weeklyStake, 10) || 0);
     const stakeMiss = Math.round(weeklyTotal / requiredPledges);
     const ok = await addGroup({
       name: name.trim(),
       weekly_stake_elo: weeklyTotal,
-      join_type: jt,
+      join_type: stakeType === 'money' ? 'request' : jt,
+      stake_type: stakeType,
       required_pledges: requiredPledges,
       stake_per_miss: stakeMiss,
     });
@@ -99,42 +118,80 @@ export function GymBrowser({ onBack, onJoined, onCreated }: { onBack: () => void
               <Eyebrow style={{ marginTop: 16 }}>Group name</Eyebrow>
               <TextInput value={name} onChangeText={setName} placeholder="6am Club" placeholderTextColor={C.mutedFg} style={styles.input} />
 
-              <View style={{ flexDirection: 'row', gap: 12, marginTop: 14 }}>
-                <View style={{ flex: 1 }}>
-                  <Eyebrow>Sessions / week</Eyebrow>
-                  <TextInput
-                    value={freq}
-                    onChangeText={(t) => setFreq(t.replace(/[^0-9]/g, ''))}
-                    keyboardType="number-pad"
-                    style={styles.input}
-                  />
-                  <Sub style={{ marginTop: 4, fontSize: 11 }}>1–7 days</Sub>
-                </View>
-                <View style={{ flex: 1 }}>
+              <Eyebrow style={{ marginTop: 16, marginBottom: 8 }}>Stake type</Eyebrow>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                {(['elo', 'money'] as const).map((opt) => {
+                  const on = stakeType === opt;
+                  return (
+                    <Pressable key={opt} onPress={() => pickStakeType(opt)} style={[styles.jtOpt, on && { borderColor: C.primary, backgroundColor: C.cardHi }]}>
+                      <View style={styles.rowGap}>
+                        <MaterialIcons name={opt === 'elo' ? 'emoji-events' : 'payments'} size={16} color={on ? C.primary : C.inkSoft} />
+                        <Text style={{ fontFamily: FONT.semibold, color: C.ink, fontSize: 14 }}>{opt === 'elo' ? 'ELO' : 'Money'}</Text>
+                      </View>
+                      <Sub style={{ marginTop: 2, fontSize: 12 }}>{opt === 'elo' ? 'Stake ELO points' : 'Stake real £ (private only)'}</Sub>
+                    </Pressable>
+                  );
+                })}
+              </View>
+
+              <View style={{ marginTop: 14 }}>
+                <Eyebrow>Sessions / week</Eyebrow>
+                <TextInput
+                  value={freq}
+                  onChangeText={(t) => setFreq(t.replace(/[^0-9]/g, ''))}
+                  keyboardType="number-pad"
+                  style={styles.input}
+                />
+                <Sub style={{ marginTop: 4, fontSize: 11 }}>1–7 days</Sub>
+              </View>
+
+              <View style={{ marginTop: 14 }}>
+                <View style={styles.rowBetween}>
                   <Eyebrow>Weekly stake</Eyebrow>
-                  <TextInput
-                    value={weeklyStake}
-                    onChangeText={(t) => setWeeklyStake(t.replace(/[^0-9]/g, ''))}
-                    keyboardType="number-pad"
-                    style={styles.input}
-                  />
-                  <Sub style={{ marginTop: 4, fontSize: 11 }}>
-                    Total ELO · {Math.round((parseInt(weeklyStake, 10) || 0) / Math.max(1, Math.min(7, parseInt(freq, 10) || 3)))} per miss
-                  </Sub>
+                  {stakeType === 'money' && (
+                    <Text style={{ fontFamily: FONT.bold, fontSize: 16, color: C.ink }}>£{moneyStake}</Text>
+                  )}
                 </View>
+                {stakeType === 'money' ? (
+                  <>
+                    <Slider min={1} max={20} value={moneyStake} onChange={setMoneyStake} />
+                    <Sub style={{ fontSize: 11 }}>
+                      £1–£20 for the week · £{(moneyStake / Math.max(1, Math.min(7, parseInt(freq, 10) || 3))).toFixed(2)} per miss
+                    </Sub>
+                  </>
+                ) : (
+                  <>
+                    <TextInput
+                      value={weeklyStake}
+                      onChangeText={(t) => setWeeklyStake(t.replace(/[^0-9]/g, ''))}
+                      keyboardType="number-pad"
+                      style={styles.input}
+                    />
+                    <Sub style={{ marginTop: 4, fontSize: 11 }}>
+                      Total ELO · {Math.round((parseInt(weeklyStake, 10) || 0) / Math.max(1, Math.min(7, parseInt(freq, 10) || 3)))} per miss
+                    </Sub>
+                  </>
+                )}
               </View>
 
               <Eyebrow style={{ marginTop: 14, marginBottom: 8 }}>Who can join?</Eyebrow>
               <View style={{ flexDirection: 'row', gap: 8 }}>
                 {(['open', 'request'] as const).map((opt) => {
                   const on = jt === opt;
+                  const disabled = stakeType === 'money' && opt === 'open';
                   return (
-                    <Pressable key={opt} onPress={() => setJt(opt)} style={[styles.jtOpt, on && { borderColor: C.primary, backgroundColor: C.cardHi }]}>
+                    <Pressable
+                      key={opt}
+                      onPress={() => !disabled && pickJoinType(opt)}
+                      style={[styles.jtOpt, on && { borderColor: C.primary, backgroundColor: C.cardHi }, disabled && { opacity: 0.4 }]}
+                    >
                       <View style={styles.rowGap}>
                         <MaterialIcons name={opt === 'open' ? 'public' : 'lock'} size={16} color={on ? C.primary : C.inkSoft} />
                         <Text style={{ fontFamily: FONT.semibold, color: C.ink, fontSize: 14 }}>{opt === 'open' ? 'Open' : 'Private'}</Text>
                       </View>
-                      <Sub style={{ marginTop: 2, fontSize: 12 }}>{opt === 'open' ? 'Anyone joins instantly' : 'You approve each request'}</Sub>
+                      <Sub style={{ marginTop: 2, fontSize: 12 }}>
+                        {disabled ? 'Not for money pots' : opt === 'open' ? 'Anyone joins instantly' : 'You approve each request'}
+                      </Sub>
                     </Pressable>
                   );
                 })}
@@ -171,6 +228,7 @@ export function GymBrowser({ onBack, onJoined, onCreated }: { onBack: () => void
                         <Sub>{g.totalElo} ELO</Sub>
                         <Text style={styles.dot}>·</Text>
                         <Sub>{g.joinType === 'open' ? 'Open' : 'Private'}</Sub>
+                        {g.stakeType === 'money' && <Chip text="£ Money" tone="accent" compact />}
                       </View>
                     </View>
                   </View>

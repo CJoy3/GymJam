@@ -401,6 +401,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     name: string;
     weekly_stake_elo: number;
     join_type: 'open' | 'request';
+    stake_type?: 'elo' | 'money';
     required_pledges: number;
     stake_per_miss: number;
   }) => {
@@ -411,6 +412,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         name: g.name,
         weekly_stake_elo: g.weekly_stake_elo,
         join_type: g.join_type,
+        stake_type: g.stake_type ?? 'elo',
         required_pledges: g.required_pledges,
         stake_per_miss: g.stake_per_miss,
       });
@@ -422,6 +424,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         tier: 'Regular',
         totalElo: me.elo,
         joinType: created.join_type,
+        stakeType: created.stake_type ?? 'elo',
         isLeader: true,
         isMember: true,
         requested: false,
@@ -646,6 +649,18 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }
   }, [me]);
 
+  const setMoney = useCallback(async (pence: number) => {
+    const snapshotMe = me;
+    setMe((prev) => (prev ? { ...prev, money: pence } : prev));
+    try {
+      const u = await usersApi.updateMe({ money: pence });
+      setMe(u);
+    } catch (e) {
+      setMe(snapshotMe);
+      reportError('Could not set wallet balance', e);
+    }
+  }, [me]);
+
   const nudge = useCallback(async (targetUserId: string) => {
     if (!myGroupSummary?.id) return;
     // Optimistically start the hour-long cooldown so the button locks instantly.
@@ -784,6 +799,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       streak: me?.streak ?? 0,
       tag: me?.tag ?? null,
       tagChanges: me?.tag_changes ?? 0,
+      money: me?.money ?? 0,
+      moneyWeekChange: me?.money_week_change ?? 0,
 
       gyms,
       gymName,
@@ -793,6 +810,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       groupName: myGroupSummary?.name ?? '',
       groupId: myGroupSummary?.id ?? null,
       isLeader: myGroupSummary?.isLeader === true,
+      stakeType: myGroupSummary?.stakeType ?? 'elo',
       groups: groupsAtGym,
       joinGroup,
       leaveGroup,
@@ -845,6 +863,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       updateDisplayName,
       updateAvatar,
       setElo,
+      setMoney,
 
       roomItems,
       placeRoomItem,
@@ -858,7 +877,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     lockNextWeek, me, myGroupSummary, nextWeek, nudge, nudgeCooldowns, placeRoomItem, pot, potCurrent, potNext,
     ready, refreshGroupContext, refreshGroupsAtGym, rejectRequest, reloading, rescheduleMissedDay, roomItems, setGym,
     setPlannedDays, setThisWeekDays, thisWeek, thisWeekIsPractice, todayDow, toggleNextWeekDay,
-    setElo, toggleWeek, updateAvatar, updateDisplayName, updatePotConditions, updateTag, weekOffsetDays,
+    setElo, setMoney, toggleWeek, updateAvatar, updateDisplayName, updatePotConditions, updateTag, weekOffsetDays,
   ]);
 
   // tier is purely a function of elo; expose for callers that want it

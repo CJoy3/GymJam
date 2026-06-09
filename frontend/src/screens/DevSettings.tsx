@@ -8,11 +8,13 @@ import { useAppState } from '../state/AppState';
 import { pageWrap } from './_shared';
 
 export function DevSettings({ onBack }: { onBack: () => void }) {
-  const { elo, goToPreviousWeek, goToNextWeek, goToPreviousDay, goToNextDay, setElo } = useAppState();
+  const { elo, money, goToPreviousWeek, goToNextWeek, goToPreviousDay, goToNextDay, setElo, setMoney } = useAppState();
 
   const [steppingClock, setSteppingClock] = useState<null | 'prevWeek' | 'nextWeek' | 'prevDay' | 'nextDay'>(null);
   const [eloDraft, setEloDraft] = useState(String(elo));
   const [settingElo, setSettingElo] = useState(false);
+  const [moneyDraft, setMoneyDraft] = useState((money / 100).toFixed(2));
+  const [settingMoney, setSettingMoney] = useState(false);
 
   const step = (key: typeof steppingClock, action: () => Promise<void>) => async () => {
     setSteppingClock(key);
@@ -24,6 +26,13 @@ export function DevSettings({ onBack }: { onBack: () => void }) {
     if (isNaN(val) || val < 0) return;
     setSettingElo(true);
     try { await setElo(val); } finally { setSettingElo(false); }
+  };
+
+  const moneyPence = Math.round((parseFloat(moneyDraft) || 0) * 100);
+  const handleSetMoney = async () => {
+    if (isNaN(parseFloat(moneyDraft)) || moneyPence < 0) return;
+    setSettingMoney(true);
+    try { await setMoney(moneyPence); } finally { setSettingMoney(false); }
   };
 
   return (
@@ -92,6 +101,28 @@ export function DevSettings({ onBack }: { onBack: () => void }) {
                 label={settingElo ? 'Saving…' : 'Set ELO'}
                 disabled={settingElo || !eloDraft || isNaN(parseInt(eloDraft, 10))}
                 onPress={handleSetElo}
+              />
+            </View>
+          </Card>
+        </FadeInItem>
+
+        <FadeInItem delay={200} style={{ marginTop: 14 }}>
+          <Card padding={SPACE.xl}>
+            <Eyebrow style={{ marginBottom: 4 }}>Set wallet balance</Eyebrow>
+            <Text style={currentEloText}>Current: £{(money / 100).toFixed(2)}</Text>
+            <TextInput
+              value={moneyDraft}
+              onChangeText={setMoneyDraft}
+              keyboardType="decimal-pad"
+              placeholder="Enter £ amount"
+              placeholderTextColor={C.mutedFg}
+              style={eloInput}
+            />
+            <View style={{ marginTop: 10 }}>
+              <Btn
+                label={settingMoney ? 'Saving…' : 'Set money'}
+                disabled={settingMoney || isNaN(parseFloat(moneyDraft))}
+                onPress={handleSetMoney}
               />
             </View>
           </Card>

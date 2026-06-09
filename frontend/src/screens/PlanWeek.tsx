@@ -6,6 +6,7 @@ import { C, FONT, RADIUS, SPACE } from '../theme/tokens';
 import { Btn, Card, Chip, Eyebrow, FadeInItem, H1, H3, Num, Sub } from '../ui/components';
 import { Avatar } from '../ui/Avatar';
 import { DayPicker } from '../ui/DayPicker';
+import { Slider } from '../ui/Slider';
 import { BlobBackground } from '../ui/Blob';
 import { showToast } from '../ui/toast';
 import { useAppState, DayStatus } from '../state/AppState';
@@ -16,8 +17,12 @@ import { LABELS, pageWrap, styles } from './_shared';
 export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: () => void }) {
   const {
     nextWeek, setPlannedDays, groupName, potNext, updatePotConditions,
-    userId, groupMembers, todayDow,
+    userId, groupMembers, todayDow, stakeType,
   } = useAppState();
+  const isMoney = stakeType === 'money';
+  // For money groups stake_per_miss is pence; show it as £. For ELO it's points.
+  const fmtStake = (amount: number) =>
+    isMoney ? `£${(amount / 100).toFixed(2)}` : `${amount.toLocaleString()} ELO`;
   // The rule setter rotates weekly — only the setter for next week may edit it.
   const isNextSetter = !!potNext && potNext.setter_user_id != null && potNext.setter_user_id === userId;
   const [local, setLocal] = useState<DayStatus['state'][]>(() => nextWeek.map((d) => d.state));
@@ -81,7 +86,7 @@ export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: (
 
         {isNextSetter && (
           <FadeInItem delay={80} style={{ marginTop: 24 }}>
-            <PotConditionsEditor potNext={potNext} onSave={updatePotConditions} isMonday={todayDow === 0} />
+            <PotConditionsEditor potNext={potNext} onSave={updatePotConditions} isMonday={todayDow === 0} isMoney={isMoney} />
           </FadeInItem>
         )}
         {!isNextSetter && potNext && (
@@ -94,7 +99,7 @@ export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: (
                 <View style={{ flex: 1 }}>
                   <H3>Next week's pot rules</H3>
                   <Sub style={{ marginTop: 2 }}>
-                    {potNext.setter_display_name || 'A group member'} is this week's rule setter (the role rotates weekly): {potNext.required_pledges} {potNext.required_pledges === 1 ? 'pledge' : 'pledges'} · {(potNext.required_pledges * potNext.stake_per_miss).toLocaleString()} ELO at stake ({potNext.stake_per_miss} per miss).
+                    {potNext.setter_display_name || 'A group member'} is this week's rule setter (the role rotates weekly): {potNext.required_pledges} {potNext.required_pledges === 1 ? 'pledge' : 'pledges'} · {fmtStake(potNext.required_pledges * potNext.stake_per_miss)} at stake ({fmtStake(potNext.stake_per_miss)} per miss).
                   </Sub>
                 </View>
               </View>
@@ -116,11 +121,11 @@ export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: (
             )}
             <View style={styles.divider} />
             <Eyebrow>Your stake</Eyebrow>
-            <Num style={{ marginTop: 6 }}>{(sel * stakePerMiss).toLocaleString()} ELO</Num>
+            <Num style={{ marginTop: 6 }}>{fmtStake(sel * stakePerMiss)}</Num>
             <Sub style={{ marginTop: 4 }}>
               {sel === 0
                 ? 'Pledge any number of days to enter the pot.'
-                : `${stakePerMiss.toLocaleString()} ELO lost per missed session.`}
+                : `${fmtStake(stakePerMiss)} lost per missed session.`}
             </Sub>
           </Card>
         </FadeInItem>
@@ -222,28 +227,35 @@ function MemberPlanRow({ days, highlightDows }: { days: DayStatus[]; highlightDo
  * setter. Only editable on Monday — after that the conditions are locked.
  */
 function PotConditionsEditor({
-  potNext, onSave, isMonday,
+  potNext, onSave, isMonday, isMoney,
 }: {
   potNext: import('../../lib/api/pot').PotDetail | null;
   onSave: (week: 'current' | 'next', required: number, stake: number) => Promise<void>;
   isMonday: boolean;
+  isMoney: boolean;
 }) {
   const initialRequired = potNext && potNext.required_pledges > 0 ? potNext.required_pledges : 3;
   const initialTotal = potNext && potNext.required_pledges > 0
     ? potNext.required_pledges * potNext.stake_per_miss
-    : 300;
+    : (isMoney ? 500 : 300);  // money: pence (£5 default); elo: 300
   const [required, setRequired] = useState(String(initialRequired));
   const [total, setTotal] = useState(String(initialTotal));
+  // Money weekly stake in whole £ (1–20), kept in sync with `total` (pence).
+  const [moneyStake, setMoneyStake] = useState(Math.max(1, Math.min(20, Math.round(initialTotal / 100))));
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   useEffect(() => {
     setRequired(String(initialRequired));
     setTotal(String(initialTotal));
+    setMoneyStake(Math.max(1, Math.min(20, Math.round(initialTotal / 100))));
     setSaved(false);
   }, [initialRequired, initialTotal]);
 
   const reqNum = Math.max(1, Math.min(7, parseInt(required, 10) || 1));
-  const perMiss = Math.round((parseInt(total, 10) || 0) / reqNum);
+  const weeklyTotal = isMoney ? moneyStake * 100 : (parseInt(total, 10) || 0);
+  const perMiss = Math.round(weeklyTotal / reqNum);
+  const fmtStake = (amount: number) =>
+    isMoney ? `£${(amount / 100).toFixed(2)}` : `${amount.toLocaleString()} ELO`;
 
   const save = async () => {
     setSaving(true);
@@ -282,34 +294,44 @@ function PotConditionsEditor({
           <View style={{ flex: 1 }}>
             <Eyebrow>Weekly stake</Eyebrow>
             <View style={[styles.input, { justifyContent: 'center' }]}>
-              <Text style={{ fontFamily: FONT.semibold, fontSize: 15, color: C.ink }}>{reqNum * perMiss}</Text>
+              <Text style={{ fontFamily: FONT.semibold, fontSize: 15, color: C.ink }}>{fmtStake(reqNum * perMiss)}</Text>
             </View>
           </View>
         </View>
       ) : (
         /* Editable — Monday only */
         <>
-          <View style={{ flexDirection: 'row', gap: 12 }}>
-            <View style={{ flex: 1 }}>
-              <Eyebrow>Sessions / week</Eyebrow>
-              <TextInput
-                value={required}
-                onChangeText={(t) => { setRequired(t.replace(/[^0-9]/g, '')); setSaved(false); }}
-                keyboardType="number-pad"
-                style={styles.input}
-              />
-              <Sub style={{ marginTop: 4, fontSize: 11 }}>1–7 days</Sub>
-            </View>
-            <View style={{ flex: 1 }}>
+          <View>
+            <Eyebrow>Sessions / week</Eyebrow>
+            <TextInput
+              value={required}
+              onChangeText={(t) => { setRequired(t.replace(/[^0-9]/g, '')); setSaved(false); }}
+              keyboardType="number-pad"
+              style={styles.input}
+            />
+            <Sub style={{ marginTop: 4, fontSize: 11 }}>1–7 days</Sub>
+          </View>
+          <View style={{ marginTop: 14 }}>
+            <View style={styles.rowBetween}>
               <Eyebrow>Weekly stake</Eyebrow>
-              <TextInput
-                value={total}
-                onChangeText={(t) => { setTotal(t.replace(/[^0-9]/g, '')); setSaved(false); }}
-                keyboardType="number-pad"
-                style={styles.input}
-              />
-              <Sub style={{ marginTop: 4, fontSize: 11 }}>Total ELO · {perMiss} per miss</Sub>
+              {isMoney && <Text style={{ fontFamily: FONT.bold, fontSize: 16, color: C.ink }}>£{moneyStake}</Text>}
             </View>
+            {isMoney ? (
+              <>
+                <Slider min={1} max={20} value={moneyStake} onChange={(v) => { setMoneyStake(v); setSaved(false); }} />
+                <Sub style={{ fontSize: 11 }}>£1–£20 for the week · {fmtStake(perMiss)} per miss</Sub>
+              </>
+            ) : (
+              <>
+                <TextInput
+                  value={total}
+                  onChangeText={(t) => { setTotal(t.replace(/[^0-9]/g, '')); setSaved(false); }}
+                  keyboardType="number-pad"
+                  style={styles.input}
+                />
+                <Sub style={{ marginTop: 4, fontSize: 11 }}>Total ELO · {perMiss} per miss</Sub>
+              </>
+            )}
           </View>
           {saved ? (
             <View style={savedBtnStyle}>

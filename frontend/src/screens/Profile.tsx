@@ -30,7 +30,7 @@ function useDebounce<T>(value: T, delay: number): T {
 export function ProfileView({ onSettings, onSquadMap }: { onSettings: () => void; onSquadMap: () => void }) {
   const {
     elo, streak, gymName, gymId, gyms, groupName, groupId, displayName, avatar,
-    thisWeek, todayDow, groupMembers,
+    thisWeek, todayDow, groupMembers, money, moneyWeekChange,
     tag, tagChanges, updateDisplayName, updateAvatar, updateTag, setGym,
   } = useAppState();
   const refresh = useRefreshControl();
@@ -151,7 +151,7 @@ export function ProfileView({ onSettings, onSquadMap }: { onSettings: () => void
                 <MaterialIcons name="open-in-full" size={15} color={C.ink} />
               </Pressable>
               <Pressable onPress={() => setPickerOpen((o) => !o)} style={styles.avatarOnMap}>
-                <Avatar id={avatar} name={displayName} size={92} style={{ borderWidth: 3, borderColor: C.bg }} />
+                <Avatar id={avatar} name={displayName} size={72} style={{ borderWidth: 3, borderColor: C.bg }} />
                 <View style={styles.editBadge}>
                   <MaterialIcons name={pickerOpen ? 'close' : 'edit'} size={14} color={C.primaryFg} />
                 </View>
@@ -355,8 +355,48 @@ export function ProfileView({ onSettings, onSquadMap }: { onSettings: () => void
           </Card>
         </FadeInItem>
 
+        {/* Wallet */}
+        <FadeInItem delay={290} style={{ marginTop: 22 }}>
+          <Card padding={SPACE.xl}>
+            <View style={[styles.rowGap, { marginBottom: 16 }]}>
+              <View style={[styles.iconChip, { backgroundColor: C.accentSoft }]}>
+                <MaterialIcons name="account-balance-wallet" size={18} color={C.accent} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <H3>Wallet</H3>
+                <Sub style={{ marginTop: 2 }}>Money-pot balance</Sub>
+              </View>
+            </View>
+            <View style={styles.walletRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.walletLabel}>Deposited</Text>
+                <Text style={styles.walletBalance}>£{(money / 100).toFixed(2)}</Text>
+              </View>
+              <View style={styles.walletDivider} />
+              <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                <Text style={styles.walletLabel}>This week</Text>
+                <View style={styles.rowGap}>
+                  <MaterialIcons
+                    name={moneyWeekChange > 0 ? 'arrow-upward' : moneyWeekChange < 0 ? 'arrow-downward' : 'remove'}
+                    size={16}
+                    color={moneyWeekChange > 0 ? C.success : moneyWeekChange < 0 ? C.danger : C.mutedFg}
+                  />
+                  <Text
+                    style={[
+                      styles.walletChange,
+                      { color: moneyWeekChange > 0 ? C.success : moneyWeekChange < 0 ? C.danger : C.mutedFg },
+                    ]}
+                  >
+                    {moneyWeekChange > 0 ? '+' : moneyWeekChange < 0 ? '−' : ''}£{(Math.abs(moneyWeekChange) / 100).toFixed(2)}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          </Card>
+        </FadeInItem>
+
         {/* Sign out */}
-        <FadeInItem delay={300} style={{ marginTop: 22 }}>
+        <FadeInItem delay={320} style={{ marginTop: 22 }}>
           <Pressable onPress={signOut} style={styles.signOutBtn}>
             <MaterialIcons name="logout" size={18} color={C.danger} />
             <Text style={styles.signOutText}>Sign out</Text>
@@ -373,26 +413,26 @@ const styles = StyleSheet.create({
   iconChip: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
 
   mapBanner: {
-    height: 184,
+    height: 116,
     width: '100%',
     backgroundColor: C.bgSoft,
   },
   avatarOnMap: {
     position: 'absolute',
-    bottom: -46,
+    bottom: -36,
     left: '50%',
-    marginLeft: -46,
+    marginLeft: -36,
   },
   expandBtn: {
-    position: 'absolute', top: 12, right: 12,
-    width: 32, height: 32, borderRadius: 16,
+    position: 'absolute', top: 10, right: 10,
+    width: 30, height: 30, borderRadius: 15,
     backgroundColor: 'rgba(242,229,210,0.88)',
     alignItems: 'center', justifyContent: 'center',
   },
   heroBody: {
-    paddingTop: 60,
+    paddingTop: 46,
     paddingHorizontal: SPACE.xl,
-    paddingBottom: SPACE.xl,
+    paddingBottom: SPACE.lg,
     alignItems: 'center',
   },
 
@@ -439,6 +479,12 @@ const styles = StyleSheet.create({
   gymOptionSelected: { backgroundColor: C.primary, borderColor: C.primary },
   gymOptionText: { fontFamily: FONT.semibold, fontSize: 15, color: C.ink, flex: 1 },
   gymValue: { fontFamily: FONT.bold, fontSize: 18, color: C.ink, letterSpacing: -0.2 },
+
+  walletRow: { flexDirection: 'row', alignItems: 'center' },
+  walletDivider: { width: 1, alignSelf: 'stretch', backgroundColor: C.border, marginHorizontal: SPACE.lg },
+  walletLabel: { fontFamily: FONT.medium, fontSize: 12, color: C.mutedFg, marginBottom: 6 },
+  walletBalance: { fontFamily: FONT.extra, fontSize: 26, color: C.ink, letterSpacing: -0.6 },
+  walletChange: { fontFamily: FONT.bold, fontSize: 18, letterSpacing: -0.3 },
 
   signOutBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,

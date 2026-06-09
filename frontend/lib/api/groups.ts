@@ -2,6 +2,7 @@ import { ApiError, apiGet, apiPost } from './client';
 import type { PlanDay } from './plans';
 
 export type JoinType = 'open' | 'request';
+export type StakeType = 'elo' | 'money';
 
 export interface Group {
   id: string;
@@ -9,6 +10,7 @@ export interface Group {
   name: string;
   weekly_stake_elo: number;
   join_type: JoinType;
+  stake_type: StakeType;
   leader_id: string | null;
   created_at: string;
 }
@@ -59,6 +61,7 @@ export const createGroup = (payload: {
   name: string;
   weekly_stake_elo: number;
   join_type: JoinType;
+  stake_type?: StakeType;
   required_pledges: number;
   stake_per_miss: number;
 }) => apiPost<Group>('/groups', payload);
