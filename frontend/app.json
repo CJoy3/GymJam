@@ -8,7 +8,13 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.gymjam.drp"
+      "bundleIdentifier": "com.gymjam.drp",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "config": {
+        "googleMapsApiKey": "AIzaSyB3RZqAciIsFQuYWVPX0V88pGhEtzLnPZQ"
+      }
     },
     "android": {
       "package": "com.gymjam.drp",
@@ -21,7 +27,7 @@
       "predictiveBackGestureEnabled": false,
       "config": {
         "googleMaps": {
-          "apiKey": "REPLACE_WITH_YOUR_GOOGLE_MAPS_ANDROID_API_KEY"
+          "apiKey": "AIzaSyB3RZqAciIsFQuYWVPX0V88pGhEtzLnPZQ"
         }
       }
     },

@@ -1,18 +1,17 @@
 /**
- * Squad Map (native) — Apple Maps via PROVIDER_DEFAULT (no API key required).
- * On iOS this renders real Apple Maps; on Android it falls back to the OS
- * default map provider. Requires a custom dev client / EAS build.
+ * Squad Map (native) — Google Maps on both iOS and Android via PROVIDER_GOOGLE.
+ * Requires a Google Maps API key in app.json (ios.config.googleMapsApiKey and
+ * android.config.googleMaps.apiKey). Requires a custom dev client / EAS build.
  */
 import React, { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
-import MapView, { Marker, PROVIDER_DEFAULT, type Region } from 'react-native-maps';
+import MapView, { Marker, PROVIDER_GOOGLE, type Region } from 'react-native-maps';
 
 import { C } from '../theme/tokens';
 import { Avatar } from './Avatar';
+import { DARK_MAP_STYLE } from './mapStyle';
 import type { SquadMapMember } from '../../lib/api/groups';
 
-// Loose box around Great Britain — used as the fallback view when no member
-// has a located home gym yet.
 const UK_REGION: Region = { latitude: 54.4, longitude: -3.0, latitudeDelta: 9.5, longitudeDelta: 11 };
 
 function regionFromMembers(members: SquadMapMember[]): Region | null {
@@ -48,10 +47,10 @@ export function SquadMap({ members, width, height, compact = false, onSelect, se
   return (
     <View style={{ width, height, borderRadius: compact ? 0 : 16, overflow: 'hidden' }}>
       <MapView
-        provider={PROVIDER_DEFAULT}
+        provider={PROVIDER_GOOGLE}
         style={StyleSheet.absoluteFill}
         initialRegion={initialRegion}
-        userInterfaceStyle="dark"
+        customMapStyle={DARK_MAP_STYLE}
         pointerEvents={compact ? 'none' : 'auto'}
         scrollEnabled={!compact}
         zoomEnabled={!compact}
