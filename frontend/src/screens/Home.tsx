@@ -15,9 +15,10 @@ import { LABELS, pageWrap, styles } from './_shared';
 export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => void; onPlan: () => void; onPot: () => void; onGroup: () => void }) {
   const {
     thisWeek, nextWeek, elo, streak, pot, potCurrent, checkInToday, displayName,
-    todayDow, thisWeekIsPractice, setThisWeekDays,
+    todayDow, thisWeekIsPractice, setThisWeekDays, stakeType,
     rescheduleMissedDay,
   } = useAppState();
+  const isMoney = stakeType === 'money';
   const refresh = useRefreshControl();
   const done = thisWeek.filter((d) => d.state === 'checked-in').length;
   const pledged = thisWeek.filter((d) => d.state === 'checked-in' || d.state === 'planned' || d.state === 'locked').length;
@@ -128,7 +129,9 @@ export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => v
               <View>
                 <Text style={styles.eyebrowOnCream}>GROUP POT</Text>
                 <Text style={styles.potValue}>
-                  {pot.toLocaleString()} <Text style={styles.potUnit}>ELO</Text>
+                  {isMoney
+                    ? <>£{(pot / 100).toFixed(2)}</>
+                    : <>{pot.toLocaleString()} <Text style={styles.potUnit}>ELO</Text></>}
                 </Text>
               </View>
               <View style={styles.creamArrow}>
@@ -137,7 +140,7 @@ export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => v
             </View>
             <Text style={[styles.subOnCream, { marginTop: 6 }]}>
               {memberCount > 0
-                ? `${onTrack} of ${memberCount} on track · ${totalAtStake.toLocaleString()} at stake`
+                ? `${onTrack} of ${memberCount} on track · ${isMoney ? `£${(totalAtStake / 100).toFixed(2)}` : totalAtStake.toLocaleString()} at stake`
                 : 'Join a group to start the pot'}
             </Text>
           </Card>

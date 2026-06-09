@@ -459,6 +459,14 @@ def _settle_money_week(group_id: str, week_start: date, stake: int) -> None:
     `money_week_change` so the Wallet's "this week" stat reflects the payout."""
     sb = get_supabase()
     pot_total, participants = _money_breakdown(group_id, week_start, stake)
+    participant_ids = {uid for uid, _ in participants}
+
+    # Reset the weekly stat for everyone in the group first, so members who sat
+    # this week out show £0.00 rather than a stale value from an earlier week.
+    for uid in _ordered_member_ids(group_id):
+        if uid not in participant_ids:
+            _safe_exec(sb.table("users").update({"money_week_change": 0}).eq("id", uid))
+
     if not participants:
         return
     share = pot_total // len(participants)
