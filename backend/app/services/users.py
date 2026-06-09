@@ -125,7 +125,14 @@ def check_tag_available(tag: str, exclude_user_id: Optional[str] = None) -> bool
 
 
 def set_tag(user_id: str, tag: str) -> dict:
-    """Set or change a user's tag. Initial set is free; thereafter limited to 1 change."""
+    """Set or change a user's tag.
+
+    The 1-change limit only kicks in AFTER the account is fully set up. Account
+    setup requires picking both a tag and a home gym, so we treat "has a home
+    gym" as the marker that setup is complete. During setup (no gym yet) the user
+    can pick/adjust their tag as many times as they like — only once the account
+    exists does the tag become limited to a single change.
+    """
     clean = tag.strip().lower()
     if not re.match(r'^[a-z0-9_-]{3,20}$', clean):
         raise HTTPException(status_code=422, detail="Tag must be 3–20 chars: letters, numbers, _ or -")
@@ -133,16 +140,19 @@ def set_tag(user_id: str, tag: str) -> dict:
     user = get_by_id(user_id)
     current_tag = user.get("tag")
     tag_changes = user.get("tag_changes", 0)
+    account_created = bool(user.get("gym_id"))
 
-    # Allow setting a tag for the first time (tag_changes=0, no current tag),
-    # or one change if they already have a tag.
-    if current_tag and tag_changes >= 1:
+    # Enforce the single-change limit only for fully set-up accounts.
+    if account_created and current_tag and tag_changes >= 1:
         raise HTTPException(status_code=400, detail="Tag can only be changed once after initial setup")
 
     if not check_tag_available(clean, user_id):
         raise HTTPException(status_code=409, detail="Tag is already taken")
 
-    new_changes = (tag_changes + 1) if current_tag else 0
+    # Only start counting changes once the account is created; tag edits during
+    # initial setup don't burn the one allowed change (and reset the counter so a
+    # fresh account always gets its single post-setup change).
+    new_changes = (tag_changes + 1) if (account_created and current_tag) else 0
     sb = get_supabase()
     res = sb.table("users").update({"tag": clean, "tag_changes": new_changes}).eq("id", user_id).execute()
     if not res.data:

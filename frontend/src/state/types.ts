@@ -78,7 +78,8 @@ export interface AppStateShape {
   groupId: string | null;
   isLeader: boolean;
   joinType: 'open' | 'request';
-  stakeType: 'elo' | 'money';   // current group's pot currency ('elo' when groupless)
+  stakeType: 'elo' | 'money';     // CURRENT week's pot currency (frozen until rollover)
+  nextStakeType: 'elo' | 'money'; // next week's currency — what the leader's toggle changes
   updateStakeType: (stakeType: 'elo' | 'money') => Promise<void>;
   groups: Group[];
   joinGroup: (groupId: string) => Promise<boolean>;

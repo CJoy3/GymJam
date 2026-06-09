@@ -128,8 +128,13 @@ def get_group(group_id: str) -> dict:
 
 
 def update_stake_type(group_id: str, user_id: str, stake_type: str) -> dict:
-    """Allow the group leader to switch between ELO and money pot.
-    Only allowed for private (request-join) groups."""
+    """Switch a private group's pot between ELO and money — leader only.
+
+    The change only takes effect from NEXT week: the current week keeps the
+    currency it started with. We freeze the current week's pot_conditions to its
+    existing type, update the group baseline (so future weeks inherit the new
+    type), and stamp next week's pot_conditions with the new type explicitly.
+    """
     if stake_type not in ("elo", "money"):
         raise HTTPException(status_code=400, detail="stake_type must be 'elo' or 'money'")
     sb = get_supabase()
@@ -146,8 +151,33 @@ def update_stake_type(group_id: str, user_id: str, stake_type: str) -> dict:
         raise HTTPException(status_code=403, detail="Only the group leader can change the stake type")
     if grp.get("join_type") != "request":
         raise HTTPException(status_code=400, detail="Stake type can only be changed for private groups")
+
+    from app.services import pot as pot_svc
+    from app.core.time_utils import current_week_start, next_week_start
+
+    prev_type = grp.get("stake_type") or "elo"
+    # 1) Freeze the current week to its existing currency so it doesn't drift
+    #    when we change the group baseline below.
+    cur = pot_svc.get_conditions(group_id, week="current")
+    if not cur.get("stake_type"):
+        _freeze_week_stake_type(group_id, current_week_start(), prev_type)
+    # 2) Group baseline drives weeks beyond next.
     sb.table("groups").update({"stake_type": stake_type}).eq("id", group_id).execute()
+    # 3) Apply the new currency to next week explicitly.
+    pot_svc.get_conditions(group_id, week="next")  # ensure the row exists
+    _freeze_week_stake_type(group_id, next_week_start(), stake_type)
     return {**grp, "stake_type": stake_type}
+
+
+def _freeze_week_stake_type(group_id: str, week_start, stake_type: str) -> None:
+    """Best-effort stamp of a week's pot currency onto its pot_conditions row."""
+    sb = get_supabase()
+    try:
+        sb.table("pot_conditions").update({"stake_type": stake_type}).eq(
+            "group_id", group_id
+        ).eq("week_start", week_start.isoformat()).execute()
+    except Exception:
+        pass
 
 
 def current_membership(user_id: str) -> dict | None:
@@ -232,12 +262,14 @@ def create_group(
             stake_per_miss=0,
             is_finalized=True,
             is_practice=True,
+            stake_type=stake_type,
         )
         pot_svc.seed_conditions(
             group["id"], next_week_start(),
             setter_user_id=creator_id,
             required_pledges=required_pledges,
             stake_per_miss=stake_per_miss,
+            stake_type=stake_type,
         )
     except Exception:
         sb.table("group_memberships").delete().eq("group_id", group["id"]).execute()
