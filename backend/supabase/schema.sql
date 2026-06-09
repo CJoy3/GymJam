@@ -34,6 +34,19 @@ create table if not exists users (
 -- Additive migration for existing deployments.
 alter table users add column if not exists avatar text;
 
+-- Auth-based account migration: link Supabase auth.users to app users.
+alter table users add column if not exists auth_user_id uuid unique;
+create index if not exists users_auth_user_id_idx on users(auth_user_id);
+
+-- Unique username handle (displayed as #tag). Lowercase, 3–20 chars.
+alter table users add column if not exists tag text unique;
+
+-- How many times the user has changed their tag (capped at 1 change after initial set).
+alter table users add column if not exists tag_changes integer not null default 0;
+
+-- Make device_id optional so OAuth-only accounts can be created without it.
+alter table users alter column device_id drop not null;
+
 create table if not exists groups (
     id uuid primary key default gen_random_uuid(),
     -- Groups are global (decoupled from gyms). gym_id is retained only as an

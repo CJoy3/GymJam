@@ -7,6 +7,7 @@ import Animated, { Easing, FadeIn } from 'react-native-reanimated';
 import {
   Onboarding, Home, CheckIn, PlanWeek, GroupView, NoGroup,
   GymBrowser, Leaderboard, PotTracker, Progress, GymSpace, ProfileView, SquadMapScreen, DevSettings,
+  AccountSetup,
 } from '../../src/screens';
 import { useAppState } from '../../src/state/AppState';
 import { BlobBackground } from '../../src/ui/Blob';
@@ -15,20 +16,21 @@ import { C, FONT } from '../../src/theme/tokens';
 const EASE_OUT = Easing.out(Easing.cubic);
 
 type Screen =
-  | 'onboarding' | 'home' | 'check-in' | 'plan-week' | 'group'
+  | 'account-setup' | 'onboarding' | 'home' | 'check-in' | 'plan-week' | 'group'
   | 'gym-browser' | 'leaderboard' | 'pot-tracker' | 'progress' | 'gym-space'
   | 'profile' | 'squad-map' | 'dev-settings';
 
 export default function GymJamApp() {
-  const { ready, gymId, groupId } = useAppState();
+  const { ready, gymId, groupId, tag } = useAppState();
   const [screen, setScreen] = useState<Screen | null>(null);
 
   useEffect(() => {
     if (!ready || screen !== null) return;
-    if (!gymId) setScreen('onboarding');
+    // New accounts: need tag + gym before accessing the app
+    if (!tag || !gymId) setScreen('account-setup');
     else if (!groupId) setScreen('gym-browser');
     else setScreen('home');
-  }, [ready, gymId, groupId, screen]);
+  }, [ready, gymId, groupId, tag, screen]);
 
   if (!ready || screen === null) {
     return (
@@ -44,6 +46,7 @@ export default function GymJamApp() {
 
   const render = () => {
     switch (screen) {
+      case 'account-setup': return <AccountSetup onDone={() => setScreen('gym-browser')} />;
       case 'onboarding':   return <Onboarding onDone={() => setScreen('gym-browser')} />;
       case 'home':         return <Home onCheckIn={() => setScreen('check-in')} onPlan={() => setScreen('plan-week')} onPot={() => setScreen('pot-tracker')} onGroup={() => setScreen('group')} />;
       case 'check-in':     return <CheckIn onClose={() => setScreen('home')} />;
@@ -63,7 +66,7 @@ export default function GymJamApp() {
     }
   };
 
-  const showTabs = screen !== 'onboarding' && screen !== 'check-in' && screen !== 'plan-week' && screen !== 'dev-settings';
+  const showTabs = screen !== 'account-setup' && screen !== 'onboarding' && screen !== 'check-in' && screen !== 'plan-week' && screen !== 'dev-settings';
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>

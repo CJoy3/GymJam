@@ -16,7 +16,7 @@ import { LABELS, pageWrap, styles } from './_shared';
 export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: () => void }) {
   const {
     nextWeek, setPlannedDays, groupName, potNext, updatePotConditions,
-    userId, groupMembers,
+    userId, groupMembers, todayDow,
   } = useAppState();
   // The rule setter rotates weekly — only the setter for next week may edit it.
   const isNextSetter = !!potNext && potNext.setter_user_id != null && potNext.setter_user_id === userId;
@@ -81,7 +81,7 @@ export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: (
 
         {isNextSetter && (
           <FadeInItem delay={80} style={{ marginTop: 24 }}>
-            <PotConditionsEditor potNext={potNext} onSave={updatePotConditions} />
+            <PotConditionsEditor potNext={potNext} onSave={updatePotConditions} isMonday={todayDow === 0} />
           </FadeInItem>
         )}
         {!isNextSetter && potNext && (
@@ -219,14 +219,14 @@ function MemberPlanRow({ days, highlightDows }: { days: DayStatus[]; highlightDo
 
 /**
  * Editor for next-week pot rules, shown only to the current rotational rule
- * setter. Visibility is controlled by the caller (PlanWeek renders this only
- * when the logged-in user is next week's setter).
+ * setter. Only editable on Monday — after that the conditions are locked.
  */
 function PotConditionsEditor({
-  potNext, onSave,
+  potNext, onSave, isMonday,
 }: {
   potNext: import('../../lib/api/pot').PotDetail | null;
   onSave: (week: 'current' | 'next', required: number, stake: number) => Promise<void>;
+  isMonday: boolean;
 }) {
   const initialRequired = potNext && potNext.required_pledges > 0 ? potNext.required_pledges : 3;
   const initialTotal = potNext && potNext.required_pledges > 0
@@ -234,17 +234,25 @@ function PotConditionsEditor({
     : 300;
   const [required, setRequired] = useState(String(initialRequired));
   const [total, setTotal] = useState(String(initialTotal));
+  const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
   useEffect(() => {
     setRequired(String(initialRequired));
     setTotal(String(initialTotal));
+    setSaved(false);
   }, [initialRequired, initialTotal]);
 
   const reqNum = Math.max(1, Math.min(7, parseInt(required, 10) || 1));
   const perMiss = Math.round((parseInt(total, 10) || 0) / reqNum);
 
-  const save = () => {
-    // Stake per missed session is derived from the full weekly amount / sessions.
-    onSave('next', reqNum, perMiss);
+  const save = async () => {
+    setSaving(true);
+    try {
+      await onSave('next', reqNum, perMiss);
+      setSaved(true);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -253,23 +261,76 @@ function PotConditionsEditor({
         <View style={{ flex: 1 }}>
           <Eyebrow>Your turn this week</Eyebrow>
           <H3 style={{ marginTop: 4 }}>Next week's pot rules</H3>
-          <Sub style={{ marginTop: 4 }}>The rule setter rotates weekly — it's your turn to set next week's conditions.</Sub>
+          <Sub style={{ marginTop: 4 }}>
+            {isMonday
+              ? "The rule setter rotates weekly — it's your turn to set next week's conditions."
+              : 'Rules can only be set on Monday. These conditions are now locked for next week.'}
+          </Sub>
         </View>
         <Chip text="Rule setter" tone="success" icon="autorenew" compact />
       </View>
-      <View style={{ flexDirection: 'row', gap: 12 }}>
-        <View style={{ flex: 1 }}>
-          <Eyebrow>Sessions / week</Eyebrow>
-          <TextInput value={required} onChangeText={(t) => setRequired(t.replace(/[^0-9]/g, ''))} keyboardType="number-pad" style={styles.input} />
-          <Sub style={{ marginTop: 4, fontSize: 11 }}>1–7 days</Sub>
+
+      {!isMonday ? (
+        /* Locked — read-only display */
+        <View style={{ flexDirection: 'row', gap: 12 }}>
+          <View style={{ flex: 1 }}>
+            <Eyebrow>Sessions / week</Eyebrow>
+            <View style={[styles.input, { justifyContent: 'center' }]}>
+              <Text style={{ fontFamily: FONT.semibold, fontSize: 15, color: C.ink }}>{reqNum}</Text>
+            </View>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Eyebrow>Weekly stake</Eyebrow>
+            <View style={[styles.input, { justifyContent: 'center' }]}>
+              <Text style={{ fontFamily: FONT.semibold, fontSize: 15, color: C.ink }}>{reqNum * perMiss}</Text>
+            </View>
+          </View>
         </View>
-        <View style={{ flex: 1 }}>
-          <Eyebrow>Weekly stake</Eyebrow>
-          <TextInput value={total} onChangeText={(t) => setTotal(t.replace(/[^0-9]/g, ''))} keyboardType="number-pad" style={styles.input} />
-          <Sub style={{ marginTop: 4, fontSize: 11 }}>Total ELO · {perMiss} per miss</Sub>
-        </View>
-      </View>
-      <Btn label="Save rules" size="md" onPress={save} style={{ marginTop: 14 }} />
+      ) : (
+        /* Editable — Monday only */
+        <>
+          <View style={{ flexDirection: 'row', gap: 12 }}>
+            <View style={{ flex: 1 }}>
+              <Eyebrow>Sessions / week</Eyebrow>
+              <TextInput
+                value={required}
+                onChangeText={(t) => { setRequired(t.replace(/[^0-9]/g, '')); setSaved(false); }}
+                keyboardType="number-pad"
+                style={styles.input}
+              />
+              <Sub style={{ marginTop: 4, fontSize: 11 }}>1–7 days</Sub>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Eyebrow>Weekly stake</Eyebrow>
+              <TextInput
+                value={total}
+                onChangeText={(t) => { setTotal(t.replace(/[^0-9]/g, '')); setSaved(false); }}
+                keyboardType="number-pad"
+                style={styles.input}
+              />
+              <Sub style={{ marginTop: 4, fontSize: 11 }}>Total ELO · {perMiss} per miss</Sub>
+            </View>
+          </View>
+          {saved ? (
+            <View style={savedBtnStyle}>
+              <MaterialIcons name="check-circle" size={18} color={C.success} />
+              <Text style={savedBtnText}>Rules saved</Text>
+            </View>
+          ) : (
+            <Btn label={saving ? 'Saving…' : 'Save rules'} size="md" loading={saving} disabled={saving} onPress={save} style={{ marginTop: 14 }} />
+          )}
+        </>
+      )}
     </Card>
   );
 }
+
+const savedBtnStyle: import('react-native').ViewStyle = {
+  flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+  marginTop: 14, height: 44, borderRadius: RADIUS.md,
+  backgroundColor: 'rgba(156,181,143,0.18)',
+  borderWidth: 1, borderColor: 'rgba(156,181,143,0.35)',
+};
+const savedBtnText: import('react-native').TextStyle = {
+  fontFamily: FONT.semibold, fontSize: 14, color: C.success,
+};

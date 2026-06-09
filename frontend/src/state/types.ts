@@ -56,6 +56,8 @@ export interface AppStateShape {
   avatar: string | null;
   elo: number;
   streak: number;
+  tag: string | null;
+  tagChanges: number;
 
   // Gyms
   gyms: Gym[];
@@ -139,6 +141,7 @@ export interface AppStateShape {
   refreshBadges: () => Promise<void>;
 
   // Profile
+  updateTag: (tag: string) => Promise<void>;
   updateDisplayName: (name: string) => Promise<void>;
   updateAvatar: (avatar: string) => Promise<void>;
   setElo: (elo: number) => Promise<void>;

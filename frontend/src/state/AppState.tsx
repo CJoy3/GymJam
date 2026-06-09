@@ -13,7 +13,6 @@ import * as roomApi from '../../lib/api/room';
 import * as usersApi from '../../lib/api/users';
 import { ApiError } from '../../lib/api/client';
 import { readCache, writeCache } from '../../lib/cache';
-import { getOrCreateUserId } from '../../lib/userId';
 import { showToast } from '../ui/toast';
 import {
   AppStateShape, DAYS, DayStatus, Group, GroupMember, Gym, JoinRequest,
@@ -222,8 +221,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const bootstrap = useCallback(async (resetClockOnStartup = false) => {
     setReloading(true);
     try {
-      const deviceId = await getOrCreateUserId();
-      const user = await usersApi.registerUser(deviceId);
+      const user = await usersApi.registerViaAuth();
       setMe(user);
       await loadClock(resetClockOnStartup);
       // Fire every independent fetch in parallel instead of one-by-one — this
@@ -594,6 +592,18 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }
   }, [myGroupSummary, refreshGroupContext]);
 
+  const updateTag = useCallback(async (tag: string) => {
+    const snapshotMe = me;
+    try {
+      const u = await usersApi.updateTag(tag);
+      setMe(u);
+    } catch (e) {
+      setMe(snapshotMe);
+      reportError('Could not update tag', e);
+      throw e;
+    }
+  }, [me]);
+
   const updateDisplayName = useCallback(async (name: string) => {
     const trimmed = name.trim();
     if (!trimmed) return;
@@ -772,6 +782,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       avatar: me?.avatar ?? null,
       elo: me?.elo ?? 0,
       streak: me?.streak ?? 0,
+      tag: me?.tag ?? null,
+      tagChanges: me?.tag_changes ?? 0,
 
       gyms,
       gymName,
@@ -829,6 +841,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       badges,
       refreshBadges: loadBadges,
 
+      updateTag,
       updateDisplayName,
       updateAvatar,
       setElo,
@@ -845,7 +858,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     lockNextWeek, me, myGroupSummary, nextWeek, nudge, nudgeCooldowns, placeRoomItem, pot, potCurrent, potNext,
     ready, refreshGroupContext, refreshGroupsAtGym, rejectRequest, reloading, rescheduleMissedDay, roomItems, setGym,
     setPlannedDays, setThisWeekDays, thisWeek, thisWeekIsPractice, todayDow, toggleNextWeekDay,
-    setElo, toggleWeek, updateAvatar, updateDisplayName, updatePotConditions, weekOffsetDays,
+    setElo, toggleWeek, updateAvatar, updateDisplayName, updatePotConditions, updateTag, weekOffsetDays,
   ]);
 
   // tier is purely a function of elo; expose for callers that want it
