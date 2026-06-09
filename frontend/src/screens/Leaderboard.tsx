@@ -1,16 +1,15 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 
 import { C, FONT, SPACE } from '../theme/tokens';
 import { Card, Chip, Eyebrow, FadeInItem, H1, Sub } from '../ui/components';
+import { Avatar } from '../ui/Avatar';
 import { BlobBackground } from '../ui/Blob';
 import { useRefreshControl } from '../ui/useRefresh';
 import { usePolling } from '../ui/usePolling';
 import { useAppState } from '../state/AppState';
 import { pageWrap, styles } from './_shared';
-
-/* Leaderboard — global ranking of groups by average member ELO */
 
 const RANK_TONE: Record<number, { bg: string; fg: string }> = {
   0: { bg: '#F4D58D', fg: '#6B4E00' },
@@ -18,12 +17,27 @@ const RANK_TONE: Record<number, { bg: string; fg: string }> = {
   2: { bg: '#E3B08C', fg: '#5A3418' },
 };
 
+type MainTab = 'groups' | 'squad';
+type SortMode = 'total' | 'average';
+
 export function Leaderboard({ onBack }: { onBack: () => void }) {
-  const { groupId, groups, refreshGroupsAtGym } = useAppState();
+  const { groupId, groups, groupMembers, userId, refreshGroupsAtGym } = useAppState();
   const refresh = useRefreshControl();
   usePolling(refreshGroupsAtGym, 12000);
 
-  const ranked = [...groups].sort((a, b) => b.totalElo - a.totalElo);
+  const [mainTab, setMainTab] = useState<MainTab>('groups');
+  const [sortMode, setSortMode] = useState<SortMode>('total');
+
+  const rankedGroups = [...groups].sort((a, b) => {
+    if (sortMode === 'average') {
+      const avgA = a.members > 0 ? a.totalElo / a.members : 0;
+      const avgB = b.members > 0 ? b.totalElo / b.members : 0;
+      return avgB - avgA;
+    }
+    return b.totalElo - a.totalElo;
+  });
+
+  const rankedMembers = [...groupMembers].sort((a, b) => b.elo - a.elo);
 
   return (
     <View style={styles.screen}>
@@ -38,46 +52,146 @@ export function Leaderboard({ onBack }: { onBack: () => void }) {
         </FadeInItem>
 
         <FadeInItem delay={60} style={{ marginTop: 18 }}>
-          <Eyebrow>All groups · ranked globally</Eyebrow>
+          <Eyebrow>Rankings</Eyebrow>
           <H1 style={{ marginTop: 6 }}>Leaderboard</H1>
-          <Sub style={{ marginTop: 6 }}>Groups ranked by their members' combined ELO.</Sub>
         </FadeInItem>
 
-        <View style={{ gap: 12, marginTop: 22 }}>
-          {ranked.length === 0 ? (
-            <FadeInItem delay={120}>
-              <Card padding={SPACE.xl}><Sub style={{ textAlign: 'center' }}>No groups yet.</Sub></Card>
+        {/* Main tabs */}
+        <FadeInItem delay={100} style={{ marginTop: 20 }}>
+          <View style={styles.tabBar}>
+            <Pressable
+              style={[styles.tab, mainTab === 'groups' && styles.tabOn]}
+              onPress={() => setMainTab('groups')}
+            >
+              <Text style={[styles.tabText, { color: mainTab === 'groups' ? C.primaryFg : C.mutedFg }]}>
+                All Groups
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[styles.tab, mainTab === 'squad' && styles.tabOn]}
+              onPress={() => setMainTab('squad')}
+            >
+              <Text style={[styles.tabText, { color: mainTab === 'squad' ? C.primaryFg : C.mutedFg }]}>
+                My Squad
+              </Text>
+            </Pressable>
+          </View>
+        </FadeInItem>
+
+        {mainTab === 'groups' && (
+          <>
+            {/* Sort toggle */}
+            <FadeInItem delay={120} style={{ marginTop: 14 }}>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <SortBtn label="Total ELO" active={sortMode === 'total'} onPress={() => setSortMode('total')} />
+                <SortBtn label="Average ELO" active={sortMode === 'average'} onPress={() => setSortMode('average')} />
+              </View>
+              <Sub style={{ marginTop: 8 }}>
+                {sortMode === 'total'
+                  ? 'Groups ranked by combined member ELO'
+                  : 'Groups ranked by average member ELO'}
+              </Sub>
             </FadeInItem>
-          ) : (
-            ranked.map((g, i) => {
-              const isMine = g.id === groupId;
-              const tone = RANK_TONE[i];
-              return (
-                <FadeInItem key={g.id} delay={120 + i * 50}>
-                  <Card padding={SPACE.lg} style={isMine ? { borderColor: C.primary, borderWidth: 1.5 } : undefined}>
-                    <View style={styles.rowGap}>
-                      <View style={[styles.avatar, { backgroundColor: tone?.bg ?? C.muted }]}>
-                        <Text style={{ fontFamily: FONT.bold, fontSize: 14, color: tone?.fg ?? C.inkSoft }}>{i + 1}</Text>
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <View style={[styles.rowGap, { flexWrap: 'wrap', gap: 6 }]}>
-                          <Text style={styles.cardTitle}>{g.name}</Text>
-                          {isMine && <Chip text="Your group" tone="success" compact />}
+
+            <View style={{ gap: 12, marginTop: 16 }}>
+              {rankedGroups.length === 0 ? (
+                <FadeInItem delay={140}>
+                  <Card padding={SPACE.xl}><Sub style={{ textAlign: 'center' }}>No groups yet.</Sub></Card>
+                </FadeInItem>
+              ) : rankedGroups.map((g, i) => {
+                const isMine = g.id === groupId;
+                const tone = RANK_TONE[i];
+                const displayElo = sortMode === 'average'
+                  ? Math.round(g.totalElo / Math.max(1, g.members))
+                  : g.totalElo;
+                return (
+                  <FadeInItem key={g.id} delay={140 + i * 40}>
+                    <Card padding={SPACE.lg} style={isMine ? { borderColor: C.primary, borderWidth: 1.5 } : undefined}>
+                      <View style={styles.rowGap}>
+                        <View style={[styles.avatar, { backgroundColor: tone?.bg ?? C.muted }]}>
+                          <Text style={{ fontFamily: FONT.bold, fontSize: 14, color: tone?.fg ?? C.inkSoft }}>{i + 1}</Text>
                         </View>
-                        <View style={[styles.rowGap, { gap: 8, marginTop: 6, flexWrap: 'wrap' }]}>
-                          <Sub>{g.members} {g.members === 1 ? 'member' : 'members'}</Sub>
-                          <Text style={styles.dot}>·</Text>
-                          <Sub>{g.totalElo} ELO</Sub>
+                        <View style={{ flex: 1 }}>
+                          <View style={[styles.rowGap, { flexWrap: 'wrap', gap: 6 }]}>
+                            <Text style={styles.cardTitle}>{g.name}</Text>
+                            {isMine && <Chip text="Your group" tone="success" compact />}
+                          </View>
+                          <View style={[styles.rowGap, { gap: 8, marginTop: 6, flexWrap: 'wrap' }]}>
+                            <Sub>{g.members} {g.members === 1 ? 'member' : 'members'}</Sub>
+                            <Text style={styles.dot}>·</Text>
+                            <Sub>{displayElo.toLocaleString()} ELO {sortMode === 'average' ? 'avg' : ''}</Sub>
+                          </View>
                         </View>
                       </View>
-                    </View>
+                    </Card>
+                  </FadeInItem>
+                );
+              })}
+            </View>
+          </>
+        )}
+
+        {mainTab === 'squad' && (
+          <>
+            <FadeInItem delay={120} style={{ marginTop: 14 }}>
+              <Sub>Your group members ranked by ELO</Sub>
+            </FadeInItem>
+
+            <View style={{ gap: 10, marginTop: 16 }}>
+              {!groupId || rankedMembers.length === 0 ? (
+                <FadeInItem delay={140}>
+                  <Card padding={SPACE.xl}>
+                    <Sub style={{ textAlign: 'center' }}>
+                      {groupId ? 'No members yet.' : 'Join a group to see your squad.'}
+                    </Sub>
                   </Card>
                 </FadeInItem>
-              );
-            })
-          )}
-        </View>
+              ) : rankedMembers.map((m, i) => {
+                const isMe = m.userId === userId;
+                const tone = RANK_TONE[i];
+                return (
+                  <FadeInItem key={m.userId} delay={140 + i * 40}>
+                    <Card padding={SPACE.lg} style={isMe ? { borderColor: C.primary, borderWidth: 1.5 } : undefined}>
+                      <View style={styles.rowGap}>
+                        <View style={[styles.avatar, { backgroundColor: tone?.bg ?? C.muted }]}>
+                          <Text style={{ fontFamily: FONT.bold, fontSize: 14, color: tone?.fg ?? C.inkSoft }}>{i + 1}</Text>
+                        </View>
+                        <Avatar id={m.avatar} name={m.name} size={38} />
+                        <View style={{ flex: 1 }}>
+                          <View style={[styles.rowGap, { flexWrap: 'wrap', gap: 6 }]}>
+                            <Text style={styles.cardTitle}>{m.name}</Text>
+                            {isMe && <Chip text="You" tone="success" compact />}
+                            {m.isLeader && <Chip text="Leader" tone="accent" compact />}
+                          </View>
+                          <Sub style={{ marginTop: 4 }}>{m.elo.toLocaleString()} ELO</Sub>
+                        </View>
+                      </View>
+                    </Card>
+                  </FadeInItem>
+                );
+              })}
+            </View>
+          </>
+        )}
       </ScrollView>
     </View>
+  );
+}
+
+function SortBtn({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={{
+        paddingHorizontal: 14, paddingVertical: 7,
+        borderRadius: 20,
+        backgroundColor: active ? C.primary : C.card,
+        borderWidth: 1, borderColor: active ? C.primary : C.borderHi,
+      }}
+    >
+      <Text style={{ fontFamily: FONT.semibold, fontSize: 13, color: active ? C.primaryFg : C.mutedFg }}>
+        {label}
+      </Text>
+    </Pressable>
   );
 }

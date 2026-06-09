@@ -73,7 +73,9 @@ export interface AppStateShape {
   groupName: string;
   groupId: string | null;
   isLeader: boolean;
+  joinType: 'open' | 'request';
   stakeType: 'elo' | 'money';   // current group's pot currency ('elo' when groupless)
+  updateStakeType: (stakeType: 'elo' | 'money') => Promise<void>;
   groups: Group[];
   joinGroup: (groupId: string) => Promise<boolean>;
   leaveGroup: () => Promise<void>;

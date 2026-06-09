@@ -1,4 +1,4 @@
-import { ApiError, apiGet, apiPost } from './client';
+import { ApiError, apiGet, apiPatch, apiPost } from './client';
 import type { PlanDay } from './plans';
 
 export type JoinType = 'open' | 'request';
@@ -119,3 +119,6 @@ export interface SquadMapMember {
 /** Group members located at their home gyms — for the Squad Map. */
 export const getSquadMap = (group_id: string) =>
   apiGet<SquadMapMember[]>(`/groups/${group_id}/squad-map`);
+
+export const updateStakeType = (group_id: string, stake_type: StakeType) =>
+  apiPatch<Group>(`/groups/${group_id}/stake-type`, { stake_type });

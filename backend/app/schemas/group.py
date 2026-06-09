@@ -44,6 +44,10 @@ class GroupSummary(Group):
     join_request_pending: bool
 
 
+class StakeTypeUpdate(BaseModel):
+    stake_type: StakeType
+
+
 class GroupMember(BaseModel):
     user_id: str
     display_name: str

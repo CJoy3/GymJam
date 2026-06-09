@@ -17,9 +17,11 @@ import { LABELS, pageWrap, styles } from './_shared';
 export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: () => void }) {
   const {
     nextWeek, setPlannedDays, groupName, potNext, updatePotConditions,
-    userId, groupMembers, todayDow, stakeType,
+    userId, groupMembers, todayDow, stakeType, isLeader, joinType, updateStakeType,
   } = useAppState();
   const isMoney = stakeType === 'money';
+  const [changingStakeType, setChangingStakeType] = useState(false);
+  const canChangeStakeType = isLeader && joinType === 'request';
   // For money groups stake_per_miss is pence; show it as £. For ELO it's points.
   const fmtStake = (amount: number) =>
     isMoney ? `£${(amount / 100).toFixed(2)}` : `${amount.toLocaleString()} ELO`;
@@ -102,6 +104,54 @@ export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: (
                     {potNext.setter_display_name || 'A group member'} is this week's rule setter (the role rotates weekly): {potNext.required_pledges} {potNext.required_pledges === 1 ? 'pledge' : 'pledges'} · {fmtStake(potNext.required_pledges * potNext.stake_per_miss)} at stake ({fmtStake(potNext.stake_per_miss)} per miss).
                   </Sub>
                 </View>
+              </View>
+            </Card>
+          </FadeInItem>
+        )}
+
+        {canChangeStakeType && (
+          <FadeInItem delay={120} style={{ marginTop: 14 }}>
+            <Card padding={SPACE.lg}>
+              <View style={[styles.rowGap, { marginBottom: 12 }]}>
+                <View style={[styles.iconChip, { backgroundColor: isMoney ? 'rgba(156,181,143,0.15)' : 'rgba(199,160,110,0.15)' }]}>
+                  <MaterialIcons
+                    name={isMoney ? 'account-balance-wallet' : 'emoji-events'}
+                    size={18}
+                    color={isMoney ? C.success : C.accent}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <H3>Pot type</H3>
+                  <Sub style={{ marginTop: 2 }}>Switch between ELO and money stakes</Sub>
+                </View>
+              </View>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <Pressable
+                  style={[stakeToggleBtn, !isMoney && stakeToggleBtnOn]}
+                  disabled={changingStakeType}
+                  onPress={async () => {
+                    if (isMoney) {
+                      setChangingStakeType(true);
+                      try { await updateStakeType('elo'); } finally { setChangingStakeType(false); }
+                    }
+                  }}
+                >
+                  <MaterialIcons name="emoji-events" size={15} color={!isMoney ? C.primaryFg : C.mutedFg} />
+                  <Text style={[stakeToggleText, { color: !isMoney ? C.primaryFg : C.mutedFg }]}>ELO</Text>
+                </Pressable>
+                <Pressable
+                  style={[stakeToggleBtn, isMoney && stakeToggleBtnOn]}
+                  disabled={changingStakeType}
+                  onPress={async () => {
+                    if (!isMoney) {
+                      setChangingStakeType(true);
+                      try { await updateStakeType('money'); } finally { setChangingStakeType(false); }
+                    }
+                  }}
+                >
+                  <MaterialIcons name="account-balance-wallet" size={15} color={isMoney ? C.primaryFg : C.mutedFg} />
+                  <Text style={[stakeToggleText, { color: isMoney ? C.primaryFg : C.mutedFg }]}>Money</Text>
+                </Pressable>
               </View>
             </Card>
           </FadeInItem>
@@ -346,6 +396,18 @@ function PotConditionsEditor({
     </Card>
   );
 }
+
+const stakeToggleBtn: import('react-native').ViewStyle = {
+  flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+  paddingVertical: 10, borderRadius: RADIUS.md,
+  backgroundColor: C.bgSoft, borderWidth: 1, borderColor: C.borderHi,
+};
+const stakeToggleBtnOn: import('react-native').ViewStyle = {
+  backgroundColor: C.primary, borderColor: C.primary,
+};
+const stakeToggleText: import('react-native').TextStyle = {
+  fontFamily: FONT.semibold, fontSize: 14,
+};
 
 const savedBtnStyle: import('react-native').ViewStyle = {
   flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,

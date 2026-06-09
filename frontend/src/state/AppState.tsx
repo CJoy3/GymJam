@@ -777,6 +777,21 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     [stepClock],
   );
 
+  const updateStakeType = useCallback(async (stakeType: 'elo' | 'money') => {
+    if (!myGroupSummary?.id) return;
+    const snapshot = myGroupSummary;
+    setMyGroupSummary((prev) => prev ? { ...prev, stakeType } : prev);
+    setGroupsAtGym((prev) => prev.map((g) => g.id === snapshot.id ? { ...g, stakeType } : g));
+    try {
+      await groupsApi.updateStakeType(snapshot.id, stakeType);
+      showToast(`Switched to ${stakeType === 'money' ? 'money pot' : 'ELO pot'}`, 'success');
+    } catch (e) {
+      setMyGroupSummary(snapshot);
+      setGroupsAtGym((prev) => prev.map((g) => g.id === snapshot.id ? { ...g, stakeType: snapshot.stakeType } : g));
+      reportError('Could not change stake type', e);
+    }
+  }, [myGroupSummary]);
+
   const placeRoomItem = useCallback(async (itemId: string, slot: number | null) => {
     try {
       const items = await roomApi.setItemPlacement(itemId, slot);
@@ -810,7 +825,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       groupName: myGroupSummary?.name ?? '',
       groupId: myGroupSummary?.id ?? null,
       isLeader: myGroupSummary?.isLeader === true,
+      joinType: myGroupSummary?.joinType ?? 'open',
       stakeType: myGroupSummary?.stakeType ?? 'elo',
+      updateStakeType,
       groups: groupsAtGym,
       joinGroup,
       leaveGroup,
@@ -877,7 +894,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     lockNextWeek, me, myGroupSummary, nextWeek, nudge, nudgeCooldowns, placeRoomItem, pot, potCurrent, potNext,
     ready, refreshGroupContext, refreshGroupsAtGym, rejectRequest, reloading, rescheduleMissedDay, roomItems, setGym,
     setPlannedDays, setThisWeekDays, thisWeek, thisWeekIsPractice, todayDow, toggleNextWeekDay,
-    setElo, setMoney, toggleWeek, updateAvatar, updateDisplayName, updatePotConditions, updateTag, weekOffsetDays,
+    setElo, setMoney, toggleWeek, updateAvatar, updateDisplayName, updatePotConditions, updateStakeType, updateTag, weekOffsetDays,
   ]);
 
   // tier is purely a function of elo; expose for callers that want it

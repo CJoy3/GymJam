@@ -10,8 +10,9 @@ import {
   AccountSetup,
 } from '../../src/screens';
 import { useAppState } from '../../src/state/AppState';
+import { usePolling } from '../../src/ui/usePolling';
 import { BlobBackground } from '../../src/ui/Blob';
-import { C, FONT } from '../../src/theme/tokens';
+import { C, FONT, RADIUS, SPACE } from '../../src/theme/tokens';
 
 const EASE_OUT = Easing.out(Easing.cubic);
 
@@ -21,14 +22,15 @@ type Screen =
   | 'profile' | 'squad-map' | 'settings';
 
 export default function GymJamApp() {
-  const { ready, gymId, groupId, tag } = useAppState();
+  const { ready, gymId, groupId, tag, elo, streak, money, stakeType, refreshAll } = useAppState();
   const [screen, setScreen] = useState<Screen | null>(null);
+
+  // Keep every device in sync — poll every 30 s and also refresh when the app
+  // returns to the foreground (e.g. user switches back from another app).
+  usePolling(refreshAll, 30000);
 
   useEffect(() => {
     if (!ready) return;
-    // Always re-assert account-setup when onboarding is incomplete, even if stale
-    // cache already set a screen — this handles the race where cache fires before
-    // bootstrap returns the real (fresh) user record.
     if (!tag || !gymId) {
       if (screen !== 'account-setup') setScreen('account-setup');
       return;
@@ -67,16 +69,40 @@ export default function GymJamApp() {
       case 'gym-space':    return <GymSpace onBack={() => setScreen('progress')} />;
       case 'profile':      return <ProfileView onSettings={() => setScreen('settings')} onSquadMap={() => setScreen('squad-map')} />;
       case 'squad-map':    return <SquadMapScreen onBack={() => setScreen('profile')} />;
-      case 'settings': return <AppSettings onBack={() => setScreen('profile')} />;
+      case 'settings':     return <AppSettings onBack={() => setScreen('profile')} />;
       default:             return <Home onCheckIn={() => setScreen('check-in')} onPlan={() => setScreen('plan-week')} onPot={() => setScreen('pot-tracker')} onGroup={() => setScreen('group')} />;
     }
   };
 
   const showTabs = screen !== 'account-setup' && screen !== 'onboarding' && screen !== 'check-in' && screen !== 'plan-week' && screen !== 'settings';
+  const showMoney = stakeType === 'money' && !!groupId;
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <View style={{ flex: 1 }}>{render()}</View>
+
+      {/* Persistent ELO / streak / wallet bar — sits at content-header level */}
+      {showTabs && (
+        <View style={styles.statOverlay} pointerEvents="none">
+          <View style={styles.statBadge}>
+            <MaterialIcons name="emoji-events" size={13} color={C.accent} />
+            <Text style={styles.statText}>{elo.toLocaleString()}</Text>
+          </View>
+          {streak > 0 && (
+            <View style={[styles.statBadge, styles.streakBadge]}>
+              <MaterialIcons name="local-fire-department" size={13} color={C.accent} />
+              <Text style={styles.statText}>{streak}w</Text>
+            </View>
+          )}
+          {showMoney && (
+            <View style={[styles.statBadge, styles.walletBadge]}>
+              <MaterialIcons name="account-balance-wallet" size={13} color={C.success} />
+              <Text style={[styles.statText, { color: C.success }]}>£{(money / 100).toFixed(2)}</Text>
+            </View>
+          )}
+        </View>
+      )}
+
       {showTabs && (
         <View style={styles.tabBar}>
           <Tab label="Home"     icon="home"          active={screen === 'home'} onPress={() => setScreen('home')} />
@@ -105,6 +131,25 @@ const styles = StyleSheet.create({
   splash: { flex: 1, backgroundColor: C.bg, alignItems: 'center', justifyContent: 'center' },
   splashCenter: { alignItems: 'center' },
   splashBrand: { fontFamily: FONT.extra, fontSize: 44, color: C.ink, letterSpacing: -1.2 },
+
+  statOverlay: {
+    position: 'absolute',
+    top: 50,
+    right: SPACE.xl,
+    flexDirection: 'row',
+    gap: 6,
+    zIndex: 10,
+  },
+  statBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: 10, paddingVertical: 5,
+    borderRadius: RADIUS.pill,
+    backgroundColor: C.card,
+    borderWidth: 1, borderColor: C.borderHi,
+  },
+  streakBadge: { backgroundColor: 'rgba(199,160,110,0.12)', borderColor: 'rgba(199,160,110,0.3)' },
+  walletBadge: { backgroundColor: 'rgba(156,181,143,0.12)', borderColor: 'rgba(156,181,143,0.3)' },
+  statText: { fontFamily: FONT.semibold, fontSize: 13, color: C.ink },
 
   tabBar: {
     flexDirection: 'row',

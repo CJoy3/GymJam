@@ -4,7 +4,7 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { C, FONT, RADIUS, SPACE, tierForElo } from '../theme/tokens';
-import { Btn, Card, Chip, Eyebrow, FadeInItem, H1, Stat, Sub } from '../ui/components';
+import { Btn, Card, Chip, Eyebrow, FadeInItem, H1, Sub } from '../ui/components';
 import { Avatar } from '../ui/Avatar';
 import { BlobBackground } from '../ui/Blob';
 import { ProfileMap, type Presence } from '../ui/ProfileMap';
@@ -19,12 +19,11 @@ const pageWrap = { padding: SPACE.xl, paddingTop: 56, paddingBottom: 40 } as con
 
 export function ProfileView({ onSettings, onSquadMap }: { onSettings: () => void; onSquadMap: () => void }) {
   const {
-    elo, streak, gymName, groupName, groupId, displayName, avatar,
-    thisWeek, todayDow, groupMembers, money, moneyWeekChange,
+    elo, gymName, groupName, groupId, displayName, avatar,
+    todayDow, groupMembers, money, moneyWeekChange,
     tag, updateDisplayName, updateAvatar,
   } = useAppState();
   const refresh = useRefreshControl();
-  const sessionsDone = thisWeek.filter((d) => d.state === 'checked-in').length;
 
   const statusById: Record<string, Presence> = {};
   for (const m of groupMembers) {
@@ -149,20 +148,6 @@ export function ProfileView({ onSettings, onSquadMap }: { onSettings: () => void
               )}
             </View>
           </Card>
-        </FadeInItem>
-
-        {/* Stats */}
-        <FadeInItem delay={140} style={{ marginTop: 14 }}>
-          <View style={{ flexDirection: 'row', gap: 12 }}>
-            <Card padding={SPACE.lg} style={{ flex: 1 }}><Stat label="ELO" value={elo.toLocaleString()} /></Card>
-            <Card padding={SPACE.lg} style={{ flex: 1 }}><Stat label="Streak" value={`${streak} wk`} accent /></Card>
-          </View>
-        </FadeInItem>
-        <FadeInItem delay={180} style={{ marginTop: 12 }}>
-          <View style={{ flexDirection: 'row', gap: 12 }}>
-            <Card padding={SPACE.lg} style={{ flex: 1 }}><Stat label="Sessions" value={sessionsDone} sub="this week" /></Card>
-            <Card padding={SPACE.lg} style={{ flex: 1 }}><Stat label="Tier" value={tierForElo(elo)} /></Card>
-          </View>
         </FadeInItem>
 
         {/* Wallet */}

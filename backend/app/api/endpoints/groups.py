@@ -8,6 +8,7 @@ from app.schemas.group import (
     GroupSummary,
     JoinRequestOut,
     SquadMapMember,
+    StakeTypeUpdate,
 )
 from app.schemas.notification import ActivityItem, NudgeResult
 from app.schemas.pot import PotConditionsUpdate, PotDetail
@@ -90,6 +91,16 @@ def update_pot_conditions(
         stake_per_miss=body.stake_per_miss,
     )
     return pot_svc.pot_detail(group_id, week=week)
+
+
+@router.patch("/{group_id}/stake-type", response_model=Group)
+def update_stake_type(
+    group_id: str,
+    body: StakeTypeUpdate,
+    current: dict = Depends(get_current_user),
+) -> dict:
+    """Switch a private group's pot between ELO and money. Leader-only."""
+    return groups_svc.update_stake_type(group_id, current["id"], body.stake_type)
 
 
 @router.get("/{group_id}/members", response_model=list[GroupMemberDetail])

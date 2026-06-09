@@ -127,6 +127,29 @@ def get_group(group_id: str) -> dict:
     return res.data[0]
 
 
+def update_stake_type(group_id: str, user_id: str, stake_type: str) -> dict:
+    """Allow the group leader to switch between ELO and money pot.
+    Only allowed for private (request-join) groups."""
+    if stake_type not in ("elo", "money"):
+        raise HTTPException(status_code=400, detail="stake_type must be 'elo' or 'money'")
+    sb = get_supabase()
+    grp = get_group(group_id)
+    mem = (
+        sb.table("group_memberships")
+        .select("role")
+        .eq("group_id", group_id)
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    if not mem.data or mem.data[0]["role"] != "leader":
+        raise HTTPException(status_code=403, detail="Only the group leader can change the stake type")
+    if grp.get("join_type") != "request":
+        raise HTTPException(status_code=400, detail="Stake type can only be changed for private groups")
+    sb.table("groups").update({"stake_type": stake_type}).eq("id", group_id).execute()
+    return {**grp, "stake_type": stake_type}
+
+
 def current_membership(user_id: str) -> dict | None:
     sb = get_supabase()
     res = (
