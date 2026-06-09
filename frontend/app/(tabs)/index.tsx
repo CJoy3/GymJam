@@ -22,7 +22,7 @@ type Screen =
   | 'profile' | 'squad-map' | 'settings';
 
 export default function GymJamApp() {
-  const { ready, gymId, groupId, tag, elo, refreshAll } = useAppState();
+  const { ready, userId, gymId, groupId, tag, elo, refreshAll } = useAppState();
   const [screen, setScreen] = useState<Screen | null>(null);
 
   // Keep every device in sync — poll every 30 s and also refresh when the app
@@ -31,14 +31,25 @@ export default function GymJamApp() {
 
   useEffect(() => {
     if (!ready) return;
-    if (!tag || !gymId) {
+    // Wait until the account itself has loaded before deciding where to route.
+    // Otherwise a warm launch (where `ready` flips true from the cache before
+    // `me` is populated) would briefly see null tag/gym and wrongly show the
+    // account-setup screen — and then get stuck there.
+    if (!userId) return;
+
+    const setUp = !!tag && !!gymId;
+    if (!setUp) {
+      // Genuinely needs to pick a tag + home gym.
       if (screen !== 'account-setup') setScreen('account-setup');
       return;
     }
-    if (screen !== null) return;
-    if (!groupId) setScreen('gym-browser');
-    else setScreen('home');
-  }, [ready, gymId, groupId, tag, screen]);
+
+    // Set up: route in from the splash or off any setup screen. Leave the user
+    // wherever they are once they're inside the app.
+    if (screen === null || screen === 'account-setup' || screen === 'onboarding') {
+      setScreen(groupId ? 'home' : 'gym-browser');
+    }
+  }, [ready, userId, gymId, groupId, tag, screen]);
 
   if (!ready || screen === null) {
     return (
