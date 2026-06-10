@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 
@@ -70,21 +70,42 @@ export function SquadMapScreen({ onBack }: { onBack: () => void }) {
     statusById[m.userId] = s === 'checked-in' ? 'in' : s === 'planned' || s === 'locked' ? 'pledged' : 'rest';
   }
 
-  const located = members.filter((m) => m.latitude != null && m.longitude != null);
-  const selectedMember = members.find((m) => m.user_id === selected) ?? null;
+  // Plot MYSELF at my real current location, not my home gym. myLocation is the
+  // PRIVATE device fix — used only to draw my own pin here; it is never uploaded,
+  // so teammates still only see me live if I opt into public sharing. (See the
+  // location-privacy split in lib/location.ts.)
+  const displayMembers = useMemo(() => {
+    if (!myLocation) return members;
+    return members.map((m) =>
+      m.is_me ? { ...m, latitude: myLocation.lat, longitude: myLocation.lng, is_live: true } : m,
+    );
+  }, [members, myLocation]);
+
+  // Stable handlers so FullMap's memoised markers don't all re-render on every tap.
+  const handleSelectMember = useCallback((id: string) => {
+    setSelectedGym(null);
+    setSelected((cur) => (cur === id ? null : id));
+  }, []);
+  const handleSelectGym = useCallback((id: string) => {
+    setSelected(null);
+    setSelectedGym((cur) => (cur === id ? null : id));
+  }, []);
+
+  const located = displayMembers.filter((m) => m.latitude != null && m.longitude != null);
+  const selectedMember = displayMembers.find((m) => m.user_id === selected) ?? null;
   const selectedGymPoint = gyms.find((g) => g.id === selectedGym) ?? null;
   const nudgeOnCooldown = selectedMember ? (nudgeCooldowns[selectedMember.user_id] ?? 0) > Date.now() : false;
 
   return (
     <View style={styles.screen}>
       <FullMap
-        members={members}
+        members={displayMembers}
         gyms={gyms}
         statusById={statusById}
         selected={selected}
-        onSelect={(id) => { setSelectedGym(null); setSelected((cur) => (cur === id ? null : id)); }}
+        onSelect={handleSelectMember}
         selectedGymId={selectedGym}
-        onSelectGym={(id) => { setSelected(null); setSelectedGym((cur) => (cur === id ? null : id)); }}
+        onSelectGym={handleSelectGym}
         onSearchArea={searchArea}
         focusLocation={myLocation}
       />

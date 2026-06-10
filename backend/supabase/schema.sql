@@ -19,9 +19,20 @@ alter table gyms add column if not exists latitude double precision;
 alter table gyms add column if not exists longitude double precision;
 
 -- OpenStreetMap id for gyms that originated from the live map (so a user picking
--- a real nearby gym during setup resolves to a single, reusable gyms row).
+-- a real nearby gym during setup resolves to a single, reusable gyms row). Also
+-- the upsert key for the bulk UK gym seed (see scripts/fetch_uk_gyms.py).
 alter table gyms add column if not exists osm_id text;
 create unique index if not exists gyms_osm_id_idx on gyms(osm_id) where osm_id is not null;
+
+-- Chain a gym belongs to (e.g. 'PureGym', 'The Gym Group'). Populated for the
+-- seeded UK chains; null for user-created/legacy rows.
+alter table gyms add column if not exists brand text;
+
+-- The Squad Map fetches gyms by viewport (bounding box) straight from this table,
+-- so index the coordinates for fast range scans. Partial: only geocoded rows are
+-- ever queried for the map.
+create index if not exists gyms_lat_lng_idx on gyms(latitude, longitude)
+    where latitude is not null and longitude is not null;
 
 create table if not exists users (
     id uuid primary key default gen_random_uuid(),

@@ -2,6 +2,7 @@
 import * as groupsApi from '../../lib/api/groups';
 import * as plansApi from '../../lib/api/plans';
 import * as potApi from '../../lib/api/pot';
+import { ApiError } from '../../lib/api/client';
 import { showToast } from '../ui/toast';
 import { DAYS, DayState, DayStatus, Group } from './types';
 
@@ -103,6 +104,22 @@ export function summaryToGroup(s: groupsApi.GroupSummary): Group {
 }
 
 export function reportError(action: string, e: unknown): void {
-  const msg = e instanceof Error ? e.message : 'Unknown error';
-  showToast(`${action}: ${msg}`, 'error');
+  showToast(`${action}: ${userFacingMessage(e)}`, 'error');
+}
+
+/**
+ * Never surface raw server internals to the user. Server faults (HTTP 5xx) and
+ * network failures collapse to a generic line; only intentional, user-actionable
+ * client errors (4xx — e.g. "tag already taken", "already requested") keep their
+ * specific message. This is the frontend half of "don't show internal server
+ * errors"; the backend also masks unhandled 500s (see app/main.py).
+ */
+export function userFacingMessage(e: unknown): string {
+  if (e instanceof ApiError) {
+    if (e.status >= 500) return 'Something went wrong on our end. Please try again.';
+    if (e.status === 0) return 'Network error. Check your connection and try again.';
+    return e.message || 'Something went wrong. Please try again.';
+  }
+  // Non-API errors are almost always fetch/network failures — keep them generic.
+  return 'Something went wrong. Please try again.';
 }

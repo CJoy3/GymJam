@@ -7,6 +7,7 @@ class Gym(BaseModel):
     id: str
     name: str
     location: Optional[str] = None
+    brand: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     created_at: datetime
@@ -27,6 +28,7 @@ class GymMapPoint(BaseModel):
     how many have checked in today."""
     id: str
     name: str
+    brand: Optional[str] = None
     latitude: float
     longitude: float
     member_count: int

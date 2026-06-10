@@ -10,7 +10,7 @@
  *    style) that re-pins to the new viewport.
  * Web has no native map — see FullMap.web.tsx.
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LayoutChangeEvent, Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import MapView, { Marker, PROVIDER_DEFAULT, type Region } from 'react-native-maps';
@@ -93,14 +93,24 @@ function useRenderUntilLaid(resetKey: unknown) {
   return { tracks, onLaidOut: () => setTracks(false) };
 }
 
-function GymMarker({ gym, selected, onPress }: { gym: GymMapPoint; selected: boolean; onPress: () => void }) {
+/**
+ * IMPORTANT: markers are wrapped in React.memo. react-native-maps re-rasterises
+ * (or, with tracksViewChanges=false, *blanks*) a custom-view marker every time it
+ * re-renders. Without memo, tapping one gym re-rendered all ~50 markers — which
+ * both made the others vanish ("clicking a gym makes nearby gyms disappear") and
+ * flooded the native bridge until it crashed ("clicking multiple gyms crashes").
+ * With memo + referentially-stable props (the gym/member object, a primitive
+ * `selected`, and a stable `onPress(id)`), a tap only re-renders the one marker
+ * whose `selected` actually changed. Keep all props here primitive/stable.
+ */
+const GymMarker = React.memo(function GymMarker({ gym, selected, onPress }: { gym: GymMapPoint; selected: boolean; onPress: (id: string) => void }) {
   const { tracks, onLaidOut } = useRenderUntilLaid(selected);
   const d = gymDiameter(gym.avg_elo);
   return (
     <Marker
       coordinate={{ latitude: gym.latitude, longitude: gym.longitude }}
       anchor={{ x: 0.5, y: 0.5 }}
-      onPress={onPress}
+      onPress={() => onPress(gym.id)}
       tracksViewChanges={tracks}
       zIndex={selected ? 5 : 1}
     >
@@ -117,16 +127,16 @@ function GymMarker({ gym, selected, onPress }: { gym: GymMapPoint; selected: boo
       </View>
     </Marker>
   );
-}
+});
 
-function MemberMarker({ member, presence, selected, onPress }: { member: SquadMapMember; presence?: Presence; selected: boolean; onPress: () => void }) {
+const MemberMarker = React.memo(function MemberMarker({ member, presence, selected, onPress }: { member: SquadMapMember; presence?: Presence; selected: boolean; onPress: (id: string) => void }) {
   const { tracks, onLaidOut } = useRenderUntilLaid(selected);
   const sz = selected ? 46 : 38;
   return (
     <Marker
       coordinate={{ latitude: member.latitude as number, longitude: member.longitude as number }}
       anchor={{ x: 0.5, y: 0.5 }}
-      onPress={onPress}
+      onPress={() => onPress(member.user_id)}
       tracksViewChanges={tracks}
       zIndex={selected ? 20 : 10}
     >
@@ -136,7 +146,7 @@ function MemberMarker({ member, presence, selected, onPress }: { member: SquadMa
       </View>
     </Marker>
   );
-}
+});
 
 export function FullMap({
   members,
@@ -170,23 +180,30 @@ export function FullMap({
   const onLayout = (e: LayoutChangeEvent) =>
     setSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height });
 
-  const located = members.filter((m) => validPoint(m.latitude, m.longitude));
+  const located = useMemo(
+    () => members.filter((m) => validPoint(m.latitude, m.longitude)),
+    [members],
+  );
 
-  // On open: zoom to the user's current location if we have it (Find-My style),
-  // otherwise frame the squad as tightly as possible.
-  const fitted = useRef(false);
+  // On open: zoom to the user's CURRENT location (Find-My style), otherwise frame
+  // the squad as tightly as possible. `fitted` tracks *what* we framed so a live
+  // fix that arrives late (location is async + permission-gated) still wins and
+  // re-centres on you — previously, if the squad loaded first we framed it and
+  // then ignored the location, leaving the map "static" away from you.
+  const fitted = useRef<'none' | 'squad' | 'focus'>('none');
   useEffect(() => {
-    if (fitted.current || !mapRef.current || !size.w) return;
+    if (!mapRef.current || !size.w) return;
     if (focusLocation) {
-      fitted.current = true;
+      if (fitted.current === 'focus') return; // already centred on you; don't fight panning
+      fitted.current = 'focus';
       mapRef.current.animateToRegion(
         { latitude: focusLocation.lat, longitude: focusLocation.lng, latitudeDelta: 0.04, longitudeDelta: 0.04 },
         600,
       );
       return;
     }
-    if (!located.length) return;
-    fitted.current = true;
+    if (fitted.current !== 'none' || !located.length) return;
+    fitted.current = 'squad';
     const coords = located.map((m) => ({ latitude: m.latitude as number, longitude: m.longitude as number }));
     if (coords.length === 1) {
       mapRef.current.animateToRegion({ ...coords[0], latitudeDelta: 0.015, longitudeDelta: 0.015 }, 500);
@@ -200,14 +217,27 @@ export function FullMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [located.length, size.w, focusLocation]);
 
-  // Gyms confined to the searched area, nearest-first, capped.
+  // Stable per-tap handlers so the memoised markers don't all re-render on every
+  // selection (that re-render churn was the disappear/crash bug — see GymMarker).
+  const handleGymPress = useCallback((id: string) => onSelectGym?.(id), [onSelectGym]);
+  const handleMemberPress = useCallback((id: string) => onSelect?.(id), [onSelect]);
+
+  // Gyms confined to the searched area, nearest-first, capped. Memoised so it
+  // only recomputes when the data or searched area changes — not when a marker is
+  // tapped (selection mustn't churn the whole list; that re-mounts markers).
   const searchIn = searchRegion ?? region;
-  const visibleGyms = (gyms ?? [])
-    .filter((g) => validPoint(g.latitude, g.longitude) && inBounds(g.latitude, g.longitude, searchIn))
-    .sort((a, b) =>
-      (Math.abs(a.latitude - searchIn.latitude) + Math.abs(a.longitude - searchIn.longitude)) -
-      (Math.abs(b.latitude - searchIn.latitude) + Math.abs(b.longitude - searchIn.longitude)))
-    .slice(0, MAX_GYMS);
+  const visibleGyms = useMemo(
+    () => (gyms ?? [])
+      .filter((g) => validPoint(g.latitude, g.longitude) && inBounds(g.latitude, g.longitude, searchIn))
+      .sort((a, b) =>
+        (Math.abs(a.latitude - searchIn.latitude) + Math.abs(a.longitude - searchIn.longitude)) -
+        (Math.abs(b.latitude - searchIn.latitude) + Math.abs(b.longitude - searchIn.longitude)))
+      .slice(0, MAX_GYMS),
+    // Depend on searchIn's *fields*, not the object — `searchRegion ?? region`
+    // is a fresh object each render and would defeat the memo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [gyms, searchIn.latitude, searchIn.longitude, searchIn.latitudeDelta, searchIn.longitudeDelta],
+  );
 
   // When zoomed out a long way, disable the gym-search feature entirely: don't
   // render gym pins and hide the search button (prevents the large-area crash).
@@ -233,7 +263,7 @@ export function FullMap({
             key={g.id}
             gym={g}
             selected={selectedGymId === g.id}
-            onPress={() => onSelectGym?.(g.id)}
+            onPress={handleGymPress}
           />
         ))}
 
@@ -244,7 +274,7 @@ export function FullMap({
             member={m}
             presence={statusById?.[m.user_id]}
             selected={selected === m.user_id}
-            onPress={() => onSelect?.(m.user_id)}
+            onPress={handleMemberPress}
           />
         ))}
       </MapView>

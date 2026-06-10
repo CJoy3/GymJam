@@ -5,8 +5,9 @@ import {
 import { MaterialIcons } from '@expo/vector-icons';
 
 import { checkTagAvailable } from '../../lib/api/users';
-import { boundsAround, getGymsMap, resolveGym, type GymMapPoint } from '../../lib/api/gyms';
+import { boundsAround, getGymsMap, type GymMapPoint } from '../../lib/api/gyms';
 import { milesTo, sortByProximity } from '../../lib/location';
+import { userFacingMessage } from '../state/mappers';
 import { C, FONT, RADIUS, SPACE } from '../theme/tokens';
 import { Btn, Card, Eyebrow, FadeInItem, H1, Sub } from '../ui/components';
 import { BlobBackground } from '../ui/Blob';
@@ -30,8 +31,7 @@ type GymOption = {
   name: string;
   latitude: number | null;
   longitude: number | null;
-  gymId?: string;       // curated gym → real id already
-  osm?: GymMapPoint;    // live map gym → resolve on continue
+  gymId: string;        // every gym (nearby or curated) is a real DB row now
 };
 
 const NEARBY_RADIUS_MILES = 8;
@@ -84,7 +84,7 @@ export function AccountSetup({ onDone }: { onDone: () => void }) {
   // Unified option list: real nearby gyms when we have them, else curated seeds.
   const hasNearby = !!nearby && nearby.length > 0;
   const options: GymOption[] = hasNearby
-    ? nearby!.map((p) => ({ key: p.id, name: p.name, latitude: p.latitude, longitude: p.longitude, osm: p }))
+    ? nearby!.map((p) => ({ key: p.id, name: p.name, latitude: p.latitude, longitude: p.longitude, gymId: p.id }))
     : sortByProximity(gyms, myLocation).map((g) => ({ key: g.id, name: g.name, latitude: g.latitude, longitude: g.longitude, gymId: g.id }));
 
   const [tag, setTagVal] = useState('');
@@ -126,22 +126,15 @@ export function AccountSetup({ onDone }: { onDone: () => void }) {
     if (!canContinue || !selected) return;
     setSaving(true);
     try {
-      // A live-map gym must first be turned into a real gym row; curated gyms
-      // already have an id.
-      const gymId = selected.gymId
-        ?? (await resolveGym({
-          osm_id: selected.osm!.id,
-          name: selected.name,
-          latitude: selected.osm!.latitude,
-          longitude: selected.osm!.longitude,
-        })).id;
+      // Every gym on the map is a real `gyms` row now (seeded from OpenStreetMap),
+      // so the picked option already carries its id — no resolve round-trip.
       await Promise.all([
         updateTag(tag.trim()),
-        setGym(gymId),
+        setGym(selected.gymId),
       ]);
       onDone();
     } catch (e: unknown) {
-      showToast(e instanceof Error ? e.message : 'Could not save, please retry', 'error');
+      showToast(userFacingMessage(e), 'error');
     } finally {
       setSaving(false);
     }
