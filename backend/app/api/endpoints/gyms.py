@@ -1,11 +1,11 @@
 from collections import defaultdict
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 
 from app.core.supabase_client import get_supabase
 from app.core.time_utils import current_day_of_week, current_week_start
 from app.schemas.gym import Gym, GymMapPoint
-from app.services.gym_data import LONDON_BBOX, fetch_london_gyms
+from app.services.gym_data import UK_BBOX, fetch_gyms
 
 router = APIRouter()
 
@@ -69,16 +69,27 @@ def _our_gym_stats() -> tuple[dict[str, dict], dict[str, dict]]:
 
 
 @router.get("/map", response_model=list[GymMapPoint])
-def gyms_map() -> list[dict]:
-    """London gyms pulled **live from OpenStreetMap** (no hand-entered coords),
-    bounded to Greater London. Each is enriched with our own crowd stats where
-    the gym name matches a gym our users train at (`avg_elo` drives the turf
-    size). Falls back to our DB gyms if Overpass is unavailable."""
+def gyms_map(
+    south: float | None = Query(None),
+    west: float | None = Query(None),
+    north: float | None = Query(None),
+    east: float | None = Query(None),
+) -> list[dict]:
+    """Gyms pulled **live from OpenStreetMap** (no hand-entered coords) for the
+    requested viewport, clamped to the UK — so the map works anywhere in the
+    country, not just London. Pass `south/west/north/east` to search a specific
+    area; omit them for the default London view. Each gym is enriched with our
+    own crowd stats where the name matches a gym our users train at (`avg_elo`
+    drives the turf size). Falls back to our DB gyms if Overpass is unavailable."""
     by_id, by_name = _our_gym_stats()
     zero = {"member_count": 0, "avg_elo": 0, "active_today": 0}
 
+    bbox = None
+    if None not in (south, west, north, east):
+        bbox = (south, west, north, east)
+
     try:
-        osm = fetch_london_gyms()
+        osm = fetch_gyms(bbox)
     except Exception:
         osm = None
 
@@ -94,8 +105,8 @@ def gyms_map() -> list[dict]:
             for g in osm
         ]
 
-    # Fallback: our own gyms that have coords, clamped to the London box.
-    s, w, n, e = LONDON_BBOX
+    # Fallback: our own gyms that have coords, clamped to the UK box.
+    s, w, n, e = UK_BBOX
     out: list[dict] = []
     for g in by_id.values():
         lat, lon = g.get("latitude"), g.get("longitude")

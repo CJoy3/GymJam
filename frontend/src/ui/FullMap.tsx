@@ -1,7 +1,9 @@
 /**
- * Full-screen interactive map (iOS → Apple Maps, no key). Real pan/zoom.
+ * Full-screen interactive map (iOS → Apple Maps, no key). Real pan/zoom/rotate.
  *  - Auto-zooms (Find-My style) to frame the squad tightly with no empty space.
- *  - Squad members are avatar pins with a check-in status halo.
+ *  - Squad members and gyms are native <Marker>s, so they stay glued to their
+ *    real-world coordinate through pan/zoom/rotate/pitch (an absolute-positioned
+ *    overlay would drift the moment the map is rotated off north).
  *  - Gyms are initials pins (e.g. "Gym Group" → "GG"), sized by average ELO,
  *    tappable for stats. Only gyms inside the searched area are shown, capped to
  *    the nearest few; panning reveals a "Search this area" button (Google-Maps
@@ -11,13 +13,21 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { LayoutChangeEvent, Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
-import MapView, { PROVIDER_DEFAULT, type Region } from 'react-native-maps';
+import MapView, { Marker, PROVIDER_DEFAULT, type Region } from 'react-native-maps';
 
 import { C, FONT } from '../theme/tokens';
 import { Avatar } from './Avatar';
 import type { SquadMapMember } from '../../lib/api/groups';
-import type { GymMapPoint } from '../../lib/api/gyms';
+import type { GymMapBounds, GymMapPoint } from '../../lib/api/gyms';
 import type { Presence } from './ProfileMap';
+
+/** Region (center + span) → (south, west, north, east) bounds for a gym query. */
+const regionToBounds = (r: Region): GymMapBounds => ({
+  south: r.latitude - r.latitudeDelta / 2,
+  north: r.latitude + r.latitudeDelta / 2,
+  west: r.longitude - r.longitudeDelta / 2,
+  east: r.longitude + r.longitudeDelta / 2,
+});
 
 const DEFAULT_REGION: Region = { latitude: 51.5072, longitude: -0.1276, latitudeDelta: 0.6, longitudeDelta: 0.6 };
 const MAX_GYMS = 40; // cap rendered gyms for performance
@@ -46,6 +56,65 @@ const movedAway = (a: Region, b: Region | null) => {
   );
 };
 
+/**
+ * Native markers cache their rendered bitmap; `tracksViewChanges` must be true
+ * while the marker's look is still settling (sprite paint, selection resize)
+ * and then flipped off so the map doesn't repaint every marker each frame.
+ */
+function useSettle(dep: unknown) {
+  const [tracks, setTracks] = useState(true);
+  useEffect(() => {
+    setTracks(true);
+    const t = setTimeout(() => setTracks(false), 600);
+    return () => clearTimeout(t);
+  }, [dep]);
+  return tracks;
+}
+
+function GymMarker({ gym, selected, onPress }: { gym: GymMapPoint; selected: boolean; onPress: () => void }) {
+  const tracks = useSettle(selected);
+  const d = gymDiameter(gym.avg_elo);
+  return (
+    <Marker
+      coordinate={{ latitude: gym.latitude, longitude: gym.longitude }}
+      anchor={{ x: 0.5, y: 0.5 }}
+      onPress={onPress}
+      tracksViewChanges={tracks}
+      zIndex={selected ? 5 : 1}
+    >
+      <View
+        style={{
+          width: d, height: d, borderRadius: d / 2,
+          alignItems: 'center', justifyContent: 'center',
+          backgroundColor: 'rgba(27,23,20,0.85)',
+          borderWidth: selected ? 3 : 2, borderColor: selected ? C.accent : C.success,
+        }}
+      >
+        <Text style={{ fontFamily: FONT.bold, fontSize: Math.max(11, d * 0.34), color: C.ink }}>{gymInitials(gym.name)}</Text>
+      </View>
+    </Marker>
+  );
+}
+
+function MemberMarker({ member, presence, selected, onPress }: { member: SquadMapMember; presence?: Presence; selected: boolean; onPress: () => void }) {
+  const tracks = useSettle(selected);
+  const sz = selected ? 46 : 38;
+  return (
+    <Marker
+      coordinate={{ latitude: member.latitude as number, longitude: member.longitude as number }}
+      anchor={{ x: 0.5, y: 0.5 }}
+      onPress={onPress}
+      tracksViewChanges={tracks}
+      zIndex={selected ? 20 : 10}
+    >
+      <View style={[styles.pin, { borderWidth: selected ? 3 : 2, borderColor: ring(presence), backgroundColor: presence === 'in' ? 'rgba(156,181,143,0.30)' : 'rgba(27,23,20,0.40)' }]}>
+        <Avatar id={member.avatar} name={member.display_name} size={sz} accent={member.is_me} />
+        {member.is_live && <View style={styles.liveDot} />}
+      </View>
+    </Marker>
+  );
+}
+
 export function FullMap({
   members,
   gyms,
@@ -54,6 +123,7 @@ export function FullMap({
   onSelect,
   selectedGymId,
   onSelectGym,
+  onSearchArea,
   style,
 }: {
   members: SquadMapMember[];
@@ -63,6 +133,8 @@ export function FullMap({
   onSelect?: (id: string) => void;
   selectedGymId?: string | null;
   onSelectGym?: (id: string) => void;
+  /** Fetch gyms for a freshly searched viewport (works anywhere in the UK). */
+  onSearchArea?: (bounds: GymMapBounds) => void;
   style?: StyleProp<ViewStyle>;
 }) {
   const mapRef = useRef<MapView>(null);
@@ -92,11 +164,6 @@ export function FullMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [located.length, size.w]);
 
-  const project = (lat: number, lng: number) => ({
-    x: ((lng - (region.longitude - region.longitudeDelta / 2)) / region.longitudeDelta) * size.w,
-    y: ((region.latitude + region.latitudeDelta / 2 - lat) / region.latitudeDelta) * size.h,
-  });
-
   // Gyms confined to the searched area, nearest-first, capped.
   const searchIn = searchRegion ?? region;
   const visibleGyms = (gyms ?? [])
@@ -117,53 +184,36 @@ export function FullMap({
         initialRegion={DEFAULT_REGION}
         onRegionChange={setRegion}
         onRegionChangeComplete={(r) => setSearchRegion((prev) => prev ?? r)}
-      />
-
-      {/* Gym pins — initials circle sized by avg ELO; tap for stats. Under members. */}
-      {size.w > 0 && visibleGyms.map((g) => {
-        const { x, y } = project(g.latitude, g.longitude);
-        if (x < -60 || y < -60 || x > size.w + 60 || y > size.h + 60) return null;
-        const d = gymDiameter(g.avg_elo);
-        const sel = selectedGymId === g.id;
-        return (
-          <Pressable
+      >
+        {/* Gym pins — native markers, glued to their coordinate through rotation. */}
+        {visibleGyms.map((g) => (
+          <GymMarker
             key={g.id}
+            gym={g}
+            selected={selectedGymId === g.id}
             onPress={() => onSelectGym?.(g.id)}
-            style={{
-              position: 'absolute', left: x - d / 2, top: y - d / 2, width: d, height: d, borderRadius: d / 2,
-              alignItems: 'center', justifyContent: 'center',
-              backgroundColor: 'rgba(27,23,20,0.85)',
-              borderWidth: sel ? 3 : 2, borderColor: sel ? C.accent : C.success,
-            }}
-          >
-            <Text style={{ fontFamily: FONT.bold, fontSize: Math.max(11, d * 0.34), color: C.ink }}>{gymInitials(g.name)}</Text>
-          </Pressable>
-        );
-      })}
+          />
+        ))}
 
-      {/* Member pins */}
-      {size.w > 0 && located.map((m) => {
-        const { x, y } = project(m.latitude as number, m.longitude as number);
-        if (x < -60 || y < -60 || x > size.w + 60 || y > size.h + 60) return null;
-        const p = statusById?.[m.user_id];
-        const sel = selected === m.user_id;
-        const sz = sel ? 46 : 38;
-        return (
-          <Pressable
+        {/* Member pins */}
+        {located.map((m) => (
+          <MemberMarker
             key={m.user_id}
+            member={m}
+            presence={statusById?.[m.user_id]}
+            selected={selected === m.user_id}
             onPress={() => onSelect?.(m.user_id)}
-            style={[styles.pin, { left: x - sz / 2 - 3, top: y - sz / 2 - 3, borderWidth: sel ? 3 : 2, borderColor: ring(p), backgroundColor: p === 'in' ? 'rgba(156,181,143,0.30)' : 'rgba(27,23,20,0.40)' }]}
-          >
-            <Avatar id={m.avatar} name={m.display_name} size={sz} accent={m.is_me} />
-            {m.is_live && <View style={styles.liveDot} />}
-          </Pressable>
-        );
-      })}
+          />
+        ))}
+      </MapView>
 
       {/* Google-Maps style "search this area" — re-pins gyms to the current view. */}
       {showSearch && (
         <View pointerEvents="box-none" style={styles.searchWrap}>
-          <Pressable onPress={() => setSearchRegion(region)} style={styles.searchBtn}>
+          <Pressable
+            onPress={() => { setSearchRegion(region); onSearchArea?.(regionToBounds(region)); }}
+            style={styles.searchBtn}
+          >
             <MaterialIcons name="search" size={15} color={C.ink} />
             <Text style={styles.searchText}>Search this area</Text>
           </Pressable>
@@ -175,7 +225,6 @@ export function FullMap({
 
 const styles = StyleSheet.create({
   pin: {
-    position: 'absolute',
     padding: 3,
     borderRadius: 28,
   },

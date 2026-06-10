@@ -8,7 +8,22 @@ import { FullMap, gymInitials } from '../ui/FullMap';
 import { type Presence } from '../ui/ProfileMap';
 import { useAppState } from '../state/AppState';
 import { getSquadMap, type SquadMapMember } from '../../lib/api/groups';
-import { getGymsMap, type GymMapPoint } from '../../lib/api/gyms';
+import { getGymsMap, type GymMapBounds, type GymMapPoint } from '../../lib/api/gyms';
+
+/** Bounding box enclosing the located squad, padded so nearby gyms are in view. */
+function squadBounds(members: SquadMapMember[]): GymMapBounds | undefined {
+  const pts = members.filter((m) => m.latitude != null && m.longitude != null);
+  if (!pts.length) return undefined;
+  const lats = pts.map((m) => m.latitude as number);
+  const lngs = pts.map((m) => m.longitude as number);
+  const pad = 0.05; // ~5km padding around the squad
+  return {
+    south: Math.min(...lats) - pad,
+    north: Math.max(...lats) + pad,
+    west: Math.min(...lngs) - pad,
+    east: Math.max(...lngs) + pad,
+  };
+}
 
 /* Squad Map — group members on a real map, by their home gym + today's status */
 
@@ -20,11 +35,22 @@ export function SquadMapScreen({ onBack }: { onBack: () => void }) {
   const [selectedGym, setSelectedGym] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    getGymsMap().then(setGyms).catch(() => setGyms([]));
-    if (!groupId) { setMembers([]); return; }
-    try { setMembers(await getSquadMap(groupId)); } catch { setMembers([]); }
+    if (!groupId) {
+      setMembers([]);
+      getGymsMap().then(setGyms).catch(() => setGyms([]));
+      return;
+    }
+    let map: SquadMapMember[] = [];
+    try { map = await getSquadMap(groupId); } catch { map = []; }
+    setMembers(map);
+    // Fetch gyms around wherever the squad actually is (works UK-wide), not London.
+    getGymsMap(squadBounds(map)).then(setGyms).catch(() => setGyms([]));
   }, [groupId]);
   useEffect(() => { load(); }, [load]);
+
+  const searchArea = useCallback((bounds: GymMapBounds) => {
+    getGymsMap(bounds).then(setGyms).catch(() => {});
+  }, []);
 
   const statusById: Record<string, Presence> = {};
   for (const m of groupMembers) {
@@ -47,6 +73,7 @@ export function SquadMapScreen({ onBack }: { onBack: () => void }) {
         onSelect={(id) => { setSelectedGym(null); setSelected((cur) => (cur === id ? null : id)); }}
         selectedGymId={selectedGym}
         onSelectGym={(id) => { setSelected(null); setSelectedGym((cur) => (cur === id ? null : id)); }}
+        onSearchArea={searchArea}
       />
 
       {/* Header overlay */}
