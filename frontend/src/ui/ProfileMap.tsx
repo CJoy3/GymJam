@@ -77,13 +77,9 @@ export function ProfileMap({
         rotateEnabled={false}
         pitchEnabled={false}
       />
-      {/* Warm scrim so cream avatars/text stay legible and it matches the theme. */}
-      <LinearGradient
-        pointerEvents="none"
-        colors={['rgba(27,23,20,0.30)', 'rgba(27,23,20,0.80)']}
-        style={StyleSheet.absoluteFill}
-      />
-      {/* Gym pins — initials circle sized by avg ELO (compact, non-interactive). */}
+      {/* Gym pins — initials circle sized by avg ELO (compact, non-interactive).
+          Drawn *under* the scrim below so their cream initials don't clash with
+          the cream hero text once gyms load (the scrim sits between them). */}
       {size.w > 0 && (gyms ?? []).map((g) => {
         const { x, y } = project(g.latitude, g.longitude);
         const d = gymDiameter(g.avg_elo) * 0.7;
@@ -98,6 +94,14 @@ export function ProfileMap({
           </View>
         );
       })}
+      {/* Warm scrim so cream avatars/text stay legible and it matches the theme.
+          Sits above the map + gym pins so hero text contrast is unaffected by
+          however many gyms load underneath. */}
+      <LinearGradient
+        pointerEvents="none"
+        colors={['rgba(27,23,20,0.45)', 'rgba(27,23,20,0.88)']}
+        style={StyleSheet.absoluteFill}
+      />
       {size.w > 0 && located.map((m) => {
         const { x, y } = project(m.latitude as number, m.longitude as number);
         const p = statusById?.[m.user_id];

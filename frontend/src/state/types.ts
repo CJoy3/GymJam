@@ -14,6 +14,8 @@ export const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 export interface Gym {
   id: string;
   name: string;
+  latitude: number | null;
+  longitude: number | null;
 }
 
 export interface Group {
@@ -63,9 +65,16 @@ export interface AppStateShape {
   money: number;
   moneyWeekChange: number;
 
-  // Opt-in live location sharing
+  // Opt-in live location sharing — PUBLIC: pushed to the backend so the squad
+  // sees you on the map.
   shareLocation: boolean;
   setShareLocation: (on: boolean) => Promise<void>;
+
+  // PRIVATE device location — stored only on-device (never sent to the backend),
+  // used to centre the map on open and sort gyms by proximity. Separate from the
+  // public sharing above. `refreshMyLocation` asks permission + re-reads GPS.
+  myLocation: { lat: number; lng: number } | null;
+  refreshMyLocation: () => Promise<{ lat: number; lng: number } | null>;
 
   // Gyms
   gyms: Gym[];

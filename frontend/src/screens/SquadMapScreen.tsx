@@ -13,8 +13,9 @@ import { boundsAround, getGymsMap, type GymMapBounds, type GymMapPoint } from '.
 const RADIUS_MILES = 5; // only ever load gyms within this radius of the map's focus
 const DEFAULT_CENTER = { lat: 51.5072, lng: -0.1276 }; // central London, used when the squad isn't located
 
-/** Where to centre the initial gym fetch: the current user if located, else the
- *  squad's centroid, else central London. */
+/** Where to centre the initial gym fetch: the squad's centroid, else central
+ *  London. (When a private current location is known it takes priority — see
+ *  the caller.) */
 function squadCenter(members: SquadMapMember[]): { lat: number; lng: number } {
   const pts = members.filter((m) => m.latitude != null && m.longitude != null);
   if (!pts.length) return DEFAULT_CENTER;
@@ -28,7 +29,15 @@ function squadCenter(members: SquadMapMember[]): { lat: number; lng: number } {
 /* Squad Map — group members on a real map, by their home gym + today's status */
 
 export function SquadMapScreen({ onBack }: { onBack: () => void }) {
-  const { groupId, groupName, groupMembers, todayDow, nudge, nudgeCooldowns } = useAppState();
+  const { groupId, groupName, groupMembers, todayDow, nudge, nudgeCooldowns, myLocation, refreshMyLocation } = useAppState();
+
+  // Grab the current location on open so the map can zoom to you (idempotent —
+  // expo won't re-prompt once granted/denied). Private; never sent to the backend.
+  useEffect(() => {
+    if (!myLocation) void refreshMyLocation();
+    // Only on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [members, setMembers] = useState<SquadMapMember[]>([]);
   const [gyms, setGyms] = useState<GymMapPoint[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
@@ -40,11 +49,12 @@ export function SquadMapScreen({ onBack }: { onBack: () => void }) {
       try { map = await getSquadMap(groupId); } catch { map = []; }
     }
     setMembers(map);
-    // Only load gyms within a 5-mile radius of the squad's focus (keeps the
-    // payload + marker count small; UK-wide loads were crashing the map).
-    const { lat, lng } = squadCenter(map);
+    // Only load gyms within a 5-mile radius of the focus (keeps the payload +
+    // marker count small; UK-wide loads were crashing the map). Prefer the
+    // private current location so you see gyms near *you*, else the squad.
+    const { lat, lng } = myLocation ?? squadCenter(map);
     getGymsMap(boundsAround(lat, lng, RADIUS_MILES)).then(setGyms).catch(() => setGyms([]));
-  }, [groupId]);
+  }, [groupId, myLocation]);
   useEffect(() => { load(); }, [load]);
 
   // "Search this area" — refetch gyms within 5 miles of the new viewport's centre.
@@ -76,6 +86,7 @@ export function SquadMapScreen({ onBack }: { onBack: () => void }) {
         selectedGymId={selectedGym}
         onSelectGym={(id) => { setSelected(null); setSelectedGym((cur) => (cur === id ? null : id)); }}
         onSearchArea={searchArea}
+        focusLocation={myLocation}
       />
 
       {/* Header overlay */}

@@ -14,6 +14,7 @@ import * as potApi from '../../lib/api/pot';
 import * as roomApi from '../../lib/api/room';
 import * as usersApi from '../../lib/api/users';
 import { ApiError } from '../../lib/api/client';
+import { getStoredLocation, requestAndStoreLocation, type Coords } from '../../lib/location';
 import { readCache, writeCache } from '../../lib/cache';
 import { showToast } from '../ui/toast';
 import {
@@ -57,6 +58,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   const [me, setMe] = useState<usersApi.User | null>(null);
   const [gyms, setGyms] = useState<Gym[]>([]);
+  // PRIVATE device location (on-device only; never sent to the backend).
+  const [myLocation, setMyLocation] = useState<Coords | null>(null);
   const [groupsAtGym, setGroupsAtGym] = useState<Group[]>([]);
   const [myGroupSummary, setMyGroupSummary] = useState<Group | null>(null);
   const [thisWeek, setThisWeek] = useState<DayStatus[]>(DAYS.map((d) => ({ day: d, state: 'unselected' })));
@@ -88,7 +91,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
   const loadGyms = useCallback(async () => {
     const list = await gymsApi.listGyms();
-    setGyms(list.map((g) => ({ id: g.id, name: g.name })));
+    setGyms(list.map((g) => ({ id: g.id, name: g.name, latitude: g.latitude ?? null, longitude: g.longitude ?? null })));
   }, []);
 
   // Groups are global (decoupled from gyms): always load every group on the
@@ -639,6 +642,20 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }
   }, [loadMembers, me, myGroupSummary]);
 
+  // Load any previously-granted PRIVATE location once on mount (device-local;
+  // separate from the public squad-map sharing below).
+  useEffect(() => {
+    getStoredLocation().then((c) => { if (c) setMyLocation(c); });
+  }, []);
+
+  // Ask permission + re-read GPS, storing it locally only. Returns the fix (or
+  // null if denied). Does NOT push to the backend — stays private.
+  const refreshMyLocation = useCallback(async () => {
+    const c = await requestAndStoreLocation();
+    if (c) setMyLocation(c);
+    return c;
+  }, []);
+
   // Push the current GPS fix to the backend (only meaningful while sharing).
   const pushLocation = useCallback(async () => {
     try {
@@ -864,6 +881,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       avatar: me?.avatar ?? null,
       shareLocation: me?.share_location ?? false,
       setShareLocation,
+      myLocation,
+      refreshMyLocation,
       elo: me?.elo ?? 0,
       streak: me?.streak ?? 0,
       tag: me?.tag ?? null,
@@ -952,7 +971,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     lockNextWeek, me, myGroupSummary, nextWeek, nudge, nudgeCooldowns, placeRoomItem, pot, potCurrent, potNext,
     ready, refreshGroupContext, refreshGroupsAtGym, rejectRequest, reloading, rescheduleMissedDay, roomItems, setGym,
     setPlannedDays, setThisWeekDays, thisWeek, thisWeekIsPractice, todayDow, toggleNextWeekDay,
-    setElo, setMoney, setShareLocation, toggleWeek, updateAvatar, updateDisplayName, updatePotConditions, updateStakeType, updateTag, weekOffsetDays,
+    setElo, setMoney, setShareLocation, myLocation, refreshMyLocation, toggleWeek, updateAvatar, updateDisplayName, updatePotConditions, updateStakeType, updateTag, weekOffsetDays,
   ]);
 
   // tier is purely a function of elo; expose for callers that want it

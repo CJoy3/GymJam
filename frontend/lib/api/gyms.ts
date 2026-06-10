@@ -4,6 +4,8 @@ export interface Gym {
   id: string;
   name: string;
   location: string | null;
+  latitude: number | null;
+  longitude: number | null;
   created_at: string;
 }
 

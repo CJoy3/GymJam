@@ -7,6 +7,7 @@ import { BlobBackground } from '../ui/Blob';
 import { showToast } from '../ui/toast';
 import { useAppState } from '../state/AppState';
 import { checkTagAvailable } from '../../lib/api/users';
+import { milesTo, sortByProximity } from '../../lib/location';
 import { pageWrap } from './_shared';
 
 function useDebounce<T>(value: T, delay: number): T {
@@ -24,8 +25,9 @@ export function AppSettings({ onBack }: { onBack: () => void }) {
     tag, tagChanges, updateTag,
     gyms, gymId, setGym,
     goToPreviousWeek, goToNextWeek, goToPreviousDay, goToNextDay,
-    setElo, setMoney, shareLocation, setShareLocation,
+    setElo, setMoney, shareLocation, setShareLocation, myLocation,
   } = useAppState();
+  const sortedGyms = sortByProximity(gyms, myLocation);
 
   // ── Tag ──────────────────────────────────────────────────────────────────
   const canChangeTag = tagChanges === 0;
@@ -201,8 +203,9 @@ export function AppSettings({ onBack }: { onBack: () => void }) {
 
             {editingGym ? (
               <View style={{ gap: 10 }}>
-                {gyms.map((g) => {
+                {sortedGyms.map((g) => {
                   const on = gymId === g.id;
+                  const miles = milesTo(myLocation, g);
                   return (
                     <Pressable
                       key={g.id}
@@ -212,7 +215,10 @@ export function AppSettings({ onBack }: { onBack: () => void }) {
                     >
                       <MaterialIcons name="place" size={18} color={on ? C.primaryFg : C.mutedFg} />
                       <Text style={[gymOptionText, on && { color: C.primaryFg }]}>{g.name}</Text>
-                      {on && <MaterialIcons name="check" size={18} color={C.primaryFg} style={{ marginLeft: 'auto' }} />}
+                      {Number.isFinite(miles) && (
+                        <Text style={[gymOptionText, { marginLeft: 'auto', color: on ? C.primaryFg : C.mutedFg, fontSize: 12 }]}>{miles.toFixed(1)} mi</Text>
+                      )}
+                      {on && <MaterialIcons name="check" size={18} color={C.primaryFg} style={{ marginLeft: Number.isFinite(miles) ? 8 : 'auto' }} />}
                       {savingGym && on && <ActivityIndicator size="small" color={C.primaryFg} />}
                     </Pressable>
                   );

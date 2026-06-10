@@ -147,6 +147,7 @@ export function FullMap({
   selectedGymId,
   onSelectGym,
   onSearchArea,
+  focusLocation,
   style,
 }: {
   members: SquadMapMember[];
@@ -158,6 +159,8 @@ export function FullMap({
   onSelectGym?: (id: string) => void;
   /** Fetch gyms for a freshly searched viewport (works anywhere in the UK). */
   onSearchArea?: (bounds: GymMapBounds) => void;
+  /** Private current location — when set, the map opens zoomed in on it. */
+  focusLocation?: { lat: number; lng: number } | null;
   style?: StyleProp<ViewStyle>;
 }) {
   const mapRef = useRef<MapView>(null);
@@ -169,10 +172,20 @@ export function FullMap({
 
   const located = members.filter((m) => validPoint(m.latitude, m.longitude));
 
-  // Find-My-style auto-zoom: frame the squad as tightly as possible.
+  // On open: zoom to the user's current location if we have it (Find-My style),
+  // otherwise frame the squad as tightly as possible.
   const fitted = useRef(false);
   useEffect(() => {
-    if (fitted.current || !located.length || !mapRef.current || !size.w) return;
+    if (fitted.current || !mapRef.current || !size.w) return;
+    if (focusLocation) {
+      fitted.current = true;
+      mapRef.current.animateToRegion(
+        { latitude: focusLocation.lat, longitude: focusLocation.lng, latitudeDelta: 0.04, longitudeDelta: 0.04 },
+        600,
+      );
+      return;
+    }
+    if (!located.length) return;
     fitted.current = true;
     const coords = located.map((m) => ({ latitude: m.latitude as number, longitude: m.longitude as number }));
     if (coords.length === 1) {
@@ -183,9 +196,9 @@ export function FullMap({
         animated: true,
       });
     }
-    // Only the count + first layout matter; the `fitted` ref guards re-runs.
+    // Only the count + first layout + focus matter; the `fitted` ref guards re-runs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [located.length, size.w]);
+  }, [located.length, size.w, focusLocation]);
 
   // Gyms confined to the searched area, nearest-first, capped.
   const searchIn = searchRegion ?? region;

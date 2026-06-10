@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, View,
+  ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 
 import { checkTagAvailable } from '../../lib/api/users';
+import { milesTo, sortByProximity } from '../../lib/location';
 import { C, FONT, RADIUS, SPACE } from '../theme/tokens';
 import { Btn, Card, Eyebrow, FadeInItem, H1, Sub } from '../ui/components';
 import { BlobBackground } from '../ui/Blob';
@@ -22,7 +23,21 @@ function useDebounce<T>(value: T, delay: number): T {
 }
 
 export function AccountSetup({ onDone }: { onDone: () => void }) {
-  const { gyms, setGym, updateTag } = useAppState();
+  const { gyms, setGym, updateTag, myLocation, refreshMyLocation } = useAppState();
+  const sortedGyms = sortByProximity(gyms, myLocation);
+  const [locating, setLocating] = useState(false);
+
+  // Grant the PRIVATE device location so the gym list can sort nearest-first.
+  // Stays on-device — not the public squad-map sharing.
+  const useMyLocation = async () => {
+    setLocating(true);
+    try {
+      const c = await refreshMyLocation();
+      showToast(c ? 'Sorted by distance to you' : 'Location permission denied', c ? 'success' : 'info');
+    } finally {
+      setLocating(false);
+    }
+  };
 
   const [tag, setTagVal] = useState('');
   const [tagStatus, setTagStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid'>('idle');
@@ -140,10 +155,31 @@ export function AccountSetup({ onDone }: { onDone: () => void }) {
 
         {/* Gym picker */}
         <FadeInItem delay={140} style={{ marginTop: 14 }}>
-          <Eyebrow style={{ marginBottom: 12 }}>Choose your home gym</Eyebrow>
-          <View style={{ gap: 10 }}>
-            {gyms.map((g, i) => {
+          <Eyebrow style={{ marginBottom: 12 }}>
+            {myLocation ? 'Choose your home gym · nearest first' : 'Choose your home gym'}
+          </Eyebrow>
+
+          {/* Optional: use your location to sort gyms nearest-first. Private. */}
+          <Pressable
+            style={[localS.locBtn, myLocation && localS.locBtnOn]}
+            onPress={useMyLocation}
+            disabled={locating}
+          >
+            {locating ? (
+              <ActivityIndicator color={C.ink} size="small" />
+            ) : (
+              <>
+                <MaterialIcons name={myLocation ? 'check-circle' : 'near-me'} size={18} color={myLocation ? C.success : C.ink} />
+                <Text style={localS.locBtnText}>{myLocation ? 'Sorted by distance to you' : 'Find gyms near me'}</Text>
+              </>
+            )}
+          </Pressable>
+          <Text style={localS.locHint}>Private — used only to find nearby gyms, never shared.</Text>
+
+          <View style={{ gap: 10, marginTop: 14 }}>
+            {sortedGyms.map((g, i) => {
               const on = gymId === g.id;
+              const miles = milesTo(myLocation, g);
               return (
                 <FadeInItem key={g.id} delay={80 * (i + 1)}>
                   <Card
@@ -159,7 +195,10 @@ export function AccountSetup({ onDone }: { onDone: () => void }) {
                         </View>
                         <Text style={[styles.cardTitle, on && { color: C.primaryFg }]}>{g.name}</Text>
                       </View>
-                      {on && <MaterialIcons name="check-circle" size={22} color={C.primaryFg} />}
+                      {Number.isFinite(miles) && (
+                        <Text style={[localS.distance, on && { color: C.primaryFg }]}>{miles.toFixed(1)} mi</Text>
+                      )}
+                      {on && <MaterialIcons name="check-circle" size={22} color={C.primaryFg} style={{ marginLeft: 8 }} />}
                     </View>
                   </Card>
                 </FadeInItem>
@@ -200,5 +239,18 @@ const localS = StyleSheet.create({
   },
   tagHint: {
     fontFamily: FONT.medium, fontSize: 12, marginTop: 8, paddingLeft: 2,
+  },
+  distance: {
+    fontFamily: FONT.semibold, fontSize: 12, color: C.mutedFg,
+  },
+  locBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    height: 46, borderRadius: RADIUS.md,
+    backgroundColor: C.card, borderWidth: 1, borderColor: C.borderHi,
+  },
+  locBtnOn: { borderColor: C.success },
+  locBtnText: { fontFamily: FONT.semibold, fontSize: 14, color: C.ink },
+  locHint: {
+    fontFamily: FONT.regular, fontSize: 11, color: C.mutedFg, marginTop: 8, paddingLeft: 2,
   },
 });
