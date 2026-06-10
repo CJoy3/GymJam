@@ -5,6 +5,7 @@ import {
 import { MaterialIcons } from '@expo/vector-icons';
 
 import { checkTagAvailable } from '../../lib/api/users';
+import { boundsAround, getGymsMap, resolveGym, type GymMapPoint } from '../../lib/api/gyms';
 import { milesTo, sortByProximity } from '../../lib/location';
 import { C, FONT, RADIUS, SPACE } from '../theme/tokens';
 import { Btn, Card, Eyebrow, FadeInItem, H1, Sub } from '../ui/components';
@@ -22,27 +23,75 @@ function useDebounce<T>(value: T, delay: number): T {
   return debounced;
 }
 
+// A selectable home-gym option — either a curated DB gym (has a real id) or a
+// live map (OSM) gym that must be resolved into a real gym row when chosen.
+type GymOption = {
+  key: string;
+  name: string;
+  latitude: number | null;
+  longitude: number | null;
+  gymId?: string;       // curated gym → real id already
+  osm?: GymMapPoint;    // live map gym → resolve on continue
+};
+
+const NEARBY_RADIUS_MILES = 8;
+const NEARBY_LIMIT = 15;
+
 export function AccountSetup({ onDone }: { onDone: () => void }) {
   const { gyms, setGym, updateTag, myLocation, refreshMyLocation } = useAppState();
-  const sortedGyms = sortByProximity(gyms, myLocation);
   const [locating, setLocating] = useState(false);
 
-  // Grant the PRIVATE device location so the gym list can sort nearest-first.
+  // Real gyms near the user, pulled live from the map (OSM) once location is
+  // granted. Falls back to the curated seed list when we have no location/results.
+  const [nearby, setNearby] = useState<GymMapPoint[] | null>(null);
+  const [loadingNearby, setLoadingNearby] = useState(false);
+
+  const fetchNearby = useCallback(async (loc: { lat: number; lng: number }) => {
+    setLoadingNearby(true);
+    try {
+      const points = await getGymsMap(boundsAround(loc.lat, loc.lng, NEARBY_RADIUS_MILES));
+      const sorted = sortByProximity(points, loc).slice(0, NEARBY_LIMIT);
+      setNearby(sorted);
+    } catch {
+      setNearby([]); // signal "we tried" so we fall back to curated gyms
+    } finally {
+      setLoadingNearby(false);
+    }
+  }, []);
+
+  // If we already have a stored location on mount, surface nearby gyms straight away.
+  useEffect(() => {
+    if (myLocation && nearby === null) fetchNearby(myLocation);
+  }, [myLocation, nearby, fetchNearby]);
+
+  // Grant the PRIVATE device location, then pull real nearby gyms from the map.
   // Stays on-device — not the public squad-map sharing.
   const useMyLocation = async () => {
     setLocating(true);
     try {
       const c = await refreshMyLocation();
-      showToast(c ? 'Sorted by distance to you' : 'Location permission denied', c ? 'success' : 'info');
+      if (c) {
+        await fetchNearby(c);
+        showToast('Found gyms near you', 'success');
+      } else {
+        showToast('Location permission denied', 'info');
+      }
     } finally {
       setLocating(false);
     }
   };
 
+  // Unified option list: real nearby gyms when we have them, else curated seeds.
+  const hasNearby = !!nearby && nearby.length > 0;
+  const options: GymOption[] = hasNearby
+    ? nearby!.map((p) => ({ key: p.id, name: p.name, latitude: p.latitude, longitude: p.longitude, osm: p }))
+    : sortByProximity(gyms, myLocation).map((g) => ({ key: g.id, name: g.name, latitude: g.latitude, longitude: g.longitude, gymId: g.id }));
+
   const [tag, setTagVal] = useState('');
   const [tagStatus, setTagStatus] = useState<'idle' | 'checking' | 'available' | 'taken' | 'invalid'>('idle');
-  const [gymId, setGymId] = useState<string | null>(null);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const selected = options.find((o) => o.key === selectedKey) ?? null;
   const checkAbortRef = useRef<number>(0);
 
   const debouncedTag = useDebounce(tag, 400);
@@ -71,15 +120,24 @@ export function AccountSetup({ onDone }: { onDone: () => void }) {
     setTagStatus('idle');
   }, []);
 
-  const canContinue = tagStatus === 'available' && !!gymId && !saving;
+  const canContinue = tagStatus === 'available' && !!selected && !saving;
 
   const handleContinue = async () => {
-    if (!canContinue) return;
+    if (!canContinue || !selected) return;
     setSaving(true);
     try {
+      // A live-map gym must first be turned into a real gym row; curated gyms
+      // already have an id.
+      const gymId = selected.gymId
+        ?? (await resolveGym({
+          osm_id: selected.osm!.id,
+          name: selected.name,
+          latitude: selected.osm!.latitude,
+          longitude: selected.osm!.longitude,
+        })).id;
       await Promise.all([
         updateTag(tag.trim()),
-        setGym(gymId!),
+        setGym(gymId),
       ]);
       onDone();
     } catch (e: unknown) {
@@ -156,34 +214,40 @@ export function AccountSetup({ onDone }: { onDone: () => void }) {
         {/* Gym picker */}
         <FadeInItem delay={140} style={{ marginTop: 14 }}>
           <Eyebrow style={{ marginBottom: 12 }}>
-            {myLocation ? 'Choose your home gym · nearest first' : 'Choose your home gym'}
+            {hasNearby ? 'Choose your home gym · gyms near you' : myLocation ? 'Choose your home gym · nearest first' : 'Choose your home gym'}
           </Eyebrow>
 
-          {/* Optional: use your location to sort gyms nearest-first. Private. */}
+          {/* Use your location to find real gyms near you. Private — on-device only. */}
           <Pressable
             style={[localS.locBtn, myLocation && localS.locBtnOn]}
             onPress={useMyLocation}
-            disabled={locating}
+            disabled={locating || loadingNearby}
           >
-            {locating ? (
+            {locating || loadingNearby ? (
               <ActivityIndicator color={C.ink} size="small" />
             ) : (
               <>
                 <MaterialIcons name={myLocation ? 'check-circle' : 'near-me'} size={18} color={myLocation ? C.success : C.ink} />
-                <Text style={localS.locBtnText}>{myLocation ? 'Sorted by distance to you' : 'Find gyms near me'}</Text>
+                <Text style={localS.locBtnText}>{myLocation ? 'Showing gyms near you' : 'Find gyms near me'}</Text>
               </>
             )}
           </Pressable>
           <Text style={localS.locHint}>Private — used only to find nearby gyms, never shared.</Text>
 
+          {myLocation && nearby !== null && nearby.length === 0 && !loadingNearby && (
+            <Text style={[localS.locHint, { marginTop: 10 }]}>
+              No gyms found nearby — pick one of ours below for now.
+            </Text>
+          )}
+
           <View style={{ gap: 10, marginTop: 14 }}>
-            {sortedGyms.map((g, i) => {
-              const on = gymId === g.id;
+            {options.map((g, i) => {
+              const on = selectedKey === g.key;
               const miles = milesTo(myLocation, g);
               return (
-                <FadeInItem key={g.id} delay={80 * (i + 1)}>
+                <FadeInItem key={g.key} delay={Math.min(80 * (i + 1), 400)}>
                   <Card
-                    onPress={() => setGymId(g.id)}
+                    onPress={() => setSelectedKey(g.key)}
                     tone={on ? 'cream' : 'default'}
                     padding={SPACE.xl - 4}
                     style={on ? { borderColor: C.primary } : undefined}
@@ -210,7 +274,7 @@ export function AccountSetup({ onDone }: { onDone: () => void }) {
 
       <View style={styles.footer}>
         <Btn
-          label={saving ? 'Setting up…' : (!gymId ? 'Pick a gym to continue' : tagStatus !== 'available' ? 'Enter a valid tag' : 'Continue')}
+          label={saving ? 'Setting up…' : (!selected ? 'Pick a gym to continue' : tagStatus !== 'available' ? 'Enter a valid tag' : 'Continue')}
           loading={saving}
           disabled={!canContinue}
           onPress={handleContinue}

@@ -12,6 +12,15 @@ class Gym(BaseModel):
     created_at: datetime
 
 
+class GymResolve(BaseModel):
+    """A gym picked from the live map (OSM), turned into a real gyms row so it
+    can be used as a home gym."""
+    osm_id: str
+    name: str
+    latitude: float
+    longitude: float
+
+
 class GymMapPoint(BaseModel):
     """A gym plotted on the map with crowd/strength stats. `avg_elo` drives the
     'turf' size; `member_count` = users whose home gym is this; `active_today` =

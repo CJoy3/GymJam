@@ -1,10 +1,10 @@
 from collections import defaultdict
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 
 from app.core.supabase_client import get_supabase
 from app.core.time_utils import current_day_of_week, current_week_start
-from app.schemas.gym import Gym, GymLeaderboardEntry, GymMapPoint
+from app.schemas.gym import Gym, GymLeaderboardEntry, GymMapPoint, GymResolve
 from app.services.gym_data import UK_BBOX, fetch_gyms
 
 router = APIRouter()
@@ -15,6 +15,34 @@ def list_gyms() -> list[dict]:
     sb = get_supabase()
     res = sb.table("gyms").select("*").order("name", desc=False).execute()
     return res.data or []
+
+
+@router.post("/resolve", response_model=Gym)
+def resolve_gym(payload: GymResolve) -> dict:
+    """Turn a gym picked from the live map (OSM) into a real `gyms` row so it can
+    be used as a home gym. Idempotent: returns the existing row for this osm_id if
+    we've already created it, otherwise inserts a new one."""
+    sb = get_supabase()
+    existing = (
+        sb.table("gyms").select("*").eq("osm_id", payload.osm_id).limit(1).execute()
+    ).data or []
+    if existing:
+        return existing[0]
+    inserted = sb.table("gyms").insert({
+        "name": payload.name,
+        "osm_id": payload.osm_id,
+        "latitude": payload.latitude,
+        "longitude": payload.longitude,
+    }).execute()
+    if inserted.data:
+        return inserted.data[0]
+    # Lost a race (unique-index conflict) — re-read by osm_id.
+    again = (
+        sb.table("gyms").select("*").eq("osm_id", payload.osm_id).limit(1).execute()
+    ).data or []
+    if again:
+        return again[0]
+    raise HTTPException(status_code=500, detail="Could not resolve gym")
 
 
 @router.get("/leaderboard", response_model=list[GymLeaderboardEntry])

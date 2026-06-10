@@ -18,6 +18,11 @@ create table if not exists gyms (
 alter table gyms add column if not exists latitude double precision;
 alter table gyms add column if not exists longitude double precision;
 
+-- OpenStreetMap id for gyms that originated from the live map (so a user picking
+-- a real nearby gym during setup resolves to a single, reusable gyms row).
+alter table gyms add column if not exists osm_id text;
+create unique index if not exists gyms_osm_id_idx on gyms(osm_id) where osm_id is not null;
+
 create table if not exists users (
     id uuid primary key default gen_random_uuid(),
     device_id text not null unique,

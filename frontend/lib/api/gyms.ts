@@ -1,4 +1,4 @@
-import { apiGet } from './client';
+import { apiGet, apiPost } from './client';
 
 export interface Gym {
   id: string;
@@ -10,6 +10,11 @@ export interface Gym {
 }
 
 export const listGyms = () => apiGet<Gym[]>('/gyms', { auth: false });
+
+/** Turn a gym picked from the live map (OSM) into a real gym row (idempotent by
+ * osm_id) so it can be set as a home gym. Returns the resolved gym. */
+export const resolveGym = (point: { osm_id: string; name: string; latitude: number; longitude: number }) =>
+  apiPost<Gym>('/gyms/resolve', point, { auth: false });
 
 export interface GymMapPoint {
   id: string;
