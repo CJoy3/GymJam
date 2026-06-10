@@ -8,6 +8,8 @@ hours since gym locations rarely change and Overpass is rate-limited; on any
 failure callers fall back to whatever is in our own `gyms` table.
 """
 import json
+import math
+import re
 import time
 import urllib.request
 from typing import Any
@@ -72,6 +74,43 @@ def _is_established(*values: str | None) -> bool:
     return False
 
 
+# Established gyms that are genuinely missing from OpenStreetMap. OSM is
+# volunteer-mapped, so some real, well-known branches simply aren't in it (e.g.
+# The Gym Group's Acton branch in Royale Leisure Park). We merge these curated
+# entries — with coordinates geocoded from each branch's real address — into the
+# live OSM results and de-duplicate, so recognisable gyms always show even where
+# OSM has a gap. Only add a branch here if you have its real coordinates; a wrong
+# pin is worse than a missing one. Extend as further gaps are reported.
+SEED_GYMS: list[dict] = [
+    {"osm_id": "seed-tgg-acton", "name": "The Gym Group London Acton",
+     "latitude": 51.5255, "longitude": -0.2803},
+]
+
+
+def _norm(name: str) -> str:
+    return " ".join((name or "").lower().split())
+
+
+def _within(bbox: tuple[float, float, float, float], lat: float, lon: float) -> bool:
+    s, w, n, e = bbox
+    return s <= lat <= n and w <= lon <= e
+
+
+def _metres_apart(a_lat: float, a_lon: float, b_lat: float, b_lon: float) -> float:
+    """Cheap planar distance in metres — accurate enough at city scale."""
+    dlat = (a_lat - b_lat) * 111_000
+    dlon = (a_lon - b_lon) * 111_000 * math.cos(math.radians(a_lat))
+    return math.hypot(dlat, dlon)
+
+
+# Regex alternation of the brands, used to filter **server-side** in Overpass so
+# we only download the handful of established gyms in a viewport rather than every
+# fitness centre (hundreds). This both fixes truncation — the old `out 800` cap
+# silently dropped branded gyms in dense areas like London — and makes the query
+# much faster (tiny payload to transfer + parse).
+_BRAND_REGEX = "|".join(sorted({re.escape(b.strip()) for b in ESTABLISHED_GYM_BRANDS}, key=len, reverse=True))
+
+
 def _clamp_bbox(bbox: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
     """Intersect a requested viewport with the UK box so we never over-fetch."""
     s, w, n, e = bbox
@@ -84,16 +123,19 @@ def _clamp_bbox(bbox: tuple[float, float, float, float]) -> tuple[float, float, 
 def _build_query(bbox: tuple[float, float, float, float]) -> str:
     s, w, n, e = bbox
     box = f"{s},{w},{n},{e}"
+    lt = '["leisure"~"fitness_centre|sports_centre"]'
     # `nwr` = nodes/ways/relations; `out center` gives a single coord for areas.
-    # We over-fetch and filter to established brands in Python (see
-    # `ESTABLISHED_GYM_BRANDS`) — Overpass regex on multiple tags is brittle.
+    # Filter to established brands *in the query* (case-insensitive regex on
+    # name/brand/operator) so Overpass returns only the gyms we'll show — fast,
+    # and no `out` cap can drop a branded gym. `_is_established` re-checks below.
     return (
-        "[out:json][timeout:25];"
+        "[out:json][timeout:15];"
         "("
-        f'nwr["leisure"="fitness_centre"]({box});'
-        f'nwr["leisure"="sports_centre"]({box});'
+        f'nwr{lt}["name"~"{_BRAND_REGEX}",i]({box});'
+        f'nwr{lt}["brand"~"{_BRAND_REGEX}",i]({box});'
+        f'nwr{lt}["operator"~"{_BRAND_REGEX}",i]({box});'
         ");"
-        "out center 800;"
+        "out center 400;"
     )
 
 
@@ -141,6 +183,19 @@ def fetch_gyms(bbox: tuple[float, float, float, float] | None = None) -> list[di
             "latitude": float(lat),
             "longitude": float(lon),
         })
+
+    # Fill OSM gaps with curated branches inside this viewport, unless OSM already
+    # has the same branch nearby (avoid duplicate pins).
+    for seed in SEED_GYMS:
+        if not _within(bbox, seed["latitude"], seed["longitude"]):
+            continue
+        dup = any(
+            _norm(g["name"]) == _norm(seed["name"])
+            and _metres_apart(g["latitude"], g["longitude"], seed["latitude"], seed["longitude"]) < 400
+            for g in out
+        )
+        if not dup:
+            out.append(dict(seed))
 
     _cache[key] = {"ts": now, "data": out}
     return out

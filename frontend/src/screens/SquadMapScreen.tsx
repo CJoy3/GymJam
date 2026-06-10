@@ -28,7 +28,7 @@ function squadBounds(members: SquadMapMember[]): GymMapBounds | undefined {
 /* Squad Map — group members on a real map, by their home gym + today's status */
 
 export function SquadMapScreen({ onBack }: { onBack: () => void }) {
-  const { groupId, groupName, groupMembers, todayDow } = useAppState();
+  const { groupId, groupName, groupMembers, todayDow, nudge, nudgeCooldowns } = useAppState();
   const [members, setMembers] = useState<SquadMapMember[]>([]);
   const [gyms, setGyms] = useState<GymMapPoint[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
@@ -61,7 +61,7 @@ export function SquadMapScreen({ onBack }: { onBack: () => void }) {
   const located = members.filter((m) => m.latitude != null && m.longitude != null);
   const selectedMember = members.find((m) => m.user_id === selected) ?? null;
   const selectedGymPoint = gyms.find((g) => g.id === selectedGym) ?? null;
-  const activeNow = members.filter((m) => statusById[m.user_id] === 'in').length;
+  const nudgeOnCooldown = selectedMember ? (nudgeCooldowns[selectedMember.user_id] ?? 0) > Date.now() : false;
 
   return (
     <View style={styles.screen}>
@@ -83,9 +83,6 @@ export function SquadMapScreen({ onBack }: { onBack: () => void }) {
         </Pressable>
         <View style={styles.titlePill}>
           <Text style={styles.title}>{groupName || 'Squad'} map</Text>
-          <Text style={styles.subtitle}>
-            {activeNow > 0 ? `${activeNow} training now · ` : ''}{located.length} on the map
-          </Text>
         </View>
         <View style={{ width: 40 }} />
       </View>
@@ -101,7 +98,19 @@ export function SquadMapScreen({ onBack }: { onBack: () => void }) {
                 {(selectedMember.gym_name ?? 'No home gym')} · {selectedMember.elo.toLocaleString()} ELO
               </Text>
             </View>
-            <StatusChip presence={statusById[selectedMember.user_id]} />
+            <View style={{ alignItems: 'flex-end', gap: 8 }}>
+              <StatusChip presence={statusById[selectedMember.user_id]} />
+              {!selectedMember.is_me && (
+                <Pressable
+                  onPress={() => nudge(selectedMember.user_id)}
+                  disabled={nudgeOnCooldown}
+                  style={[styles.nudgeBtn, nudgeOnCooldown && { opacity: 0.45 }]}
+                >
+                  <MaterialIcons name="campaign" size={15} color={C.ink} />
+                  <Text style={styles.nudgeText}>{nudgeOnCooldown ? 'Nudged' : 'Nudge'}</Text>
+                </Pressable>
+              )}
+            </View>
           </View>
         </View>
       )}
@@ -195,6 +204,13 @@ const styles = StyleSheet.create({
   },
   statusDot: { width: 7, height: 7, borderRadius: 4 },
   statusText: { fontFamily: FONT.semibold, fontSize: 11 },
+
+  nudgeBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: C.accent,
+    borderRadius: RADIUS.pill, paddingHorizontal: 12, paddingVertical: 7,
+  },
+  nudgeText: { fontFamily: FONT.bold, fontSize: 12, color: C.ink },
 
   empty: {
     position: 'absolute', left: 24, right: 24, bottom: 40,

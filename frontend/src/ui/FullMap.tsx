@@ -30,7 +30,7 @@ const regionToBounds = (r: Region): GymMapBounds => ({
 });
 
 const DEFAULT_REGION: Region = { latitude: 51.5072, longitude: -0.1276, latitudeDelta: 0.6, longitudeDelta: 0.6 };
-const MAX_GYMS = 40; // cap rendered gyms for performance
+const MAX_GYMS = 150; // cap rendered gyms for performance (only established brands reach here)
 
 /** Pin diameter (px) grows with a gym's average ELO; default ~30px. */
 export const gymDiameter = (avgElo: number) => 30 + Math.min(avgElo / 80, 26);
