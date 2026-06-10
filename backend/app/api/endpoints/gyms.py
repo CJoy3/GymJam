@@ -4,7 +4,7 @@ from fastapi import APIRouter, Query
 
 from app.core.supabase_client import get_supabase
 from app.core.time_utils import current_day_of_week, current_week_start
-from app.schemas.gym import Gym, GymMapPoint
+from app.schemas.gym import Gym, GymLeaderboardEntry, GymMapPoint
 from app.services.gym_data import UK_BBOX, fetch_gyms
 
 router = APIRouter()
@@ -15,6 +15,27 @@ def list_gyms() -> list[dict]:
     sb = get_supabase()
     res = sb.table("gyms").select("*").order("name", desc=False).execute()
     return res.data or []
+
+
+@router.get("/leaderboard", response_model=list[GymLeaderboardEntry])
+def gyms_leaderboard() -> list[dict]:
+    """Gyms ranked by their members' ELO — exactly like the group leaderboard,
+    but membership is each user's **home gym** (`users.gym_id`). Returns total and
+    average ELO so the client can sort either way; only gyms with members appear."""
+    by_id, _ = _our_gym_stats()
+    entries = [
+        {
+            "id": g["id"],
+            "name": g["name"],
+            "member_count": g["member_count"],
+            "total_elo": g["total_elo"],
+            "avg_elo": g["avg_elo"],
+        }
+        for g in by_id.values()
+        if g["member_count"] > 0
+    ]
+    entries.sort(key=lambda e: e["total_elo"], reverse=True)
+    return entries
 
 
 def _norm(name: str) -> str:
@@ -60,6 +81,7 @@ def _our_gym_stats() -> tuple[dict[str, dict], dict[str, dict]]:
         return {
             "member_count": c,
             "avg_elo": round(elo_total[gid] / c) if c else 0,
+            "total_elo": elo_total.get(gid, 0),
             "active_today": active.get(gid, 0),
         }
 

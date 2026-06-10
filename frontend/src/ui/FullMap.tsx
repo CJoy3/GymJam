@@ -30,7 +30,10 @@ const regionToBounds = (r: Region): GymMapBounds => ({
 });
 
 const DEFAULT_REGION: Region = { latitude: 51.5072, longitude: -0.1276, latitudeDelta: 0.6, longitudeDelta: 0.6 };
-const MAX_GYMS = 150; // cap rendered gyms for performance (only established brands reach here)
+// Hard cap on rendered native markers — too many (we saw ~150 in dense central
+// London) overwhelms the map and crashes it. We fetch only a 5-mile radius and
+// render the nearest few to the viewport centre; that's plenty on screen at once.
+const MAX_GYMS = 50;
 
 /** Pin diameter (px) grows with a gym's average ELO; default ~30px. */
 export const gymDiameter = (avgElo: number) => 30 + Math.min(avgElo / 80, 26);

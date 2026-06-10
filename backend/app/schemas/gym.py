@@ -23,3 +23,13 @@ class GymMapPoint(BaseModel):
     member_count: int
     avg_elo: int
     active_today: int
+
+
+class GymLeaderboardEntry(BaseModel):
+    """A gym ranked on the leaderboard. Members are users whose home gym is this
+    gym; `total_elo` is their combined ELO, `avg_elo` the per-member average."""
+    id: str
+    name: str
+    member_count: int
+    total_elo: int
+    avg_elo: int

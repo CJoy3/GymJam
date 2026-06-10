@@ -111,12 +111,29 @@ def _metres_apart(a_lat: float, a_lon: float, b_lat: float, b_lon: float) -> flo
 _BRAND_REGEX = "|".join(sorted({re.escape(b.strip()) for b in ESTABLISHED_GYM_BRANDS}, key=len, reverse=True))
 
 
+# Defensive cap on how large a viewport we'll ever query, in degrees of half-span
+# (~6 miles). The client only ever asks for a 5-mile radius, but this guarantees a
+# pathological request can't pull thousands of gyms and overwhelm the map.
+_MAX_HALF_SPAN_DEG = 0.09
+
+
 def _clamp_bbox(bbox: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
-    """Intersect a requested viewport with the UK box so we never over-fetch."""
+    """Cap the viewport span (defensive) then intersect with the UK box so we
+    never over-fetch."""
     s, w, n, e = bbox
+    s, n = min(s, n), max(s, n)
+    w, e = min(w, e), max(w, e)
+
+    # Shrink an oversized box around its centre.
+    clat, clon = (s + n) / 2, (w + e) / 2
+    half_lat = min((n - s) / 2, _MAX_HALF_SPAN_DEG)
+    half_lon = min((e - w) / 2, _MAX_HALF_SPAN_DEG)
+    s, n = clat - half_lat, clat + half_lat
+    w, e = clon - half_lon, clon + half_lon
+
     S, W, N, E = UK_BBOX
-    s, n = max(min(s, n), S), min(max(s, n), N)
-    w, e = max(min(w, e), W), min(max(w, e), E)
+    s, n = max(s, S), min(n, N)
+    w, e = max(w, W), min(e, E)
     return (s, w, n, e)
 
 

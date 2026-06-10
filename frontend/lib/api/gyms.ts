@@ -27,6 +27,17 @@ export interface GymMapBounds {
 }
 
 /**
+ * A bounding box of `miles` radius around a point. Used to keep gym fetches
+ * small (we only ever load gyms within ~5 miles), which both bounds the payload
+ * and avoids rendering hundreds of map markers at once.
+ */
+export function boundsAround(lat: number, lng: number, miles: number): GymMapBounds {
+  const dLat = miles / 69; // ~69 miles per degree of latitude
+  const dLng = dLat / Math.max(0.1, Math.cos((lat * Math.PI) / 180));
+  return { south: lat - dLat, north: lat + dLat, west: lng - dLng, east: lng + dLng };
+}
+
+/**
  * Geocoded gyms with crowd/strength stats for the map "turf" overlays.
  * Pass a bounding box to search a specific area (anywhere in the UK); omit it
  * for the default London view.
@@ -37,3 +48,15 @@ export const getGymsMap = (bounds?: GymMapBounds) => {
     : '';
   return apiGet<GymMapPoint[]>(`/gyms/map${qs}`, { auth: false });
 };
+
+export interface GymLeaderboardEntry {
+  id: string;
+  name: string;
+  member_count: number;
+  total_elo: number;
+  avg_elo: number;
+}
+
+/** Gyms ranked by their members' ELO (membership = users' home gym). */
+export const getGymsLeaderboard = () =>
+  apiGet<GymLeaderboardEntry[]>('/gyms/leaderboard', { auth: false });

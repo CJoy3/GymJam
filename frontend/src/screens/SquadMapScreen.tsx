@@ -8,21 +8,21 @@ import { FullMap, gymInitials } from '../ui/FullMap';
 import { type Presence } from '../ui/ProfileMap';
 import { useAppState } from '../state/AppState';
 import { getSquadMap, type SquadMapMember } from '../../lib/api/groups';
-import { getGymsMap, type GymMapBounds, type GymMapPoint } from '../../lib/api/gyms';
+import { boundsAround, getGymsMap, type GymMapBounds, type GymMapPoint } from '../../lib/api/gyms';
 
-/** Bounding box enclosing the located squad, padded so nearby gyms are in view. */
-function squadBounds(members: SquadMapMember[]): GymMapBounds | undefined {
+const RADIUS_MILES = 5; // only ever load gyms within this radius of the map's focus
+const DEFAULT_CENTER = { lat: 51.5072, lng: -0.1276 }; // central London, used when the squad isn't located
+
+/** Where to centre the initial gym fetch: the current user if located, else the
+ *  squad's centroid, else central London. */
+function squadCenter(members: SquadMapMember[]): { lat: number; lng: number } {
   const pts = members.filter((m) => m.latitude != null && m.longitude != null);
-  if (!pts.length) return undefined;
-  const lats = pts.map((m) => m.latitude as number);
-  const lngs = pts.map((m) => m.longitude as number);
-  const pad = 0.05; // ~5km padding around the squad
-  return {
-    south: Math.min(...lats) - pad,
-    north: Math.max(...lats) + pad,
-    west: Math.min(...lngs) - pad,
-    east: Math.max(...lngs) + pad,
-  };
+  if (!pts.length) return DEFAULT_CENTER;
+  const me = pts.find((m) => m.is_me);
+  if (me) return { lat: me.latitude as number, lng: me.longitude as number };
+  const lat = pts.reduce((s, m) => s + (m.latitude as number), 0) / pts.length;
+  const lng = pts.reduce((s, m) => s + (m.longitude as number), 0) / pts.length;
+  return { lat, lng };
 }
 
 /* Squad Map — group members on a real map, by their home gym + today's status */
@@ -35,21 +35,23 @@ export function SquadMapScreen({ onBack }: { onBack: () => void }) {
   const [selectedGym, setSelectedGym] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    if (!groupId) {
-      setMembers([]);
-      getGymsMap().then(setGyms).catch(() => setGyms([]));
-      return;
-    }
     let map: SquadMapMember[] = [];
-    try { map = await getSquadMap(groupId); } catch { map = []; }
+    if (groupId) {
+      try { map = await getSquadMap(groupId); } catch { map = []; }
+    }
     setMembers(map);
-    // Fetch gyms around wherever the squad actually is (works UK-wide), not London.
-    getGymsMap(squadBounds(map)).then(setGyms).catch(() => setGyms([]));
+    // Only load gyms within a 5-mile radius of the squad's focus (keeps the
+    // payload + marker count small; UK-wide loads were crashing the map).
+    const { lat, lng } = squadCenter(map);
+    getGymsMap(boundsAround(lat, lng, RADIUS_MILES)).then(setGyms).catch(() => setGyms([]));
   }, [groupId]);
   useEffect(() => { load(); }, [load]);
 
+  // "Search this area" — refetch gyms within 5 miles of the new viewport's centre.
   const searchArea = useCallback((bounds: GymMapBounds) => {
-    getGymsMap(bounds).then(setGyms).catch(() => {});
+    const lat = (bounds.south + bounds.north) / 2;
+    const lng = (bounds.west + bounds.east) / 2;
+    getGymsMap(boundsAround(lat, lng, RADIUS_MILES)).then(setGyms).catch(() => {});
   }, []);
 
   const statusById: Record<string, Presence> = {};
