@@ -35,8 +35,17 @@ const DEFAULT_REGION: Region = { latitude: 51.5072, longitude: -0.1276, latitude
 // render the nearest few to the viewport centre; that's plenty on screen at once.
 const MAX_GYMS = 50;
 
-/** Pin diameter (px) grows with a gym's average ELO; default ~30px. */
-export const gymDiameter = (avgElo: number) => 30 + Math.min(avgElo / 80, 26);
+/** Pin diameter (px) grows with a gym's average ELO; default ~30px. A non-finite
+ *  ELO would yield NaN dimensions, which crashes the native map — so clamp it. */
+export const gymDiameter = (avgElo: number) => {
+  const e = Number.isFinite(avgElo) ? Math.max(avgElo, 0) : 0;
+  return 30 + Math.min(e / 80, 26);
+};
+
+/** Apple Maps assert-crashes on NaN/Infinity coordinates — never render those. */
+const validPoint = (lat?: number | null, lng?: number | null): boolean =>
+  Number.isFinite(lat as number) && Number.isFinite(lng as number) &&
+  Math.abs(lat as number) <= 90 && Math.abs(lng as number) <= 180;
 
 export function gymInitials(name: string): string {
   const parts = (name || '').trim().split(/\s+/).filter(Boolean);
@@ -147,7 +156,7 @@ export function FullMap({
   const onLayout = (e: LayoutChangeEvent) =>
     setSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height });
 
-  const located = members.filter((m) => m.latitude != null && m.longitude != null);
+  const located = members.filter((m) => validPoint(m.latitude, m.longitude));
 
   // Find-My-style auto-zoom: frame the squad as tightly as possible.
   const fitted = useRef(false);
@@ -170,7 +179,7 @@ export function FullMap({
   // Gyms confined to the searched area, nearest-first, capped.
   const searchIn = searchRegion ?? region;
   const visibleGyms = (gyms ?? [])
-    .filter((g) => inBounds(g.latitude, g.longitude, searchIn))
+    .filter((g) => validPoint(g.latitude, g.longitude) && inBounds(g.latitude, g.longitude, searchIn))
     .sort((a, b) =>
       (Math.abs(a.latitude - searchIn.latitude) + Math.abs(a.longitude - searchIn.longitude)) -
       (Math.abs(b.latitude - searchIn.latitude) + Math.abs(b.longitude - searchIn.longitude)))
@@ -185,8 +194,10 @@ export function FullMap({
         style={StyleSheet.absoluteFill}
         provider={PROVIDER_DEFAULT}
         initialRegion={DEFAULT_REGION}
-        onRegionChange={setRegion}
-        onRegionChangeComplete={(r) => setSearchRegion((prev) => prev ?? r)}
+        // Only update on *complete* (gesture/animation end), never per-frame.
+        // Updating region state on every frame re-creates all markers ~60×/s and
+        // crashes the native map while panning/searching.
+        onRegionChangeComplete={(r) => { setRegion(r); setSearchRegion((prev) => prev ?? r); }}
       >
         {/* Gym pins — native markers, glued to their coordinate through rotation. */}
         {visibleGyms.map((g) => (
