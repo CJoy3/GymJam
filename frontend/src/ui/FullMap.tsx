@@ -35,11 +35,11 @@ const DEFAULT_REGION: Region = { latitude: 51.5072, longitude: -0.1276, latitude
 // render the nearest few to the viewport centre; that's plenty on screen at once.
 const MAX_GYMS = 50;
 // Zoomed out beyond this latitude span (~24 miles), we stop showing gyms and hide
-// the "Search this area" button — searching a huge area was crashing the map.
+// the "Search this area" button — rendering many pins over a huge area crashed
+// the map. We *don't* clamp the native zoom (minZoomLevel freezes Apple Maps —
+// it rubber-bands you back in and the map stops responding); instead we just shed
+// the gym layer at wide zoom, which is what actually caused the crash.
 const SEARCH_MAX_DELTA = 0.35;
-// Hard floor on zoom-out so the map can't be pulled out to a whole-country view
-// (which fetched/rendered far too much and crashed). ~9 ≈ a city-sized view.
-const MIN_ZOOM_LEVEL = 9;
 
 /** Pin diameter (px) grows with a gym's average ELO; default ~30px. A non-finite
  *  ELO would yield NaN dimensions, which crashes the native map — so clamp it. */
@@ -208,7 +208,6 @@ export function FullMap({
         style={StyleSheet.absoluteFill}
         provider={PROVIDER_DEFAULT}
         initialRegion={DEFAULT_REGION}
-        minZoomLevel={MIN_ZOOM_LEVEL}
         // Only update on *complete* (gesture/animation end), never per-frame.
         // Updating region state on every frame re-creates all markers ~60×/s and
         // crashes the native map while panning/searching.
