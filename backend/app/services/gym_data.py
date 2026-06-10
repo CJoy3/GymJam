@@ -9,7 +9,6 @@ failure callers fall back to whatever is in our own `gyms` table.
 """
 import json
 import math
-import re
 import time
 import urllib.request
 from typing import Any
@@ -21,7 +20,19 @@ UK_BBOX = (49.8, -8.65, 60.9, 1.78)
 # Default viewport when the caller doesn't supply one (Greater London).
 LONDON_BBOX = (51.28, -0.51, 51.69, 0.34)
 
-_OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+# Public Overpass instances are frequently overloaded — single-server requests
+# 504 (timeout) or 429 (rate-limit) intermittently, which made the map "hit or
+# miss" outside London. We try mirrors in turn so one failing falls through to the
+# next. overpass-api.de is the primary (fast + full planet coverage); the others
+# are last-ditch fallbacks that are flakier, so the per-attempt timeout is kept
+# short to fail fast rather than hang the request. (mail.ru 403s us and osm.ch is
+# Switzerland-only, so they're deliberately excluded.)
+_OVERPASS_MIRRORS = (
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://overpass.private.coffee/api/interpreter",
+)
+_REQUEST_TIMEOUT = 12  # seconds per mirror attempt before trying the next
 _CACHE_TTL = 6 * 60 * 60  # 6 hours
 # Cache keyed by rounded bbox so each searched area is fetched at most once/TTL.
 _cache: dict[tuple, dict[str, Any]] = {}
@@ -103,14 +114,6 @@ def _metres_apart(a_lat: float, a_lon: float, b_lat: float, b_lon: float) -> flo
     return math.hypot(dlat, dlon)
 
 
-# Regex alternation of the brands, used to filter **server-side** in Overpass so
-# we only download the handful of established gyms in a viewport rather than every
-# fitness centre (hundreds). This both fixes truncation — the old `out 800` cap
-# silently dropped branded gyms in dense areas like London — and makes the query
-# much faster (tiny payload to transfer + parse).
-_BRAND_REGEX = "|".join(sorted({re.escape(b.strip()) for b in ESTABLISHED_GYM_BRANDS}, key=len, reverse=True))
-
-
 # Defensive cap on how large a viewport we'll ever query, in degrees of half-span
 # (~6 miles). The client only ever asks for a 5-mile radius, but this guarantees a
 # pathological request can't pull thousands of gyms and overwhelm the map.
@@ -140,20 +143,39 @@ def _clamp_bbox(bbox: tuple[float, float, float, float]) -> tuple[float, float, 
 def _build_query(bbox: tuple[float, float, float, float]) -> str:
     s, w, n, e = bbox
     box = f"{s},{w},{n},{e}"
-    lt = '["leisure"~"fitness_centre|sports_centre"]'
     # `nwr` = nodes/ways/relations; `out center` gives a single coord for areas.
-    # Filter to established brands *in the query* (case-insensitive regex on
-    # name/brand/operator) so Overpass returns only the gyms we'll show — fast,
-    # and no `out` cap can drop a branded gym. `_is_established` re-checks below.
+    # Plain bbox fetch of every fitness/sports centre, then filter to established
+    # brands in Python (`_is_established`). A server-side regex filter is heavier
+    # for Overpass and made it 504 far more often; a plain index-based bbox query
+    # is much more likely to succeed. The `out` cap is high so the brand filter
+    # never loses a gym — a 5-mile viewport stays well under it even in London.
     return (
-        "[out:json][timeout:15];"
+        "[out:json][timeout:20];"
         "("
-        f'nwr{lt}["name"~"{_BRAND_REGEX}",i]({box});'
-        f'nwr{lt}["brand"~"{_BRAND_REGEX}",i]({box});'
-        f'nwr{lt}["operator"~"{_BRAND_REGEX}",i]({box});'
+        f'nwr["leisure"="fitness_centre"]({box});'
+        f'nwr["leisure"="sports_centre"]({box});'
         ");"
-        "out center 400;"
+        "out center 2000;"
     )
+
+
+def _query_overpass(query: str) -> dict:
+    """POST `query` to each Overpass mirror in turn, returning the first JSON
+    response. Raises the last error only if *every* mirror fails."""
+    last_err: Exception | None = None
+    for url in _OVERPASS_MIRRORS:
+        try:
+            req = urllib.request.Request(
+                url,
+                data=query.encode("utf-8"),
+                headers={"Content-Type": "text/plain", "User-Agent": "GymJam/1.0"},
+            )
+            with urllib.request.urlopen(req, timeout=_REQUEST_TIMEOUT) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except Exception as exc:  # noqa: BLE001 — try the next mirror on any failure
+            last_err = exc
+            continue
+    raise last_err or RuntimeError("all Overpass mirrors failed")
 
 
 def fetch_gyms(bbox: tuple[float, float, float, float] | None = None) -> list[dict]:
@@ -170,13 +192,7 @@ def fetch_gyms(bbox: tuple[float, float, float, float] | None = None) -> list[di
     if cached and (now - cached["ts"]) < _CACHE_TTL:
         return cached["data"]
 
-    req = urllib.request.Request(
-        _OVERPASS_URL,
-        data=_build_query(bbox).encode("utf-8"),
-        headers={"Content-Type": "text/plain", "User-Agent": "GymJam/1.0"},
-    )
-    with urllib.request.urlopen(req, timeout=20) as resp:
-        payload = json.loads(resp.read().decode("utf-8"))
+    payload = _query_overpass(_build_query(bbox))
 
     out: list[dict] = []
     for el in payload.get("elements", []):

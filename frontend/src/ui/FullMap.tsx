@@ -34,6 +34,12 @@ const DEFAULT_REGION: Region = { latitude: 51.5072, longitude: -0.1276, latitude
 // London) overwhelms the map and crashes it. We fetch only a 5-mile radius and
 // render the nearest few to the viewport centre; that's plenty on screen at once.
 const MAX_GYMS = 50;
+// Zoomed out beyond this latitude span (~24 miles), we stop showing gyms and hide
+// the "Search this area" button — searching a huge area was crashing the map.
+const SEARCH_MAX_DELTA = 0.35;
+// Hard floor on zoom-out so the map can't be pulled out to a whole-country view
+// (which fetched/rendered far too much and crashed). ~9 ≈ a city-sized view.
+const MIN_ZOOM_LEVEL = 9;
 
 /** Pin diameter (px) grows with a gym's average ELO; default ~30px. A non-finite
  *  ELO would yield NaN dimensions, which crashes the native map — so clamp it. */
@@ -69,22 +75,26 @@ const movedAway = (a: Region, b: Region | null) => {
 };
 
 /**
- * Native markers cache their rendered bitmap; `tracksViewChanges` must be true
- * while the marker's look is still settling (sprite paint, selection resize)
- * and then flipped off so the map doesn't repaint every marker each frame.
+ * A native marker only caches its custom view as a bitmap while
+ * `tracksViewChanges` is true. The old approach flipped it off on a fixed timer,
+ * but if the child hadn't painted yet the marker cached an empty frame and iOS
+ * showed its *default red pin* instead — the "random red pins" bug. Here we keep
+ * tracking until the child's `onLayout` fires (it's definitely painted by then),
+ * then stop tracking for performance. Selection changes the size, so re-track.
  */
-function useSettle(dep: unknown) {
+function useRenderUntilLaid(resetKey: unknown) {
   const [tracks, setTracks] = useState(true);
   useEffect(() => {
     setTracks(true);
-    const t = setTimeout(() => setTracks(false), 600);
+    // Safety net in case onLayout somehow doesn't fire.
+    const t = setTimeout(() => setTracks(false), 2000);
     return () => clearTimeout(t);
-  }, [dep]);
-  return tracks;
+  }, [resetKey]);
+  return { tracks, onLaidOut: () => setTracks(false) };
 }
 
 function GymMarker({ gym, selected, onPress }: { gym: GymMapPoint; selected: boolean; onPress: () => void }) {
-  const tracks = useSettle(selected);
+  const { tracks, onLaidOut } = useRenderUntilLaid(selected);
   const d = gymDiameter(gym.avg_elo);
   return (
     <Marker
@@ -95,6 +105,7 @@ function GymMarker({ gym, selected, onPress }: { gym: GymMapPoint; selected: boo
       zIndex={selected ? 5 : 1}
     >
       <View
+        onLayout={onLaidOut}
         style={{
           width: d, height: d, borderRadius: d / 2,
           alignItems: 'center', justifyContent: 'center',
@@ -109,7 +120,7 @@ function GymMarker({ gym, selected, onPress }: { gym: GymMapPoint; selected: boo
 }
 
 function MemberMarker({ member, presence, selected, onPress }: { member: SquadMapMember; presence?: Presence; selected: boolean; onPress: () => void }) {
-  const tracks = useSettle(selected);
+  const { tracks, onLaidOut } = useRenderUntilLaid(selected);
   const sz = selected ? 46 : 38;
   return (
     <Marker
@@ -119,7 +130,7 @@ function MemberMarker({ member, presence, selected, onPress }: { member: SquadMa
       tracksViewChanges={tracks}
       zIndex={selected ? 20 : 10}
     >
-      <View style={[styles.pin, { borderWidth: selected ? 3 : 2, borderColor: ring(presence), backgroundColor: presence === 'in' ? 'rgba(156,181,143,0.30)' : 'rgba(27,23,20,0.40)' }]}>
+      <View onLayout={onLaidOut} style={[styles.pin, { borderWidth: selected ? 3 : 2, borderColor: ring(presence), backgroundColor: presence === 'in' ? 'rgba(156,181,143,0.30)' : 'rgba(27,23,20,0.40)' }]}>
         <Avatar id={member.avatar} name={member.display_name} size={sz} accent={member.is_me} />
         {member.is_live && <View style={styles.liveDot} />}
       </View>
@@ -185,7 +196,10 @@ export function FullMap({
       (Math.abs(b.latitude - searchIn.latitude) + Math.abs(b.longitude - searchIn.longitude)))
     .slice(0, MAX_GYMS);
 
-  const showSearch = movedAway(region, searchRegion);
+  // When zoomed out a long way, disable the gym-search feature entirely: don't
+  // render gym pins and hide the search button (prevents the large-area crash).
+  const tooZoomedOut = region.latitudeDelta > SEARCH_MAX_DELTA;
+  const showSearch = !tooZoomedOut && movedAway(region, searchRegion);
 
   return (
     <View style={[{ flex: 1 }, style]} onLayout={onLayout}>
@@ -194,13 +208,15 @@ export function FullMap({
         style={StyleSheet.absoluteFill}
         provider={PROVIDER_DEFAULT}
         initialRegion={DEFAULT_REGION}
+        minZoomLevel={MIN_ZOOM_LEVEL}
         // Only update on *complete* (gesture/animation end), never per-frame.
         // Updating region state on every frame re-creates all markers ~60×/s and
         // crashes the native map while panning/searching.
         onRegionChangeComplete={(r) => { setRegion(r); setSearchRegion((prev) => prev ?? r); }}
       >
-        {/* Gym pins — native markers, glued to their coordinate through rotation. */}
-        {visibleGyms.map((g) => (
+        {/* Gym pins — native markers, glued to their coordinate through rotation.
+            Hidden when zoomed too far out (see tooZoomedOut). */}
+        {!tooZoomedOut && visibleGyms.map((g) => (
           <GymMarker
             key={g.id}
             gym={g}
