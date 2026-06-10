@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 
@@ -10,7 +10,10 @@ import { BlobBackground } from '../ui/Blob';
 import { useRefreshControl } from '../ui/useRefresh';
 import { usePolling } from '../ui/usePolling';
 import { useAppState } from '../state/AppState';
+import { readCache, writeCache } from '../../lib/cache';
 import { pageWrap, styles } from './_shared';
+
+const DISMISSED_KEY = 'dismissedActivity';
 
 /* Group view — members, notifications menu, per-day join + nudges */
 
@@ -29,6 +32,11 @@ export function GroupView({ onBrowse, onLeaderboard }: { onBrowse: () => void; o
   } = useAppState();
   const refresh = useRefreshControl();
   const [showFeed, setShowFeed] = useState(false);
+  // Locally-dismissed notification ids, persisted so they stay cleared across
+  // sessions. Join requests are never dismissable (they're actionable), so they
+  // always reappear regardless of this set.
+  const [dismissed, setDismissed] = useState<string[]>([]);
+  useEffect(() => { readCache<string[]>(DISMISSED_KEY).then((d) => { if (d) setDismissed(d); }); }, []);
   // Keep the group fresh: refresh on open, on app foreground, and gently while viewing.
   usePolling(refreshGroup, 9000);
   const setterName = potNext?.setter_user_id === userId ? 'You' : potNext?.setter_display_name;
@@ -36,7 +44,18 @@ export function GroupView({ onBrowse, onLeaderboard }: { onBrowse: () => void; o
   const orderedMembers = userId
     ? [...groupMembers].sort((a, b) => Number(b.userId === userId) - Number(a.userId === userId))
     : groupMembers;
-  const actionableCount = activity.filter((a) => a.kind === 'join_request' || a.kind === 'nudge').length;
+
+  // Join requests always show; everything else hides once dismissed.
+  const visibleActivity = activity.filter((a) => a.kind === 'join_request' || !dismissed.includes(a.id));
+  const actionableCount = visibleActivity.filter((a) => a.kind === 'join_request' || a.kind === 'nudge').length;
+  const clearableCount = visibleActivity.filter((a) => a.kind !== 'join_request').length;
+
+  const clearNotifications = () => {
+    const ids = activity.filter((a) => a.kind !== 'join_request').map((a) => a.id);
+    const next = Array.from(new Set([...dismissed, ...ids]));
+    setDismissed(next);
+    writeCache(DISMISSED_KEY, next);
+  };
 
   const toggleFeed = () => {
     setShowFeed((s) => {
@@ -80,14 +99,22 @@ export function GroupView({ onBrowse, onLeaderboard }: { onBrowse: () => void; o
         {showFeed && (
           <FadeInItem delay={40} style={{ marginTop: 16 }}>
             <Card padding={SPACE.lg}>
-              <Eyebrow style={{ marginBottom: 12 }}>Notifications</Eyebrow>
-              {activity.length === 0 ? (
+              <View style={[styles.rowBetween, { marginBottom: 12 }]}>
+                <Eyebrow>Notifications</Eyebrow>
+                {clearableCount > 0 && (
+                  <Pressable onPress={clearNotifications} hitSlop={8} style={styles.rowGap}>
+                    <MaterialIcons name="clear-all" size={15} color={C.mutedFg} />
+                    <Text style={{ fontFamily: FONT.semibold, fontSize: 13, color: C.mutedFg }}>Clear</Text>
+                  </Pressable>
+                )}
+              </View>
+              {visibleActivity.length === 0 ? (
                 <Sub style={{ textAlign: 'center' }}>
                   No updates yet. Plan sessions and nudge teammates to get things going.
                 </Sub>
               ) : (
                 <View style={{ gap: 14 }}>
-                  {activity.map((a) => {
+                  {visibleActivity.map((a) => {
                     const meta = KIND_META[a.kind] ?? KIND_META.nudge;
                     return (
                       <View key={a.id} style={styles.rowGap}>

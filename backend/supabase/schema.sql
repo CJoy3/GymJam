@@ -24,7 +24,7 @@ create table if not exists users (
     display_name text not null default 'Anonymous',
     -- Chosen pixel-art avatar id (see frontend avatar catalog). NULL ⇒ initials.
     avatar text,
-    elo integer not null default 1000 check (elo >= 0),
+    elo integer not null default 0 check (elo >= 0),
     streak integer not null default 0 check (streak >= 0),
     gym_id uuid references gyms(id) on delete set null,
     -- Opt-in live location sharing (Snap-Maps style); broadcast to the user's
@@ -39,6 +39,8 @@ create table if not exists users (
 
 -- Additive migrations for existing deployments.
 alter table users add column if not exists avatar text;
+-- New users start at 0 ELO (Beginner) rather than the old 1000 default.
+alter table users alter column elo set default 0;
 alter table users add column if not exists share_location boolean not null default false;
 alter table users add column if not exists latitude double precision;
 alter table users add column if not exists longitude double precision;
