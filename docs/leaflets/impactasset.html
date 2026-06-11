@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GymJam — Poster</title>
+<title>GymJam — Cover Story</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=Inter:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500&display=swap" rel="stylesheet">
@@ -11,7 +11,6 @@
   :root{
     --ink:#201A16;
     --ink-2:#2B2420;
-    --ink-3:#332C26;
     --cream:#F1E7D6;
     --cream-dim:#BCAD98;
     --peach:#F0A07C;
@@ -23,7 +22,6 @@
   }
 
   *{box-sizing:border-box;}
-
   html,body{margin:0;padding:0;}
 
   body{
@@ -38,331 +36,153 @@
 
   .poster{
     width:100%;
-    max-width:1080px;
+    max-width:1040px;
     background:
-      radial-gradient(120% 70% at 78% 0%, rgba(240,160,124,0.10), transparent 55%),
-      radial-gradient(120% 70% at 10% 100%, rgba(166,196,154,0.08), transparent 55%),
+      radial-gradient(120% 70% at 80% 0%, rgba(240,160,124,0.10), transparent 55%),
+      radial-gradient(120% 70% at 6% 100%, rgba(166,196,154,0.08), transparent 55%),
       var(--ink);
     border:1px solid var(--line);
     border-radius:6px;
     overflow:hidden;
     box-shadow:0 24px 80px rgba(0,0,0,0.55);
   }
+  .inner{padding:40px 46px 36px;}
 
-  .inner{padding:44px 48px 40px;}
-
-  /* ---------- HEADER ---------- */
-  .masthead{
-    position:relative;
-    z-index:2;
-    text-align:center;
-    margin-bottom:-46px;
-    pointer-events:none;
+  /* ---------- MASTHEAD ---------- */
+  .masthead{text-align:center;margin:0 0 14px;}
+  .eyebrow-top{
+    font-family:var(--body);text-transform:uppercase;letter-spacing:0.42em;
+    font-size:11px;font-weight:600;color:var(--sage);margin:0 0 6px 6px;
   }
   .logo{
-    font-family:var(--display);
-    font-weight:800;
-    font-size:clamp(64px,13vw,148px);
-    line-height:0.86;
-    letter-spacing:-0.04em;
-    color:var(--cream);
-    margin:0;
+    font-family:var(--display);font-weight:800;
+    font-size:clamp(62px,12.5vw,138px);line-height:0.84;letter-spacing:-0.04em;
+    color:var(--cream);margin:0;text-shadow:0 6px 30px rgba(0,0,0,0.55);
   }
   .logo .jam{color:var(--peach);}
-  .eyebrow-top{
-    font-family:var(--body);
-    text-transform:uppercase;
-    letter-spacing:0.42em;
-    font-size:11px;
-    font-weight:600;
-    color:var(--sage);
-    margin:0 0 10px 6px;
-  }
 
-  .hero{
-    position:relative;
-    height:240px;
-    border-radius:8px;
-    border:2px dashed var(--line-strong);
-    background:
-      repeating-linear-gradient(135deg, rgba(255,255,255,0.018) 0 18px, transparent 18px 36px),
-      linear-gradient(160deg,#2E2620,#241D18);
-    display:flex;
-    align-items:flex-end;
-    justify-content:center;
-    padding-bottom:18px;
+  /* serif-style lead caption */
+  .lead-cap{
+    text-align:center;margin:0 auto;max-width:880px;
+    font-family:var(--display);font-weight:600;
+    font-size:clamp(19px,2.3vw,24px);line-height:1.36;letter-spacing:-0.01em;color:var(--cream);
   }
-  .hero .ph{
-    font-family:var(--body);
-    text-transform:uppercase;
-    letter-spacing:0.22em;
-    font-size:11px;
-    font-weight:600;
-    color:var(--cream-dim);
-    opacity:0.85;
-  }
+  .lead-cap b{font-weight:800;font-style:italic;color:var(--peach);}
 
-  .tagline{
-    text-align:center;
-    margin:26px auto 6px;
-    max-width:760px;
-    font-family:var(--display);
-    font-weight:600;
-    font-size:clamp(20px,2.6vw,28px);
-    line-height:1.28;
-    letter-spacing:-0.01em;
-    color:var(--cream);
-  }
-  .tagline .lead{color:var(--peach);font-weight:700;}
-  .circle-wrap{position:relative;display:inline-block;padding:2px 4px;white-space:nowrap;}
-  .circle-wrap svg{position:absolute;inset:-8px -6px -10px -6px;width:calc(100% + 12px);height:calc(100% + 18px);overflow:visible;pointer-events:none;}
-  .circle-wrap .loop{fill:none;stroke:var(--peach);stroke-width:3;stroke-linecap:round;}
+  .rule{height:1px;background:var(--line);border:0;margin:26px 0 24px;}
 
-  .rule{height:1px;background:var(--line);border:0;margin:30px 0 28px;}
-
-  /* ---------- COLUMNS ---------- */
-  .cols{
-    display:grid;
-    grid-template-columns:1fr 1fr 1fr;
-    gap:0;
-  }
-  .col{padding:0 26px;}
+  /* ---------- EDITORIAL TWO-COLUMN ---------- */
+  .cols{display:grid;grid-template-columns:0.82fr 1.18fr;gap:0;}
+  .col{padding:0 30px;}
   .col:first-child{padding-left:0;}
   .col:last-child{padding-right:0;}
   .col + .col{border-left:1px solid var(--line);}
 
-  .col-head{
-    font-family:var(--body);
-    text-transform:uppercase;
-    letter-spacing:0.26em;
-    font-size:11px;
-    font-weight:700;
-    color:var(--peach);
-    margin:0 0 16px;
-    padding-bottom:10px;
-    border-bottom:2px solid var(--peach);
+  /* long pull testimonial (left) */
+  .testimony{
+    font-family:var(--display);font-weight:500;
+    font-size:17.5px;line-height:1.56;letter-spacing:-0.01em;
+    color:var(--cream);text-align:justify;hyphens:auto;margin:0;
   }
-  .col:nth-child(3) .col-head{color:var(--sage);border-bottom-color:var(--sage);}
-
-  .block{margin-bottom:22px;}
-  .block:last-child{margin-bottom:0;}
-
-  .sub{
-    font-family:var(--display);
-    font-weight:700;
-    font-size:18px;
-    line-height:1.2;
-    letter-spacing:-0.01em;
-    color:var(--cream);
-    margin:0 0 4px;
-  }
-  .sub .small{display:block;font-size:11px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:var(--cream-dim);margin-top:5px;}
-
-  p.body{
-    font-size:13px;
-    line-height:1.58;
-    color:#E4D8C5;
-    text-align:justify;
-    hyphens:auto;
-    margin:8px 0 0;
+  .testimony b{font-weight:800;}
+  .by{
+    display:block;margin-top:12px;font-family:var(--body);
+    font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.18em;color:var(--peach);
   }
 
-  /* stat list */
-  .stat{display:flex;align-items:baseline;gap:12px;padding:9px 0;border-bottom:1px solid var(--line);}
-  .stat:last-of-type{border-bottom:0;}
-  .stat .num{
-    font-family:var(--display);
-    font-weight:800;
-    font-size:46px;
-    line-height:0.9;
-    letter-spacing:-0.03em;
-    color:var(--cream);
-    min-width:96px;
-  }
-  .stat .num.peach{color:var(--peach);}
-  .stat .num.sage{color:var(--sage);}
-  .stat .num .u{font-size:24px;}
-  .stat .lbl{font-size:12.5px;line-height:1.42;color:#E4D8C5;}
-
-  .costwrap{margin-top:6px;}
-  .bignum{
-    font-family:var(--display);
-    font-weight:800;
-    font-size:62px;
-    line-height:0.86;
-    letter-spacing:-0.03em;
-    color:var(--peach);
-    margin:2px 0 6px;
-  }
-  .bignum .u{font-size:30px;}
-
-  /* impact bullets */
-  .impact{margin-top:6px;}
-  .impact .point{margin:0 0 16px;}
-  .impact .point:last-child{margin-bottom:0;}
-  .impact .t{
-    font-family:var(--display);
-    font-weight:700;
-    font-size:14.5px;
-    color:var(--sage);
-    margin:0 0 3px;
-    display:flex;
-    gap:8px;
-    align-items:baseline;
-  }
-  .impact .t::before{content:"";flex:0 0 auto;width:7px;height:7px;border-radius:2px;background:var(--sage);transform:translateY(-1px);}
-
-  /* sage stat blob */
+  /* sage stat speech-blob */
   .blob{
-    position:relative;
-    margin:6px 0 20px;
-    padding:20px 18px 18px;
-    background:rgba(166,196,154,0.12);
-    border:1px solid rgba(166,196,154,0.35);
-    border-radius:18px 18px 18px 4px;
+    position:relative;margin:26px 0 4px;padding:24px 22px 22px;
+    background:rgba(166,196,154,0.13);border:1px solid rgba(166,196,154,0.40);
+    border-radius:22px 22px 22px 5px;
   }
   .blob .b-num{
-    font-family:var(--display);
-    font-weight:800;
-    font-size:50px;
-    line-height:0.9;
-    letter-spacing:-0.03em;
-    color:var(--sage);
+    font-family:var(--display);font-weight:800;font-size:62px;line-height:0.86;
+    letter-spacing:-0.04em;color:var(--sage);
   }
-  .blob .b-num .u{font-size:26px;}
-  .blob .b-txt{font-size:12.5px;line-height:1.45;color:#E4D8C5;margin-top:4px;}
+  .blob .b-num .u{font-size:30px;}
+  .blob .b-txt{
+    font-family:var(--display);font-weight:600;font-size:14px;line-height:1.4;
+    color:#E8DCC9;margin-top:8px;transform:rotate(-1.5deg);transform-origin:left center;
+  }
 
-  /* ---------- PHONE MOCKUPS ---------- */
-  .phones{
-    position:relative;
-    height:300px;
-    margin:4px 0 18px;
+  /* boxed testimonial (right, top) */
+  .boxquote{
+    background:rgba(240,160,124,0.12);border:1px solid rgba(240,160,124,0.34);
+    border-radius:16px 16px 16px 5px;padding:18px 20px 16px;margin:0 0 22px;
   }
+  .boxquote .t{
+    font-family:var(--display);font-weight:600;font-style:italic;
+    font-size:16.5px;line-height:1.46;letter-spacing:-0.01em;color:var(--cream);margin:0;
+  }
+  .boxquote .t u{text-decoration-color:var(--peach);text-underline-offset:3px;}
+  .boxquote .w{
+    display:block;margin-top:10px;font-family:var(--body);font-size:10.5px;
+    font-weight:600;text-transform:uppercase;letter-spacing:0.16em;color:var(--peach);
+  }
+
+  /* pull-quote + phones row */
+  .pullrow{display:flex;gap:18px;align-items:center;margin-bottom:8px;}
+  .pull{
+    flex:1;font-family:var(--display);font-weight:700;
+    font-size:clamp(22px,2.7vw,30px);line-height:1.16;letter-spacing:-0.02em;color:var(--cream);margin:0;
+  }
+  .circle-wrap{position:relative;display:inline-block;padding:1px 3px;white-space:nowrap;}
+  .circle-wrap svg{position:absolute;inset:-7px -6px -9px -6px;width:calc(100% + 12px);height:calc(100% + 16px);overflow:visible;pointer-events:none;}
+  .circle-wrap .loop{fill:none;stroke:var(--peach);stroke-width:3;stroke-linecap:round;}
+
+  /* phone mockups — each frame hugs its screenshot's real aspect ratio, so the
+     image is shown in full (no cropping or letterboxing). */
+  .phones{position:relative;width:252px;height:300px;flex:0 0 252px;}
   .phone{
-    position:absolute;
-    width:118px;
-    aspect-ratio:9/19.2;
-    border:2px dashed var(--line-strong);
-    border-radius:22px;
-    background:linear-gradient(165deg,#2F2721,#241D18);
-    display:flex;
-    flex-direction:column;
-    align-items:center;
-    justify-content:center;
-    text-align:center;
-    padding:10px;
+    position:absolute;width:122px;
+    border:2px solid var(--line-strong);border-radius:16px;overflow:hidden;
+    background:#15110E;box-shadow:0 12px 34px rgba(0,0,0,0.5);line-height:0;
   }
-  .phone::before{
-    content:"";
-    position:absolute;
-    top:9px;left:50%;
-    transform:translateX(-50%);
-    width:34px;height:5px;border-radius:3px;
-    background:var(--line-strong);
-  }
-  .phone .tag{
-    font-family:var(--display);
-    font-weight:700;
-    font-size:12px;
-    color:var(--cream);
-    line-height:1.15;
-  }
-  .phone .add{
-    font-family:var(--body);
-    text-transform:uppercase;
-    letter-spacing:0.14em;
-    font-size:8px;
-    font-weight:600;
-    color:var(--cream-dim);
-    margin-top:8px;
-  }
-  .phone .icon{font-size:20px;margin-bottom:6px;opacity:0.85;}
-  .p1{left:0;top:24px;transform:rotate(-7deg);z-index:2;}
-  .p2{left:88px;top:0;transform:rotate(3deg);z-index:3;border-color:rgba(240,160,124,0.5);}
-  .p3{right:0;top:30px;transform:rotate(8deg);z-index:1;}
-
-  /* A phone showing a real screenshot: solid frame, image fills it, caption strip. */
-  .phone.has-shot{border-style:solid;border-color:var(--line-strong);background:#15110E;overflow:hidden;padding:0;box-shadow:0 10px 30px rgba(0,0,0,0.45);}
-  .p2.has-shot{border-color:rgba(240,160,124,0.55);}
-  .phone.has-shot::before{display:none;}
-  .phone .shot{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:top center;z-index:0;}
+  .phone .shot{display:block;width:100%;height:auto;}
   .phone .cap{
     position:absolute;left:0;right:0;bottom:0;z-index:2;
-    font-family:var(--body);text-transform:uppercase;letter-spacing:0.12em;
-    font-size:7.5px;font-weight:700;color:var(--cream);
-    padding:14px 6px 6px;text-align:center;
-    background:linear-gradient(to top, rgba(10,8,6,0.9), rgba(10,8,6,0.55) 55%, transparent);
+    font-family:var(--body);text-transform:uppercase;letter-spacing:0.1em;
+    font-size:7.5px;font-weight:700;color:var(--cream);padding:14px 5px 5px;text-align:center;line-height:1.1;
+    background:linear-gradient(to top, rgba(10,8,6,0.94), transparent);
   }
+  .p1{left:0;top:36px;transform:rotate(-7deg);z-index:2;}
+  .p2{left:66px;top:0;transform:rotate(3deg);z-index:3;border-color:rgba(240,160,124,0.55);}
+  .p3{right:0;top:44px;transform:rotate(8deg);z-index:1;}
 
-  /* ---------- QUOTES ---------- */
-  .quotes{
-    display:grid;
-    grid-template-columns:1fr 1fr;
-    gap:22px;
-    margin-top:34px;
+  /* section heading + body */
+  .sec-head{
+    font-family:var(--display);font-weight:800;font-size:23px;letter-spacing:-0.01em;
+    color:var(--cream);margin:24px 0 10px;
   }
-  .quote{
-    position:relative;
-    padding:24px 26px 22px;
-    border-radius:20px;
+  .sec-head .br{color:var(--peach);}
+  p.body{
+    font-size:15px;line-height:1.62;color:#E4D8C5;text-align:justify;hyphens:auto;margin:0 0 13px;
   }
-  .quote.peach{background:rgba(240,160,124,0.13);border:1px solid rgba(240,160,124,0.38);border-radius:20px 20px 20px 5px;}
-  .quote.sage{background:rgba(166,196,154,0.12);border:1px solid rgba(166,196,154,0.38);border-radius:20px 20px 5px 20px;}
-  .quote .mark{
-    font-family:var(--display);
-    font-weight:800;
-    font-size:46px;
-    line-height:0;
-    position:relative;
-    top:18px;
-    color:var(--peach);
-  }
-  .quote.sage .mark{color:var(--sage);}
-  .quote .text{
-    font-family:var(--display);
-    font-weight:600;
-    font-size:16px;
-    line-height:1.4;
-    letter-spacing:-0.01em;
-    color:var(--cream);
-    margin:0 0 14px;
-  }
-  .quote .who{
-    font-family:var(--body);
-    font-size:11px;
-    font-weight:600;
-    text-transform:uppercase;
-    letter-spacing:0.18em;
-    color:var(--peach);
-  }
-  .quote.sage .who{color:var(--sage);}
+  p.body:last-child{margin-bottom:0;}
+  p.body b{color:var(--cream);}
+  .data{color:var(--peach);font-weight:700;}
+  .data.sage{color:var(--sage);}
 
   /* ---------- FOOTER ---------- */
   .foot{
-    margin-top:32px;
-    padding-top:14px;
-    border-top:1px solid var(--line);
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    gap:16px;
-    flex-wrap:wrap;
+    margin-top:30px;padding-top:14px;border-top:1px solid var(--line);
+    display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;
   }
   .foot .mark{font-family:var(--display);font-weight:800;font-size:15px;letter-spacing:-0.02em;color:var(--cream);}
   .foot .mark .jam{color:var(--peach);}
-  .foot .note{font-size:10px;color:var(--cream-dim);line-height:1.4;max-width:62%;text-align:right;}
+  .foot .refs{font-size:9.5px;color:var(--cream-dim);line-height:1.5;max-width:60%;text-align:right;}
 
-  /* ---------- RESPONSIVE ---------- */
   @media (max-width:820px){
-    .inner{padding:30px 24px 28px;}
-    .cols{grid-template-columns:1fr;gap:0;}
+    .inner{padding:28px 22px 26px;}
+    .cols{grid-template-columns:1fr;}
     .col{padding:24px 0;border-left:0 !important;border-top:1px solid var(--line);}
     .col:first-child{padding-top:0;border-top:0;}
-    .masthead{margin-bottom:-26px;}
-    .quotes{grid-template-columns:1fr;}
-    .foot .note{max-width:100%;text-align:left;}
+    .masthead{margin-bottom:-24px;}
+    .pullrow{flex-direction:column;align-items:flex-start;}
+    .phones{margin-top:8px;}
+    .foot .refs{max-width:100%;text-align:left;}
   }
-
   @media print{
     body{background:#fff;padding:0;}
     .poster{box-shadow:none;border:0;max-width:none;border-radius:0;}
@@ -373,143 +193,104 @@
   <div class="poster">
     <div class="inner">
 
-      <!-- HEADER -->
+      <!-- MASTHEAD over HERO -->
       <header class="masthead">
         <p class="eyebrow-top">The Accountability App</p>
         <h1 class="logo">Gym<span class="jam">Jam</span></h1>
       </header>
 
-      <div class="hero">
-        <span class="ph">▢ Hero image — friends at the gym / lifestyle shot</span>
-      </div>
-
-      <p class="tagline">
-        <span class="lead">Bridging the gap</span> between <em>wanting</em> to be fit, and
-        <span class="circle-wrap">actually going.<svg viewBox="0 0 200 70" preserveAspectRatio="none"><path class="loop" d="M14,40 C10,20 70,8 110,11 C168,15 192,28 188,44 C184,60 120,64 74,60 C30,56 18,52 22,38"/></svg></span>
+      <p class="lead-cap">
+        <b>Join the Jam:</b> turning the lonely grind of the gym into a team sport —
+        where your group is the reason you actually show up.
       </p>
 
       <hr class="rule">
 
-      <!-- COLUMNS -->
       <div class="cols">
 
-        <!-- LEFT: PROBLEM -->
+        <!-- LEFT: human story + headline stat -->
         <section class="col">
-          <h2 class="col-head">The Macro Problem</h2>
-
-          <div class="block">
-            <h3 class="sub">The Intention–Action Gap</h3>
-            <div class="stat">
-              <span class="num peach">76<span class="u">%</span></span>
-              <span class="lbl">of people aspire to be fit.</span>
-            </div>
-            <div class="stat">
-              <span class="num">48<span class="u">%</span></span>
-              <span class="lbl">actually exercise regularly.</span>
-            </div>
-            <div class="stat">
-              <span class="num sage">11.5<span class="u">M</span></span>
-              <span class="lbl">record UK gym memberships, driven by Gen&nbsp;Z — yet nearly two-thirds of us still feel we don't look after our health enough.</span>
-            </div>
-          </div>
-
-          <div class="block">
-            <h3 class="sub">The Hidden Barriers</h3>
-            <p class="body">Why aren't we going? For many, it's not a lack of desire. Rising rates of <em>'gymtimidation'</em> — particularly among women and beginners — keep people away. The gym feels like a solo, intimidating chore rather than a welcoming space.</p>
-          </div>
-
-          <div class="block">
-            <h3 class="sub">The Societal Cost</h3>
-            <div class="costwrap">
-              <div class="bignum">£7.4<span class="u">bn</span></div>
-              <p class="body">Physical inactivity is associated with 1 in 6 deaths in the UK and costs the nation £7.4&nbsp;billion every year — including £0.9&nbsp;billion to the NHS alone.</p>
-            </div>
-          </div>
-        </section>
-
-        <!-- CENTER: SOLUTION -->
-        <section class="col">
-          <h2 class="col-head">The Solution</h2>
-
-          <div class="phones">
-            <div class="phone p1 has-shot">
-              <img class="shot" src="img/plan-next-week.png" alt="Plan next week — pledge days and stake">
-              <span class="cap">Plan Next Week</span>
-            </div>
-            <div class="phone p2 has-shot">
-              <img class="shot" src="img/group-pot.png" alt="The weekly group pot and member breakdown">
-              <span class="cap">The Group Pot</span>
-            </div>
-            <div class="phone p3 has-shot">
-              <img class="shot" src="img/gymspace.png" alt="Pixel-art GymSpace progression">
-              <span class="cap">Pixel GymSpace</span>
-            </div>
-          </div>
-
-          <div class="block">
-            <h3 class="sub">Redefining Fitness as a Team Sport</h3>
-            <p class="body">GymJam doesn't just track workouts — it engineers accountability. By combining transparent social planning (<strong>the Squad Map</strong>), loss-aversion micro-stakes (<strong>the Pot</strong>), and tangible digital rewards (<strong>GymSpace</strong>), GymJam turns the isolated struggle of going to the gym into a collaborative, community-driven habit.</p>
-          </div>
-        </section>
-
-        <!-- RIGHT: IMPACT -->
-        <section class="col">
-          <h2 class="col-head">The Impact</h2>
+          <p class="testimony">
+            “GymJam completely changed my relationship with the gym. I always
+            <em>wanted</em> to get fit, but walking into the weights room alone was
+            terrifying — I'd talk myself out of it before I even left the house. Now I
+            open the Squad Map, see someone from my group is already there, and it
+            doesn't feel like I'm doing it alone anymore. The weekly pot means I follow
+            through on the days I pledge, because I don't want to let my group — or my
+            £5 — down. For the first time, being consistent feels easy.
+            <b>GymJam turned my intentions into a habit.</b>”
+            <span class="by">— Maya, 21 · university student, first-year lifter</span>
+          </p>
 
           <div class="blob">
-            <div class="b-num">85<span class="u">%</span></div>
-            <div class="b-txt">of early users feel more confident entering the gym when the Squad Map shows a friend is already there.</div>
-          </div>
-
-          <div class="block">
-            <h3 class="sub">Empowering the User<span class="small">Direct impact</span></h3>
-            <div class="impact">
-              <div class="point">
-                <div class="t">Crushing gymtimidation</div>
-                <p class="body">Seeing a friend already checked in via the Squad Map gives nervous beginners the push to walk through the door.</p>
-              </div>
-              <div class="point">
-                <div class="t">Sustained accountability</div>
-                <p class="body">Real financial stakes and group visibility prevent the notorious "Week&nbsp;4 Drop-off," keeping users engaged long after initial motivation fades.</p>
-              </div>
-            </div>
-          </div>
-
-          <div class="block">
-            <h3 class="sub">The Ripple Effect<span class="small">Wider impact</span></h3>
-            <div class="impact">
-              <div class="point">
-                <div class="t">Easing public-health strain</div>
-                <p class="body">By turning fitness aspirations into cemented, long-term habits in young adults, GymJam acts as a preventative health tool — directly combating the £7.4&nbsp;billion cost of inactivity.</p>
-              </div>
-              <div class="point">
-                <div class="t">A new social hub</div>
-                <p class="body">As Gen&nbsp;Z ditches "the pub for pilates," GymJam provides the infrastructure for sober socialising — fighting youth loneliness by building real-world ties through shared effort.</p>
-              </div>
+            <div class="b-num">95<span class="u">%</span></div>
+            <div class="b-txt">
+              more likely to reach a goal when you're accountable to other people with a
+              regular check-in — exactly the loop a GymJam group runs every week.
             </div>
           </div>
         </section>
 
-      </div>
+        <!-- RIGHT: proof, pull-quote, product, the argument -->
+        <section class="col">
+          <blockquote class="boxquote">
+            <p class="t">
+              The £5 in the group pot is exactly the kick I need on a rainy Tuesday. I
+              don't want to lose my money — but more than that,
+              <u>I don't want to be the one who breaks the streak for everyone else.</u>
+            </p>
+            <span class="w">— James, 23 · recent graduate</span>
+          </blockquote>
 
-      <!-- QUOTES -->
-      <div class="quotes">
-        <blockquote class="quote peach">
-          <span class="mark">“</span>
-          <p class="text">I used to be terrified of the weight room. Now, checking the Squad Map to see if anyone from my group is around gives me the push I need. It doesn't feel like I'm doing it alone anymore.</p>
-          <span class="who">Maya, 21 · University Student</span>
-        </blockquote>
-        <blockquote class="quote sage">
-          <span class="mark">“</span>
-          <p class="text">The £5 in the group pot is exactly the kick I need on a rainy Tuesday. I don't want to lose my money — but more importantly, I don't want to let my group down. GymJam made consistency non-negotiable.</p>
-          <span class="who">James, 23 · Recent Graduate</span>
-        </blockquote>
+          <div class="pullrow">
+            <p class="pull">
+              Make fitness work
+              <span class="circle-wrap">with<svg viewBox="0 0 120 64" preserveAspectRatio="none"><path class="loop" d="M12,34 C9,16 50,8 78,11 C108,14 116,26 110,40 C104,54 60,56 36,50 C16,45 14,40 18,30"/></svg></span>
+              your friends — not against your willpower.
+            </p>
+            <div class="phones">
+              <div class="phone p1"><img class="shot" src="img/plan-next-week.png" alt="Plan next week"><span class="cap">Plan Week</span></div>
+              <div class="phone p2"><img class="shot" src="img/group-pot.png" alt="The group pot"><span class="cap">The Pot</span></div>
+              <div class="phone p3"><img class="shot" src="img/gymspace.png" alt="Pixel GymSpace"><span class="cap">GymSpace</span></div>
+            </div>
+          </div>
+
+          <h2 class="sec-head">The Intention–Action <span class="br">Gap</span></h2>
+          <p class="body">
+            <span class="data">76%</span> of people say they want to be fit, yet only
+            <span class="data">48%</span> exercise regularly. The barrier usually isn't
+            desire — it's <em>'gymtimidation'</em>, busy schedules, and the
+            <b>"Week-4 drop-off,"</b> where new members quietly stop going once the
+            initial motivation fades. Left unchecked, this has a real cost: physical
+            inactivity is linked to <span class="data">1 in 6</span> UK deaths and
+            <span class="data sage">£7.4&nbsp;billion</span> a year — including
+            <span class="data sage">£0.9&nbsp;billion</span> to the NHS alone.
+          </p>
+          <p class="body">
+            <b>GymJam closes that gap by making accountability social.</b> The
+            <b>Squad Map</b> crushes gymtimidation — seeing a friend already checked in
+            gives beginners (especially women) the push to walk through the door. The
+            <b>Pot</b> turns intentions into commitment with small loss-aversion stakes,
+            and <b>GymSpace</b> rewards every session you show up for. Together they make
+            consistency the easy, default choice.
+          </p>
+          <p class="body">
+            <b>The ripple effect.</b> As Gen&nbsp;Z swaps the pub for pilates, GymJam
+            becomes infrastructure for sober socialising — building real-world ties that
+            ease youth loneliness, while turning fitness aspirations into lasting habits
+            that take preventative-health strain off an overstretched NHS.
+          </p>
+        </section>
+
       </div>
 
       <!-- FOOTER -->
       <div class="foot">
         <span class="mark">Gym<span class="jam">Jam</span> — fitness, but make it a team sport.</span>
-        <span class="note">Stats: UK gym membership &amp; physical-inactivity figures (Sport England / DHSC). Replace placeholder frames with live app screenshots before printing.</span>
+        <span class="refs">
+          [1] Sport England, <em>Active Lives</em> &amp; DHSC physical-inactivity cost estimates.
+          [2] Association for Talent Development — goal achievement &amp; accountability.
+        </span>
       </div>
 
     </div>
