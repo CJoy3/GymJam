@@ -31,7 +31,8 @@ export function LoginScreen() {
       const { error } = await sb.auth.signInWithPassword({ email: email.trim(), password });
       if (error) throw error;
     } catch (e: unknown) {
-      showToast(e instanceof Error ? e.message : 'Could not sign in', 'error');
+      // Failures stay silent (no error popup) — log only for debugging.
+      if (__DEV__) console.warn('Sign-in failed', e);
     } finally {
       setLoading(false);
     }
@@ -56,7 +57,8 @@ export function LoginScreen() {
         showToast('Check your email to confirm your account', 'success');
       }
     } catch (e: unknown) {
-      showToast(e instanceof Error ? e.message : 'Could not create account', 'error');
+      // Failures stay silent (no error popup) — log only for debugging.
+      if (__DEV__) console.warn('Sign-up failed', e);
     } finally {
       setLoading(false);
     }

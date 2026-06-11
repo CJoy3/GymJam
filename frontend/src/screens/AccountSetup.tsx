@@ -134,7 +134,8 @@ export function AccountSetup({ onDone }: { onDone: () => void }) {
       ]);
       onDone();
     } catch (e: unknown) {
-      showToast(userFacingMessage(e), 'error');
+      // Failures stay silent (no error popup) — log only for debugging.
+      if (__DEV__) console.warn('Account setup failed', userFacingMessage(e), e);
     } finally {
       setSaving(false);
     }

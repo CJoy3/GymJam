@@ -10,6 +10,15 @@ type Toast = { id: number; message: string; variant: ToastVariant };
 let push: ((t: Omit<Toast, 'id'>) => void) | null = null;
 
 export function showToast(message: string, variant: ToastVariant = 'info') {
+  // Product decision: never pop error toasts to the user. Failed actions stay
+  // silent (logged for debugging only); only successes and input guidance show.
+  // This is the single guarantee that no raw/internal error — "Internal Server
+  // Error", network failures, auth faults — can ever reach the UI, regardless
+  // of which call site produced it. Keep it here so the rule can't drift.
+  if (variant === 'error') {
+    if (__DEV__) console.warn('[suppressed error toast]', message);
+    return;
+  }
   push?.({ message, variant });
 }
 

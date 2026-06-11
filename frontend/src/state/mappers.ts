@@ -3,7 +3,6 @@ import * as groupsApi from '../../lib/api/groups';
 import * as plansApi from '../../lib/api/plans';
 import * as potApi from '../../lib/api/pot';
 import { ApiError } from '../../lib/api/client';
-import { showToast } from '../ui/toast';
 import { DAYS, DayState, DayStatus, Group } from './types';
 
 export function tierForElo(elo: number): string {
@@ -104,7 +103,9 @@ export function summaryToGroup(s: groupsApi.GroupSummary): Group {
 }
 
 export function reportError(action: string, e: unknown): void {
-  showToast(`${action}: ${userFacingMessage(e)}`, 'error');
+  // Errors are never surfaced to the user (see showToast). Log for debugging so
+  // failures are still traceable in dev/console without a popup.
+  if (__DEV__) console.warn(`${action}: ${userFacingMessage(e)}`, e);
 }
 
 /**
