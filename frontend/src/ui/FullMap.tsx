@@ -30,10 +30,21 @@ const regionToBounds = (r: Region): GymMapBounds => ({
 });
 
 const DEFAULT_REGION: Region = { latitude: 51.5072, longitude: -0.1276, latitudeDelta: 0.6, longitudeDelta: 0.6 };
-// Hard cap on rendered native markers — too many (we saw ~150 in dense central
-// London) overwhelms the map and crashes it. We fetch only a 5-mile radius and
-// render the nearest few to the viewport centre; that's plenty on screen at once.
-const MAX_GYMS = 50;
+// How tightly we zoom onto you when the map opens (~1.3 km span — your street +
+// immediate surroundings, so nearby gym pins are still in frame).
+const FOCUS_DELTA = 0.0024;
+// Where the open-animation STARTS: centred on you but zoomed out (~city level),
+// so the map then visibly glides in to your street (a Find-My style fly-in)
+// rather than sliding diagonally from the default region.
+const FLY_IN_FROM_DELTA = 0.25;
+// How long the zoom-in glide takes.
+const FLY_IN_MS = 1100;
+// Hard cap on rendered native markers. Each is a custom-view marker that
+// re-rasterises on mount/remount (open, pan, "Search this area"), and Apple Maps
+// crashes once too many do so at once — we saw it at ~150, and 50 still drifted
+// into crashes over a long pan+tap+search session. 24 nearest-to-centre pins is
+// plenty on screen and keeps the rasterisation spike well inside safe limits.
+const MAX_GYMS = 24;
 // Zoomed out beyond this latitude span (~24 miles), we stop showing gyms and hide
 // the "Search this area" button — rendering many pins over a huge area crashed
 // the map. We *don't* clamp the native zoom (minZoomLevel freezes Apple Maps —
@@ -76,35 +87,45 @@ const movedAway = (a: Region, b: Region | null) => {
 
 /**
  * A native marker only caches its custom view as a bitmap while
- * `tracksViewChanges` is true. The old approach flipped it off on a fixed timer,
- * but if the child hadn't painted yet the marker cached an empty frame and iOS
- * showed its *default red pin* instead — the "random red pins" bug. Here we keep
- * tracking until the child's `onLayout` fires (it's definitely painted by then),
- * then stop tracking for performance. Selection changes the size, so re-track.
+ * `tracksViewChanges` is true. We track until the child's `onLayout` fires (it's
+ * definitely painted by then), then stop FOREVER — a marker's appearance never
+ * changes after mount, so it never needs to re-rasterise.
+ *
+ * Why "forever": the previous version re-tracked whenever `selected` changed, to
+ * resize/recolour the pin. But `tracks` is React state, so on the tap-render it
+ * was still `false` while the child had already changed → react-native-maps
+ * BLANKED the cached bitmap ("the gym disappears when I tap it"), and the
+ * rasterisation churn that forced on every tap accumulated until Apple Maps
+ * CRASHED ("tapping gyms eventually crashes"). Keeping markers visually static
+ * kills both: selection is shown by the bottom info card instead.
  */
-function useRenderUntilLaid(resetKey: unknown) {
+function useRenderUntilLaid() {
   const [tracks, setTracks] = useState(true);
   useEffect(() => {
-    setTracks(true);
     // Safety net in case onLayout somehow doesn't fire.
     const t = setTimeout(() => setTracks(false), 2000);
     return () => clearTimeout(t);
-  }, [resetKey]);
-  return { tracks, onLaidOut: () => setTracks(false) };
+  }, []);
+  // Stable so callers can safely include it in a useMemo dep list.
+  const onLaidOut = useCallback(() => setTracks(false), []);
+  return { tracks, onLaidOut };
 }
 
 /**
- * IMPORTANT: markers are wrapped in React.memo. react-native-maps re-rasterises
- * (or, with tracksViewChanges=false, *blanks*) a custom-view marker every time it
- * re-renders. Without memo, tapping one gym re-rendered all ~50 markers — which
- * both made the others vanish ("clicking a gym makes nearby gyms disappear") and
- * flooded the native bridge until it crashed ("clicking multiple gyms crashes").
- * With memo + referentially-stable props (the gym/member object, a primitive
- * `selected`, and a stable `onPress(id)`), a tap only re-renders the one marker
- * whose `selected` actually changed. Keep all props here primitive/stable.
+ * IMPORTANT: markers are wrapped in React.memo AND are visually static (their
+ * appearance never depends on selection). react-native-maps re-rasterises (or,
+ * with tracksViewChanges=false, *blanks*) a custom-view marker every time its
+ * children change. So markers must never change after their one-time paint:
+ *   - memo + referentially-stable props (the gym/member object + a stable
+ *     `onPress(id)`) means a tap re-renders NOTHING here, and
+ *   - no `selected` styling means there's no child change to blank or re-rasterise.
+ * Together that's what stops "the gym disappears when I tap it" and "tapping gyms
+ * eventually crashes". Which marker is selected is shown by the bottom info card
+ * in SquadMapScreen, not by mutating the pin. Keep all props here primitive/stable
+ * and never feed selection into the rendered <View>.
  */
-const GymMarker = React.memo(function GymMarker({ gym, selected, onPress }: { gym: GymMapPoint; selected: boolean; onPress: (id: string) => void }) {
-  const { tracks, onLaidOut } = useRenderUntilLaid(selected);
+const GymMarker = React.memo(function GymMarker({ gym, onPress }: { gym: GymMapPoint; onPress: (id: string) => void }) {
+  const { tracks, onLaidOut } = useRenderUntilLaid();
   const d = gymDiameter(gym.avg_elo);
   return (
     <Marker
@@ -112,7 +133,7 @@ const GymMarker = React.memo(function GymMarker({ gym, selected, onPress }: { gy
       anchor={{ x: 0.5, y: 0.5 }}
       onPress={() => onPress(gym.id)}
       tracksViewChanges={tracks}
-      zIndex={selected ? 5 : 1}
+      zIndex={1}
     >
       <View
         onLayout={onLaidOut}
@@ -120,7 +141,7 @@ const GymMarker = React.memo(function GymMarker({ gym, selected, onPress }: { gy
           width: d, height: d, borderRadius: d / 2,
           alignItems: 'center', justifyContent: 'center',
           backgroundColor: 'rgba(27,23,20,0.85)',
-          borderWidth: selected ? 3 : 2, borderColor: selected ? C.accent : C.success,
+          borderWidth: 2, borderColor: C.success,
         }}
       >
         <Text style={{ fontFamily: FONT.bold, fontSize: Math.max(11, d * 0.34), color: C.ink }}>{gymInitials(gym.name)}</Text>
@@ -129,32 +150,38 @@ const GymMarker = React.memo(function GymMarker({ gym, selected, onPress }: { gy
   );
 });
 
-const MemberMarker = React.memo(function MemberMarker({ member, presence, selected, onPress }: { member: SquadMapMember; presence?: Presence; selected: boolean; onPress: (id: string) => void }) {
-  const { tracks, onLaidOut } = useRenderUntilLaid(selected);
-  const sz = selected ? 46 : 38;
+const MemberMarker = React.memo(function MemberMarker({ member, presence, onPress }: { member: SquadMapMember; presence?: Presence; onPress: (id: string) => void }) {
+  const { tracks, onLaidOut } = useRenderUntilLaid();
+  // The child view depends ONLY on appearance, never on position. The live "me"
+  // pin updates its coordinate every GPS tick while the map is open; keeping this
+  // element referentially stable means react-native-maps just repositions the
+  // existing native view instead of re-creating the custom marker view each tick.
+  // Re-creating it repeatedly leaks native views on iOS and crashes the map after
+  // a few minutes ("crashes when I spend some time on there").
+  const child = useMemo(() => (
+    <View onLayout={onLaidOut} style={[styles.pin, { borderWidth: 2, borderColor: ring(presence), backgroundColor: presence === 'in' ? 'rgba(156,181,143,0.30)' : 'rgba(27,23,20,0.40)' }]}>
+      <Avatar id={member.avatar} name={member.display_name} size={38} accent={member.is_me} />
+      {member.is_live && <View style={styles.liveDot} />}
+    </View>
+  ), [member.avatar, member.display_name, member.is_me, member.is_live, presence, onLaidOut]);
   return (
     <Marker
       coordinate={{ latitude: member.latitude as number, longitude: member.longitude as number }}
       anchor={{ x: 0.5, y: 0.5 }}
       onPress={() => onPress(member.user_id)}
       tracksViewChanges={tracks}
-      zIndex={selected ? 20 : 10}
+      zIndex={10}
     >
-      <View onLayout={onLaidOut} style={[styles.pin, { borderWidth: selected ? 3 : 2, borderColor: ring(presence), backgroundColor: presence === 'in' ? 'rgba(156,181,143,0.30)' : 'rgba(27,23,20,0.40)' }]}>
-        <Avatar id={member.avatar} name={member.display_name} size={sz} accent={member.is_me} />
-        {member.is_live && <View style={styles.liveDot} />}
-      </View>
+      {child}
     </Marker>
   );
 });
 
-export function FullMap({
+export const FullMap = React.memo(function FullMap({
   members,
   gyms,
   statusById,
-  selected,
   onSelect,
-  selectedGymId,
   onSelectGym,
   onSearchArea,
   focusLocation,
@@ -163,9 +190,7 @@ export function FullMap({
   members: SquadMapMember[];
   gyms?: GymMapPoint[];
   statusById?: Record<string, Presence>;
-  selected?: string | null;
   onSelect?: (id: string) => void;
-  selectedGymId?: string | null;
   onSelectGym?: (id: string) => void;
   /** Fetch gyms for a freshly searched viewport (works anywhere in the UK). */
   onSearchArea?: (bounds: GymMapBounds) => void;
@@ -175,10 +200,24 @@ export function FullMap({
 }) {
   const mapRef = useRef<MapView>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
+  // Apple Maps silently ignores animateToRegion until the native map has finished
+  // initialising. We only animate after onMapReady fires — otherwise the very
+  // first focus call (often a quick last-known fix that beats the map) no-ops and
+  // the `fitted` flag below then blocks every retry, leaving the map "static".
+  const [mapReady, setMapReady] = useState(false);
   const [region, setRegion] = useState<Region>(DEFAULT_REGION);
   const [searchRegion, setSearchRegion] = useState<Region | null>(null);
   const onLayout = (e: LayoutChangeEvent) =>
     setSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height });
+
+  // Fallback in case onMapReady never fires (it's occasionally silent on Apple
+  // Maps): once the view has laid out, the native map is ready within a beat, so
+  // proceed anyway. A no-op if onMapReady already flipped this true.
+  useEffect(() => {
+    if (!size.w || mapReady) return;
+    const t = setTimeout(() => setMapReady(true), 700);
+    return () => clearTimeout(t);
+  }, [size.w, mapReady]);
 
   const located = useMemo(
     () => members.filter((m) => validPoint(m.latitude, m.longitude)),
@@ -191,15 +230,42 @@ export function FullMap({
   // re-centres on you — previously, if the squad loaded first we framed it and
   // then ignored the location, leaving the map "static" away from you.
   const fitted = useRef<'none' | 'squad' | 'focus'>('none');
+  const focusedAt = useRef<{ lat: number; lng: number } | null>(null);
+  // The pending fly-in zoom-in step. Kept in a ref (not as effect cleanup) so the
+  // rapid burst of location updates on open — getQuickLocation, then the fresh
+  // fix, then the watch — can't cancel the scheduled zoom-in. Only unmount clears
+  // it (see below). Without this the timer was cleared on every focus update and
+  // the map stayed stuck at the zoomed-OUT start frame and never glided in.
+  const flyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (flyTimer.current) clearTimeout(flyTimer.current); }, []);
   useEffect(() => {
-    if (!mapRef.current || !size.w) return;
+    if (!mapRef.current || !size.w || !mapReady) return;
     if (focusLocation) {
-      if (fitted.current === 'focus') return; // already centred on you; don't fight panning
+      // Zoom in on first focus, or if the fix jumps a long way (a precise fix
+      // correcting the instant rough one). Small movements (walking) don't
+      // re-zoom — that would fight the user panning around.
+      const prev = focusedAt.current;
+      const bigJump = !!prev &&
+        (Math.abs(prev.lat - focusLocation.lat) > 0.01 || Math.abs(prev.lng - focusLocation.lng) > 0.01);
+      if (fitted.current === 'focus' && !bigJump) return;
+      const firstFocus = fitted.current !== 'focus';
       fitted.current = 'focus';
-      mapRef.current.animateToRegion(
-        { latitude: focusLocation.lat, longitude: focusLocation.lng, latitudeDelta: 0.04, longitudeDelta: 0.04 },
-        600,
-      );
+      focusedAt.current = { lat: focusLocation.lat, lng: focusLocation.lng };
+      const target = { latitude: focusLocation.lat, longitude: focusLocation.lng, latitudeDelta: FOCUS_DELTA, longitudeDelta: FOCUS_DELTA };
+      if (firstFocus) {
+        // Find-My style fly-in: snap centred on you but zoomed out, then glide in
+        // so you SEE the map zoom into your street rather than jump straight there.
+        mapRef.current.animateToRegion(
+          { latitude: focusLocation.lat, longitude: focusLocation.lng, latitudeDelta: FLY_IN_FROM_DELTA, longitudeDelta: FLY_IN_FROM_DELTA },
+          0,
+        );
+        flyTimer.current = setTimeout(() => mapRef.current?.animateToRegion(target, FLY_IN_MS), 350);
+        return;
+      }
+      // A late precise fix that jumped a long way: cancel any pending fly-in and
+      // re-centre directly (no second fly-in — you're already looking at the map).
+      if (flyTimer.current) clearTimeout(flyTimer.current);
+      mapRef.current.animateToRegion(target, 600);
       return;
     }
     if (fitted.current !== 'none' || !located.length) return;
@@ -213,14 +279,19 @@ export function FullMap({
         animated: true,
       });
     }
-    // Only the count + first layout + focus matter; the `fitted` ref guards re-runs.
+    // Count + first layout + map-ready + focus matter; the `fitted` ref guards re-runs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [located.length, size.w, focusLocation]);
+  }, [located.length, size.w, mapReady, focusLocation]);
 
   // Stable per-tap handlers so the memoised markers don't all re-render on every
   // selection (that re-render churn was the disappear/crash bug — see GymMarker).
   const handleGymPress = useCallback((id: string) => onSelectGym?.(id), [onSelectGym]);
   const handleMemberPress = useCallback((id: string) => onSelect?.(id), [onSelect]);
+  const handleMapReady = useCallback(() => setMapReady(true), []);
+  const handleRegionChangeComplete = useCallback((r: Region) => {
+    setRegion(r);
+    setSearchRegion((prev) => prev ?? r);
+  }, []);
 
   // Gyms confined to the searched area, nearest-first, capped. Memoised so it
   // only recomputes when the data or searched area changes — not when a marker is
@@ -251,10 +322,11 @@ export function FullMap({
         style={StyleSheet.absoluteFill}
         provider={PROVIDER_DEFAULT}
         initialRegion={DEFAULT_REGION}
+        onMapReady={handleMapReady}
         // Only update on *complete* (gesture/animation end), never per-frame.
         // Updating region state on every frame re-creates all markers ~60×/s and
         // crashes the native map while panning/searching.
-        onRegionChangeComplete={(r) => { setRegion(r); setSearchRegion((prev) => prev ?? r); }}
+        onRegionChangeComplete={handleRegionChangeComplete}
       >
         {/* Gym pins — native markers, glued to their coordinate through rotation.
             Hidden when zoomed too far out (see tooZoomedOut). */}
@@ -262,7 +334,6 @@ export function FullMap({
           <GymMarker
             key={g.id}
             gym={g}
-            selected={selectedGymId === g.id}
             onPress={handleGymPress}
           />
         ))}
@@ -273,7 +344,6 @@ export function FullMap({
             key={m.user_id}
             member={m}
             presence={statusById?.[m.user_id]}
-            selected={selected === m.user_id}
             onPress={handleMemberPress}
           />
         ))}
@@ -293,7 +363,7 @@ export function FullMap({
       )}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   pin: {

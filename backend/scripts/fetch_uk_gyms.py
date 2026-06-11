@@ -65,6 +65,10 @@ BRANDS: dict[str, str] = {
 SEED_EXTRA: list[dict] = [
     {"osm_id": "seed-tgg-acton", "brand": "The Gym Group",
      "name": "The Gym Group London Acton", "latitude": 51.5255, "longitude": -0.2803},
+    # Imperial College's own sports centre (7 Prince's Gardens, SW7) — not a chain,
+    # so OSM doesn't carry it under a brand. Coords are OSM's "Ethos Gym" node.
+    {"osm_id": "seed-ethos-imperial", "brand": "Ethos",
+     "name": "Ethos Sports Centre", "latitude": 51.500099, "longitude": -0.173452},
 ]
 
 CACHE_DIR = Path(__file__).resolve().parent / ".cache"

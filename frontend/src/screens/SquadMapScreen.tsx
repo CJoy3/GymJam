@@ -9,6 +9,7 @@ import { type Presence } from '../ui/ProfileMap';
 import { useAppState } from '../state/AppState';
 import { getSquadMap, type SquadMapMember } from '../../lib/api/groups';
 import { boundsAround, getGymsMap, type GymMapBounds, type GymMapPoint } from '../../lib/api/gyms';
+import { getQuickLocation, milesBetween, watchLocation, type Coords } from '../../lib/location';
 
 const RADIUS_MILES = 5; // only ever load gyms within this radius of the map's focus
 const DEFAULT_CENTER = { lat: 51.5072, lng: -0.1276 }; // central London, used when the squad isn't located
@@ -31,13 +32,37 @@ function squadCenter(members: SquadMapMember[]): { lat: number; lng: number } {
 export function SquadMapScreen({ onBack }: { onBack: () => void }) {
   const { groupId, groupName, groupMembers, todayDow, nudge, nudgeCooldowns, myLocation, refreshMyLocation } = useAppState();
 
-  // Grab the current location on open so the map can zoom to you (idempotent —
-  // expo won't re-prompt once granted/denied). Private; never sent to the backend.
+  // My LIVE position while the map is open. Tracked continuously so my pin follows
+  // me as I move — and, crucially, so a stale stored fix (e.g. "you were at the
+  // gym earlier") never pins me to the wrong place. Device-only; never uploaded.
+  const [liveLoc, setLiveLoc] = useState<Coords | null>(null);
   useEffect(() => {
-    if (!myLocation) void refreshMyLocation();
+    let cancelled = false;
+    // 1) Instant zoom from a RECENT last-known fix (no GPS wait) so the map opens
+    //    already zoomed on you. Won't overwrite a fresher value if one beat it.
+    getQuickLocation().then((c) => { if (c && !cancelled) setLiveLoc((prev) => prev ?? c); });
+    // 2) A precise fresh fix (corrects the quick one if needed); also re-centres
+    //    the gym fetch on you. The stored value is never used for the pin/zoom.
+    refreshMyLocation().then((c) => { if (c && !cancelled) setLiveLoc(c); });
+    // 3) Keep watching so the pin follows you as you move. Ignore sub-~24m jitter
+    //    (returning the previous value makes React bail) so standing still doesn't
+    //    re-render the live pin every GPS tick — that churn leaked the native
+    //    marker view and crashed the map over a long session.
+    let sub: { remove: () => void } | null = null;
+    watchLocation((c) =>
+      setLiveLoc((prev) => (prev && milesBetween(prev, c) < 0.015 ? prev : c)),
+    ).then((s) => {
+      if (cancelled) s?.remove();
+      else sub = s;
+    });
+    return () => { cancelled = true; sub?.remove(); };
     // Only on mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // My live position (fresh fix + ongoing watch). Stays null — so my pin falls
+  // back to my home gym and the map frames the squad — until we have a real fix;
+  // never the stale stored value.
+  const meLoc = liveLoc;
   const [members, setMembers] = useState<SquadMapMember[]>([]);
   const [gyms, setGyms] = useState<GymMapPoint[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
@@ -64,22 +89,28 @@ export function SquadMapScreen({ onBack }: { onBack: () => void }) {
     getGymsMap(boundsAround(lat, lng, RADIUS_MILES)).then(setGyms).catch(() => {});
   }, []);
 
-  const statusById: Record<string, Presence> = {};
-  for (const m of groupMembers) {
-    const s = m.thisWeek[todayDow]?.state;
-    statusById[m.userId] = s === 'checked-in' ? 'in' : s === 'planned' || s === 'locked' ? 'pledged' : 'rest';
-  }
+  // Memoised so it's a STABLE object across the app's background re-renders (the
+  // 60s location push, sibling-screen polls, etc.). A fresh object every render
+  // would defeat FullMap's React.memo and keep re-rendering the native map.
+  const statusById = useMemo(() => {
+    const out: Record<string, Presence> = {};
+    for (const m of groupMembers) {
+      const s = m.thisWeek[todayDow]?.state;
+      out[m.userId] = s === 'checked-in' ? 'in' : s === 'planned' || s === 'locked' ? 'pledged' : 'rest';
+    }
+    return out;
+  }, [groupMembers, todayDow]);
 
   // Plot MYSELF at my real current location, not my home gym. myLocation is the
   // PRIVATE device fix — used only to draw my own pin here; it is never uploaded,
   // so teammates still only see me live if I opt into public sharing. (See the
   // location-privacy split in lib/location.ts.)
   const displayMembers = useMemo(() => {
-    if (!myLocation) return members;
+    if (!meLoc) return members;
     return members.map((m) =>
-      m.is_me ? { ...m, latitude: myLocation.lat, longitude: myLocation.lng, is_live: true } : m,
+      m.is_me ? { ...m, latitude: meLoc.lat, longitude: meLoc.lng, is_live: true } : m,
     );
-  }, [members, myLocation]);
+  }, [members, meLoc]);
 
   // Stable handlers so FullMap's memoised markers don't all re-render on every tap.
   const handleSelectMember = useCallback((id: string) => {
@@ -102,12 +133,10 @@ export function SquadMapScreen({ onBack }: { onBack: () => void }) {
         members={displayMembers}
         gyms={gyms}
         statusById={statusById}
-        selected={selected}
         onSelect={handleSelectMember}
-        selectedGymId={selectedGym}
         onSelectGym={handleSelectGym}
         onSearchArea={searchArea}
-        focusLocation={myLocation}
+        focusLocation={meLoc}
       />
 
       {/* Header overlay */}
