@@ -4,7 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { C } from '../theme/tokens';
 
 /**
- * Atmospheric background blobs — soft warm glows behind the content layer.
+ * Atmospheric background blobs-soft warm glows behind the content layer.
  * Variants tint different corners depending on screen mood.
  */
 export function BlobBackground({ variant = 'home' }: { variant?: 'home' | 'group' | 'progress' | 'profile' | 'celebrate' }) {

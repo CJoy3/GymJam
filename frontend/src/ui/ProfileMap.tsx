@@ -6,7 +6,7 @@
  *   green  = checked in today ("at the gym")
  *   peach  = pledged today, not yet in
  *   faint  = resting
- * Web has no native map — see ProfileMap.web.tsx for the SVG fallback.
+ * Web has no native map-see ProfileMap.web.tsx for the SVG fallback.
  */
 import React, { useState } from 'react';
 import { LayoutChangeEvent, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
@@ -77,7 +77,7 @@ export function ProfileMap({
         rotateEnabled={false}
         pitchEnabled={false}
       />
-      {/* Gym pins — initials circle sized by avg ELO (compact, non-interactive).
+      {/* Gym pins-initials circle sized by avg ELO (compact, non-interactive).
           Drawn *under* the scrim below so their cream initials don't clash with
           the cream hero text once gyms load (the scrim sits between them). */}
       {size.w > 0 && (gyms ?? []).map((g) => {

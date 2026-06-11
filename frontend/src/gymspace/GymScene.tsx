@@ -3,7 +3,7 @@
  * arena tier (derived from `elo`); the character plays a looping dumbbell-curl.
  *
  * Props are user-placed: pass `placedItemIds` to control which appear. In
- * `editable` mode every *unlocked* prop is tappable — placed ones show solid
+ * `editable` mode every *unlocked* prop is tappable-placed ones show solid
  * (tap to remove), unplaced ones show ghosted with a + (tap to add).
  */
 import React, { useEffect, useState } from 'react';

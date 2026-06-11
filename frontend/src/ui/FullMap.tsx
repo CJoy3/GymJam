@@ -8,7 +8,7 @@
  *    tappable for stats. Only gyms inside the searched area are shown, capped to
  *    the nearest few; panning reveals a "Search this area" button (Google-Maps
  *    style) that re-pins to the new viewport.
- * Web has no native map — see FullMap.web.tsx.
+ * Web has no native map-see FullMap.web.tsx.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { LayoutChangeEvent, Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
@@ -30,7 +30,7 @@ const regionToBounds = (r: Region): GymMapBounds => ({
 });
 
 const DEFAULT_REGION: Region = { latitude: 51.5072, longitude: -0.1276, latitudeDelta: 0.6, longitudeDelta: 0.6 };
-// How tightly we zoom onto you when the map opens (~1.3 km span — your street +
+// How tightly we zoom onto you when the map opens (~1.3 km span-your street +
 // immediate surroundings, so nearby gym pins are still in frame).
 const FOCUS_DELTA = 0.0024;
 // Where the open-animation STARTS: centred on you but zoomed out (~city level),
@@ -41,25 +41,25 @@ const FLY_IN_FROM_DELTA = 0.25;
 const FLY_IN_MS = 1100;
 // Hard cap on rendered native markers. Each is a custom-view marker that
 // re-rasterises on mount/remount (open, pan, "Search this area"), and Apple Maps
-// crashes once too many do so at once — we saw it at ~150, and 50 still drifted
+// crashes once too many do so at once-we saw it at ~150, and 50 still drifted
 // into crashes over a long pan+tap+search session. 24 nearest-to-centre pins is
 // plenty on screen and keeps the rasterisation spike well inside safe limits.
 const MAX_GYMS = 24;
 // Zoomed out beyond this latitude span (~24 miles), we stop showing gyms and hide
-// the "Search this area" button — rendering many pins over a huge area crashed
+// the "Search this area" button-rendering many pins over a huge area crashed
 // the map. We *don't* clamp the native zoom (minZoomLevel freezes Apple Maps —
 // it rubber-bands you back in and the map stops responding); instead we just shed
 // the gym layer at wide zoom, which is what actually caused the crash.
 const SEARCH_MAX_DELTA = 0.35;
 
 /** Pin diameter (px) grows with a gym's average ELO; default ~30px. A non-finite
- *  ELO would yield NaN dimensions, which crashes the native map — so clamp it. */
+ *  ELO would yield NaN dimensions, which crashes the native map-so clamp it. */
 export const gymDiameter = (avgElo: number) => {
   const e = Number.isFinite(avgElo) ? Math.max(avgElo, 0) : 0;
   return 30 + Math.min(e / 80, 26);
 };
 
-/** Apple Maps assert-crashes on NaN/Infinity coordinates — never render those. */
+/** Apple Maps assert-crashes on NaN/Infinity coordinates-never render those. */
 const validPoint = (lat?: number | null, lng?: number | null): boolean =>
   Number.isFinite(lat as number) && Number.isFinite(lng as number) &&
   Math.abs(lat as number) <= 90 && Math.abs(lng as number) <= 180;
@@ -88,7 +88,7 @@ const movedAway = (a: Region, b: Region | null) => {
 /**
  * A native marker only caches its custom view as a bitmap while
  * `tracksViewChanges` is true. We track until the child's `onLayout` fires (it's
- * definitely painted by then), then stop FOREVER — a marker's appearance never
+ * definitely painted by then), then stop FOREVER-a marker's appearance never
  * changes after mount, so it never needs to re-rasterise.
  *
  * Why "forever": the previous version re-tracked whenever `selected` changed, to
@@ -194,14 +194,14 @@ export const FullMap = React.memo(function FullMap({
   onSelectGym?: (id: string) => void;
   /** Fetch gyms for a freshly searched viewport (works anywhere in the UK). */
   onSearchArea?: (bounds: GymMapBounds) => void;
-  /** Private current location — when set, the map opens zoomed in on it. */
+  /** Private current location-when set, the map opens zoomed in on it. */
   focusLocation?: { lat: number; lng: number } | null;
   style?: StyleProp<ViewStyle>;
 }) {
   const mapRef = useRef<MapView>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
   // Apple Maps silently ignores animateToRegion until the native map has finished
-  // initialising. We only animate after onMapReady fires — otherwise the very
+  // initialising. We only animate after onMapReady fires-otherwise the very
   // first focus call (often a quick last-known fix that beats the map) no-ops and
   // the `fitted` flag below then blocks every retry, leaving the map "static".
   const [mapReady, setMapReady] = useState(false);
@@ -227,13 +227,13 @@ export const FullMap = React.memo(function FullMap({
   // On open: zoom to the user's CURRENT location (Find-My style), otherwise frame
   // the squad as tightly as possible. `fitted` tracks *what* we framed so a live
   // fix that arrives late (location is async + permission-gated) still wins and
-  // re-centres on you — previously, if the squad loaded first we framed it and
+  // re-centres on you-previously, if the squad loaded first we framed it and
   // then ignored the location, leaving the map "static" away from you.
   const fitted = useRef<'none' | 'squad' | 'focus'>('none');
   const focusedAt = useRef<{ lat: number; lng: number } | null>(null);
   // The pending fly-in zoom-in step. Kept in a ref (not as effect cleanup) so the
-  // rapid burst of location updates on open — getQuickLocation, then the fresh
-  // fix, then the watch — can't cancel the scheduled zoom-in. Only unmount clears
+  // rapid burst of location updates on open-getQuickLocation, then the fresh
+  // fix, then the watch-can't cancel the scheduled zoom-in. Only unmount clears
   // it (see below). Without this the timer was cleared on every focus update and
   // the map stayed stuck at the zoomed-OUT start frame and never glided in.
   const flyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -243,7 +243,7 @@ export const FullMap = React.memo(function FullMap({
     if (focusLocation) {
       // Zoom in on first focus, or if the fix jumps a long way (a precise fix
       // correcting the instant rough one). Small movements (walking) don't
-      // re-zoom — that would fight the user panning around.
+      // re-zoom-that would fight the user panning around.
       const prev = focusedAt.current;
       const bigJump = !!prev &&
         (Math.abs(prev.lat - focusLocation.lat) > 0.01 || Math.abs(prev.lng - focusLocation.lng) > 0.01);
@@ -263,7 +263,7 @@ export const FullMap = React.memo(function FullMap({
         return;
       }
       // A late precise fix that jumped a long way: cancel any pending fly-in and
-      // re-centre directly (no second fly-in — you're already looking at the map).
+      // re-centre directly (no second fly-in-you're already looking at the map).
       if (flyTimer.current) clearTimeout(flyTimer.current);
       mapRef.current.animateToRegion(target, 600);
       return;
@@ -284,7 +284,7 @@ export const FullMap = React.memo(function FullMap({
   }, [located.length, size.w, mapReady, focusLocation]);
 
   // Stable per-tap handlers so the memoised markers don't all re-render on every
-  // selection (that re-render churn was the disappear/crash bug — see GymMarker).
+  // selection (that re-render churn was the disappear/crash bug-see GymMarker).
   const handleGymPress = useCallback((id: string) => onSelectGym?.(id), [onSelectGym]);
   const handleMemberPress = useCallback((id: string) => onSelect?.(id), [onSelect]);
   const handleMapReady = useCallback(() => setMapReady(true), []);
@@ -294,7 +294,7 @@ export const FullMap = React.memo(function FullMap({
   }, []);
 
   // Gyms confined to the searched area, nearest-first, capped. Memoised so it
-  // only recomputes when the data or searched area changes — not when a marker is
+  // only recomputes when the data or searched area changes-not when a marker is
   // tapped (selection mustn't churn the whole list; that re-mounts markers).
   const searchIn = searchRegion ?? region;
   const visibleGyms = useMemo(
@@ -304,7 +304,7 @@ export const FullMap = React.memo(function FullMap({
         (Math.abs(a.latitude - searchIn.latitude) + Math.abs(a.longitude - searchIn.longitude)) -
         (Math.abs(b.latitude - searchIn.latitude) + Math.abs(b.longitude - searchIn.longitude)))
       .slice(0, MAX_GYMS),
-    // Depend on searchIn's *fields*, not the object — `searchRegion ?? region`
+    // Depend on searchIn's *fields*, not the object-`searchRegion ?? region`
     // is a fresh object each render and would defeat the memo.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [gyms, searchIn.latitude, searchIn.longitude, searchIn.latitudeDelta, searchIn.longitudeDelta],
@@ -328,7 +328,7 @@ export const FullMap = React.memo(function FullMap({
         // crashes the native map while panning/searching.
         onRegionChangeComplete={handleRegionChangeComplete}
       >
-        {/* Gym pins — native markers, glued to their coordinate through rotation.
+        {/* Gym pins-native markers, glued to their coordinate through rotation.
             Hidden when zoomed too far out (see tooZoomedOut). */}
         {!tooZoomedOut && visibleGyms.map((g) => (
           <GymMarker
@@ -349,7 +349,7 @@ export const FullMap = React.memo(function FullMap({
         ))}
       </MapView>
 
-      {/* Google-Maps style "search this area" — re-pins gyms to the current view. */}
+      {/* Google-Maps style "search this area"-re-pins gyms to the current view. */}
       {showSearch && (
         <View pointerEvents="box-none" style={styles.searchWrap}>
           <Pressable

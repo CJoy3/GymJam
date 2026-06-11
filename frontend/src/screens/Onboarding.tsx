@@ -9,7 +9,7 @@ import { useAppState } from '../state/AppState';
 import { sortByProximity } from '../../lib/location';
 import { pageWrap, styles } from './_shared';
 
-/* Onboarding — first-launch gym picker */
+/* Onboarding-first-launch gym picker */
 
 export function Onboarding({ onDone }: { onDone: () => void }) {
   const { gyms, setGym, myLocation } = useAppState();

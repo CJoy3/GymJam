@@ -37,7 +37,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-# UK-wide bounding box (south, west, north, east) — covers GB + NI.
+# UK-wide bounding box (south, west, north, east)-covers GB + NI.
 UK_BBOX = "49.8,-8.65,60.9,1.78"
 
 OVERPASS_MIRRORS = (
@@ -60,12 +60,12 @@ BRANDS: dict[str, str] = {
     "Fitness First": "Fitness First",
 }
 
-# Branches genuinely absent from OSM — merged in with real coordinates. Extend as
+# Branches genuinely absent from OSM-merged in with real coordinates. Extend as
 # gaps are reported. (osm_id is synthetic but stable so upserts stay idempotent.)
 SEED_EXTRA: list[dict] = [
     {"osm_id": "seed-tgg-acton", "brand": "The Gym Group",
      "name": "The Gym Group London Acton", "latitude": 51.5255, "longitude": -0.2803},
-    # Imperial College's own sports centre (7 Prince's Gardens, SW7) — not a chain,
+    # Imperial College's own sports centre (7 Prince's Gardens, SW7)-not a chain,
     # so OSM doesn't carry it under a brand. Coords are OSM's "Ethos Gym" node.
     {"osm_id": "seed-ethos-imperial", "brand": "Ethos",
      "name": "Ethos Sports Centre", "latitude": 51.500099, "longitude": -0.173452},
@@ -76,7 +76,7 @@ OUT_SQL = Path(__file__).resolve().parents[1] / "supabase" / "gyms_seed.sql"
 
 REQUEST_TIMEOUT = 60  # seconds per mirror attempt
 
-# Nominatim (OSM reverse geocoder) — used only to name branches OSM leaves bare.
+# Nominatim (OSM reverse geocoder)-used only to name branches OSM leaves bare.
 # Its usage policy requires an identifying User-Agent and ≤1 request/second.
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/reverse"
 NOMINATIM_UA = "GymJam/1.0 (UK gym locator; +https://github.com/ctj24/GymJam)"
@@ -97,7 +97,7 @@ def _overpass(query: str, rounds: int = 3) -> dict:
                 )
                 with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT) as resp:
                     return json.loads(resp.read().decode("utf-8"))
-            except Exception as exc:  # noqa: BLE001 — try the next mirror
+            except Exception as exc:  # noqa: BLE001-try the next mirror
                 last = exc
                 print(f"    mirror failed ({url.split('//')[1].split('/')[0]}): {type(exc).__name__}")
                 time.sleep(2)
@@ -110,7 +110,7 @@ def _fetch_brand(label: str, regex: str, deep: bool = False) -> list[dict]:
     """All OSM elements for one chain, cached on disk. The ``brand`` tag alone
     gives near-complete coverage of these major chains and is fast/reliable. The
     optional ``deep`` sweep also matches leisure-scoped name/operator to catch the
-    rare un-branded branch — it's heavier and flaky on public mirrors, so it's a
+    rare un-branded branch-it's heavier and flaky on public mirrors, so it's a
     single best-effort attempt that can never hang or fail the run."""
     CACHE_DIR.mkdir(exist_ok=True)
     cache = CACHE_DIR / f"{label.replace(' ', '_')}.json"
@@ -123,10 +123,10 @@ def _fetch_brand(label: str, regex: str, deep: bool = False) -> list[dict]:
         for el in payload.get("elements", []):
             elements[(el.get("type"), el.get("id"))] = el
 
-    # brand tag — fast, clean, the essential query (retried hard).
+    # brand tag-fast, clean, the essential query (retried hard).
     print(f"  {label}: brand query…")
     collect(_overpass(f'[out:json][timeout:55];nwr["brand"~"{regex}",i]({UK_BBOX});out center;', rounds=3))
-    # name/operator scoped to leisure venues — best-effort single attempt only.
+    # name/operator scoped to leisure venues-best-effort single attempt only.
     if deep:
         try:
             print(f"  {label}: deep name/operator query…")
@@ -137,7 +137,7 @@ def _fetch_brand(label: str, regex: str, deep: bool = False) -> list[dict]:
                 f');out center;',
                 rounds=1,
             ))
-        except Exception as exc:  # noqa: BLE001 — brand results are enough on failure
+        except Exception as exc:  # noqa: BLE001-brand results are enough on failure
             print(f"    (deep query skipped: {type(exc).__name__})")
 
     payload = {"elements": list(elements.values())}
@@ -146,7 +146,7 @@ def _fetch_brand(label: str, regex: str, deep: bool = False) -> list[dict]:
 
 
 def _metres_apart(a_lat: float, a_lon: float, b_lat: float, b_lon: float) -> float:
-    """Cheap planar distance in metres — accurate enough at city scale."""
+    """Cheap planar distance in metres-accurate enough at city scale."""
     dlat = (a_lat - b_lat) * 111_000
     dlon = (a_lon - b_lon) * 111_000 * math.cos(math.radians(a_lat))
     return math.hypot(dlat, dlon)
@@ -162,7 +162,7 @@ def _coord(el: dict) -> tuple[float, float] | None:
     return float(lat), float(lon)
 
 
-# Big-city names that DON'T disambiguate a branch — "PureGym London" is useless
+# Big-city names that DON'T disambiguate a branch-"PureGym London" is useless
 # when there are 80 of them. When these are all OSM gives us, we reverse-geocode
 # the coordinate to a real neighbourhood instead (see _reverse_area).
 GENERIC_CITIES = {"london", "greater london", "city of london"}
@@ -173,13 +173,13 @@ def _specifier_from_tags(tags: dict) -> str | None:
     have is a generic big-city name. Combines the place with the street for
     uniqueness: a Brighton branch on London Road becomes 'Brighton London Road'
     (not a bare 'London Road' that collides with five other towns), while a London
-    branch — where the city name is useless — falls back to its street/suburb."""
+    branch-where the city name is useless-falls back to its street/suburb."""
     suburb = tags.get("addr:suburb") or tags.get("addr:neighbourhood") or tags.get("addr:quarter")
     street = tags.get("addr:street")
     house = tags.get("addr:housename")
     town = tags.get("addr:town")
     city = tags.get("addr:city")
-    # The recognisable "place" — a suburb, else a real town/city (never generic
+    # The recognisable "place"-a suburb, else a real town/city (never generic
     # "London", which can't tell 80 branches apart).
     place = suburb
     if not place and town and town.lower() not in GENERIC_CITIES:
@@ -197,7 +197,7 @@ def _specifier_from_tags(tags: dict) -> str | None:
     return None
 
 
-# Filler words that don't identify a *branch* — a name made only of the brand +
+# Filler words that don't identify a *branch*-a name made only of the brand +
 # these is generic (e.g. "Nuffield Health Fitness & Wellbeing", "David Lloyd
 # Clubs") and must be replaced with a real locality, or 90 branches read alike.
 GENERIC_NAME_WORDS = {
@@ -208,7 +208,7 @@ GENERIC_NAME_WORDS = {
 
 
 def _name_adds_detail(label: str, raw: str) -> bool:
-    """True if the OSM name identifies *which* branch — i.e. it has a token beyond
+    """True if the OSM name identifies *which* branch-i.e. it has a token beyond
     the brand words and generic gym filler. 'PureGym Stratford' → True;
     'Nuffield Health Fitness & Wellbeing' → False (says nothing branch-specific)."""
     brand_words = set(label.lower().split())
@@ -221,9 +221,9 @@ def _name_adds_detail(label: str, raw: str) -> bool:
 
 def _display_name(label: str, tags: dict, rev_area: str | None = None) -> str:
     """A human-friendly, *specific* name. Keeps OSM's name only when it actually
-    names the branch; otherwise appends the most specific locality we have — an
+    names the branch; otherwise appends the most specific locality we have-an
     address tag, or (for branches OSM leaves bare/generic) a reverse-geocoded
-    neighbourhood — so every branch is distinguishable in the picker."""
+    neighbourhood-so every branch is distinguishable in the picker."""
     raw = " ".join((tags.get("name") or "").split())
     if raw and _name_adds_detail(label, raw):
         return raw
@@ -238,7 +238,7 @@ _BAD_AREA = re.compile(r"borough of|\bcounty\b|greater london|metropolitan|^city
 
 def _reverse_area(lat: float, lon: float, cache: dict) -> str | None:
     """Reverse-geocode a coordinate to a neighbourhood/town via Nominatim. Cached
-    on disk by coordinate (resumable + polite) and fully best-effort — any failure
+    on disk by coordinate (resumable + polite) and fully best-effort-any failure
     just leaves the branch with its bare brand name rather than aborting."""
     key = f"{round(lat, 5)},{round(lon, 5)}"
     if key in cache:
@@ -256,7 +256,7 @@ def _reverse_area(lat: float, lon: float, cache: dict) -> str | None:
             "city_district", "city_block", "road",
         )]
         area = next((c for c in candidates if c and not _BAD_AREA.search(c)), None)
-    except Exception:  # noqa: BLE001 — best-effort; keep going on any error
+    except Exception:  # noqa: BLE001-best-effort; keep going on any error
         return None
     cache[key] = area
     CACHE_DIR.mkdir(exist_ok=True)
@@ -292,7 +292,7 @@ def _clean_branch_name(label: str, name: str) -> str:
 
 
 def _fetch_puregym_official() -> list[dict]:
-    """All PureGym branches from puregym.com — each branch page carries JSON-LD
+    """All PureGym branches from puregym.com-each branch page carries JSON-LD
     with the branch name + geo coordinates. ~490 branches, fetched concurrently."""
     cache = CACHE_DIR / "official_PureGym.json"
     if cache.exists():
@@ -314,7 +314,7 @@ def _fetch_puregym_official() -> list[dict]:
                         "latitude": round(float(d["geo"]["latitude"]), 6),
                         "longitude": round(float(d["geo"]["longitude"]), 6),
                     }
-        except Exception:  # noqa: BLE001 — skip a branch that won't parse
+        except Exception:  # noqa: BLE001-skip a branch that won't parse
             return None
         return None
 
@@ -343,12 +343,12 @@ def build_rows(deep: bool = False, geocode: bool = True) -> list[dict]:
                 rows.extend(official)
                 print(f"  -> {label}: {len(official)} gyms (official store-finder)")
                 continue
-            except Exception as exc:  # noqa: BLE001 — fall back to OSM on any failure
+            except Exception as exc:  # noqa: BLE001-fall back to OSM on any failure
                 print(f"  !! {label}: official fetch failed ({type(exc).__name__}); using OSM")
         try:
             els = _fetch_brand(label, regex, deep=deep)
-        except Exception as exc:  # noqa: BLE001 — record + keep going; re-run resumes from cache
-            print(f"  !! {label}: FAILED ({type(exc).__name__}) — will need a re-run")
+        except Exception as exc:  # noqa: BLE001-record + keep going; re-run resumes from cache
+            print(f"  !! {label}: FAILED ({type(exc).__name__})-will need a re-run")
             failed.append(label)
             continue
         kept = 0
@@ -373,11 +373,11 @@ def build_rows(deep: bool = False, geocode: bool = True) -> list[dict]:
     if failed:
         raise SystemExit(
             f"\nIncomplete: {', '.join(failed)} could not be fetched (Overpass busy). "
-            "Re-run the script — cached brands load instantly so it resumes."
+            "Re-run the script-cached brands load instantly so it resumes."
         )
 
     # Name the branches OSM left bare (no address tags at all) by reverse-geocoding
-    # their coordinate to a neighbourhood — otherwise dozens would all read just
+    # their coordinate to a neighbourhood-otherwise dozens would all read just
     # "PureGym". Cached + resumable; safe to interrupt and re-run.
     if geocode:
         cache = json.loads(_GEO_CACHE_FILE.read_text()) if _GEO_CACHE_FILE.exists() else {}
@@ -429,7 +429,7 @@ def write_sql(rows: list[dict]) -> None:
     chunks: list[str] = []
     header = (
         "-- GymJam: UK gym locations for the Squad Map, sourced from OpenStreetMap.\n"
-        "-- GENERATED by backend/scripts/fetch_uk_gyms.py — do not hand-edit.\n"
+        "-- GENERATED by backend/scripts/fetch_uk_gyms.py-do not hand-edit.\n"
         f"-- {len(rows)} gyms across {len(BRANDS)} chains. Idempotent (upsert by osm_id).\n"
         "-- Run in the Supabase SQL editor AFTER schema.sql (needs gyms.brand + osm_id).\n\n"
     )

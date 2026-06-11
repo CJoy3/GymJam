@@ -11,7 +11,7 @@ import { useRefreshControl } from '../ui/useRefresh';
 import { useAppState } from '../state/AppState';
 import { LABELS, pageWrap, styles } from './_shared';
 
-/* Home — greeting, this week, pot, primary CTAs */
+/* Home-greeting, this week, pot, primary CTAs */
 
 export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => void; onPlan: () => void; onPot: () => void; onGroup: () => void }) {
   const {
@@ -53,7 +53,7 @@ export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => v
     const willMove = nextOccupied + 1 <= 7;
     const stake = potCurrent?.stake_per_miss ?? 0;
     Alert.alert(
-      'Reschedule — unforeseen circumstances',
+      'Reschedule-unforeseen circumstances',
       willMove
         ? 'Move this missed session into next week? No ELO penalty.'
         : `Next week is already full (7 days), so this can't be moved. A 50% penalty (${Math.round(stake * 0.5)} ELO) will apply instead of a full miss.`,
@@ -108,11 +108,11 @@ export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => v
               <Sub style={{ marginTop: 14 }}>
                 {thisWeekIsPractice
                   ? (practiceRemaining > 0
-                      ? `Practice week — no ELO at stake. Tap the ${practiceRemaining} day${practiceRemaining === 1 ? '' : 's'} left to pledge. Plan next week as normal.`
-                      : 'Practice week — the real challenge starts next week. Plan it below.')
-                  : pledged === 0 ? 'No sessions pledged yet — plan next week.'
-                  : pledged - done > 0 ? `${pledged - done} more session${pledged - done === 1 ? '' : 's'} to go.`
-                  : 'All sessions done. Strong week.'}
+                    ? `Practice week-no ELO at stake. Tap the ${practiceRemaining} day${practiceRemaining === 1 ? '' : 's'} left to pledge. Plan next week as normal.`
+                    : 'Practice week-the real challenge starts next week. Plan it below.')
+                  : pledged === 0 ? 'No sessions pledged yet-plan next week.'
+                    : pledged - done > 0 ? `${pledged - done} more session${pledged - done === 1 ? '' : 's'} to go.`
+                      : 'All sessions done. Strong week.'}
               </Sub>
               {thisWeek.some((d) => d.state === 'missed') && (
                 <Sub style={{ marginTop: 6, color: C.accent }}>
@@ -142,7 +142,7 @@ export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => v
               {memberCount > 0
                 ? `${onTrack} of ${memberCount} on track · ${isMoney ? `£${(totalAtStake / 100).toFixed(2)}` : totalAtStake.toLocaleString()} at stake`
                 : groupId
-                  ? 'No stakes yet — pledge sessions to build the pot'
+                  ? 'No stakes yet-pledge sessions to build the pot'
                   : 'Join a group to start the pot'}
             </Text>
           </Card>

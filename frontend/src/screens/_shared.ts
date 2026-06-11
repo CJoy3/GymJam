@@ -36,7 +36,7 @@ export const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
 
-  // Dev clock controls — four small pills (« week, « day, day », week ») that
+  // Dev clock controls-four small pills (« week, « day, day », week ») that
   // step the simulated "today" so testers can walk pledges through their
   // states without waiting for real time to pass.
   devClockBar: {

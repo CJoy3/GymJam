@@ -15,14 +15,14 @@ import { pageWrap, styles } from './_shared';
 
 const DISMISSED_KEY = 'dismissedActivity';
 
-/* Group view — members, notifications menu, per-day join + nudges */
+/* Group view-members, notifications menu, per-day join + nudges */
 
 const KIND_META: Record<string, { icon: keyof typeof MaterialIcons.glyphMap; color: string }> = {
   join_request: { icon: 'person-add', color: C.accent },
-  nudge:        { icon: 'campaign', color: C.accent },
-  missed:       { icon: 'close', color: C.danger },
-  checkin:      { icon: 'check-circle', color: C.success },
-  streak:       { icon: 'local-fire-department', color: C.accent },
+  nudge: { icon: 'campaign', color: C.accent },
+  missed: { icon: 'close', color: C.danger },
+  checkin: { icon: 'check-circle', color: C.success },
+  streak: { icon: 'local-fire-department', color: C.accent },
 };
 
 export function GroupView({ onBrowse, onLeaderboard }: { onBrowse: () => void; onLeaderboard: () => void }) {

@@ -65,12 +65,12 @@ export interface AppStateShape {
   money: number;
   moneyWeekChange: number;
 
-  // Opt-in live location sharing — PUBLIC: pushed to the backend so the squad
+  // Opt-in live location sharing-PUBLIC: pushed to the backend so the squad
   // sees you on the map.
   shareLocation: boolean;
   setShareLocation: (on: boolean) => Promise<void>;
 
-  // PRIVATE device location — stored only on-device (never sent to the backend),
+  // PRIVATE device location-stored only on-device (never sent to the backend),
   // used to centre the map on open and sort gyms by proximity. Separate from the
   // public sharing above. `refreshMyLocation` asks permission + re-reads GPS.
   myLocation: { lat: number; lng: number } | null;
@@ -88,7 +88,7 @@ export interface AppStateShape {
   isLeader: boolean;
   joinType: 'open' | 'request';
   stakeType: 'elo' | 'money';     // CURRENT week's pot currency (frozen until rollover)
-  nextStakeType: 'elo' | 'money'; // next week's currency — what the leader's toggle changes
+  nextStakeType: 'elo' | 'money'; // next week's currency-what the leader's toggle changes
   updateStakeType: (stakeType: 'elo' | 'money') => Promise<void>;
   groups: Group[];
   joinGroup: (groupId: string) => Promise<boolean>;
@@ -121,11 +121,11 @@ export interface AppStateShape {
   checkInToday: () => Promise<void>;
   rescheduleMissedDay: (dow: number) => Promise<void>;
 
-  // Dev clock — toggle between the real week and one week ahead
+  // Dev clock-toggle between the real week and one week ahead
   weekSimulated: boolean;        // true when the clock is shifted into next week
   toggleWeek: () => Promise<void>;
 
-  // Dev clock — fine-grained day/week stepping, for walking through pledge
+  // Dev clock-fine-grained day/week stepping, for walking through pledge
   // state transitions one step at a time while testing.
   goToPreviousWeek: () => Promise<void>;
   goToNextWeek: () => Promise<void>;
@@ -138,7 +138,7 @@ export interface AppStateShape {
   // for frequent polling on group screens without refetching the whole list.
   refreshGroup: () => Promise<void>;
 
-  // Pot — full breakdown for the current week + simpler aggregate
+  // Pot-full breakdown for the current week + simpler aggregate
   pot: number;                              // total_pot_elo for current week (alias)
   potCurrent: potApi.PotDetail | null;      // current week's conditions + member rows
   potNext: potApi.PotDetail | null;         // next week's pending conditions

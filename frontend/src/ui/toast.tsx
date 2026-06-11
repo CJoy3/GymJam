@@ -12,8 +12,8 @@ let push: ((t: Omit<Toast, 'id'>) => void) | null = null;
 export function showToast(message: string, variant: ToastVariant = 'info') {
   // Product decision: never pop error toasts to the user. Failed actions stay
   // silent (logged for debugging only); only successes and input guidance show.
-  // This is the single guarantee that no raw/internal error — "Internal Server
-  // Error", network failures, auth faults — can ever reach the UI, regardless
+  // This is the single guarantee that no raw/internal error-"Internal Server
+  // Error", network failures, auth faults-can ever reach the UI, regardless
   // of which call site produced it. Keep it here so the rule can't drift.
   if (variant === 'error') {
     if (__DEV__) console.warn('[suppressed error toast]', message);
@@ -56,12 +56,12 @@ function ToastBubble({ toast }: { toast: Toast }) {
   useEffect(() => {
     Animated.parallel([
       Animated.timing(slide, { toValue: 0, duration: 260, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
-      Animated.timing(fade,  { toValue: 1, duration: 220, useNativeDriver: true }),
+      Animated.timing(fade, { toValue: 1, duration: 220, useNativeDriver: true }),
     ]).start();
     const t = setTimeout(() => {
       Animated.parallel([
         Animated.timing(slide, { toValue: 20, duration: 200, useNativeDriver: true }),
-        Animated.timing(fade,  { toValue: 0, duration: 200, useNativeDriver: true }),
+        Animated.timing(fade, { toValue: 0, duration: 200, useNativeDriver: true }),
       ]).start();
     }, VISIBLE_MS - 260);
     return () => clearTimeout(t);
@@ -69,8 +69,8 @@ function ToastBubble({ toast }: { toast: Toast }) {
 
   const palette =
     toast.variant === 'error' ? { fg: C.danger, icon: 'error-outline' as const }
-    : toast.variant === 'success' ? { fg: C.success, icon: 'check-circle' as const }
-    : { fg: C.ink, icon: 'info-outline' as const };
+      : toast.variant === 'success' ? { fg: C.success, icon: 'check-circle' as const }
+        : { fg: C.ink, icon: 'info-outline' as const };
 
   return (
     <Animated.View style={[styles.bubble, { opacity: fade, transform: [{ translateY: slide }] }]}>

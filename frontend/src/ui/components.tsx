@@ -11,7 +11,7 @@ import { C, FONT, RADIUS, SPACE } from '../theme/tokens';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
-// Shared motion language — short, cubic ease-out, zero spring overshoot.
+// Shared motion language-short, cubic ease-out, zero spring overshoot.
 const EASE_OUT = Easing.out(Easing.cubic);
 const EASE_OUT_QUAD = Easing.out(Easing.quad);
 
@@ -52,8 +52,8 @@ export function Card({
 }) {
   const bg = tone === 'cream' ? C.primary
     : tone === 'peach' ? C.accentSoft
-    : tone === 'sage'  ? C.successSoft
-    : C.card;
+      : tone === 'sage' ? C.successSoft
+        : C.card;
   const border = tone === 'cream' ? 'transparent' : C.border;
   const content = (
     <View style={[styles.card, { padding, backgroundColor: bg, borderColor: border }, style]}>{children}</View>
@@ -87,9 +87,9 @@ export function Btn({
 }) {
   const v =
     variant === 'primary' ? { bg: C.primary, fg: C.primaryFg, border: 'transparent' }
-    : variant === 'inverse' ? { bg: C.card, fg: C.ink, border: C.borderHi }
-    : variant === 'danger' ? { bg: 'transparent', fg: C.danger, border: C.danger }
-    : { bg: 'transparent', fg: C.ink, border: C.borderHi };
+      : variant === 'inverse' ? { bg: C.card, fg: C.ink, border: C.borderHi }
+        : variant === 'danger' ? { bg: 'transparent', fg: C.danger, border: C.danger }
+          : { bg: 'transparent', fg: C.ink, border: C.borderHi };
 
   const scale = useSharedValue(1);
   const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
@@ -138,11 +138,11 @@ export function Chip({
   compact?: boolean;
 }) {
   const tones = {
-    neutral: { bg: C.muted,            fg: C.inkSoft },
-    success: { bg: C.successSoft,      fg: C.success },
-    accent:  { bg: C.accentSoft,       fg: C.accent  },
-    danger:  { bg: C.dangerSoft,       fg: C.danger  },
-    cream:   { bg: C.primary,          fg: C.primaryFg },
+    neutral: { bg: C.muted, fg: C.inkSoft },
+    success: { bg: C.successSoft, fg: C.success },
+    accent: { bg: C.accentSoft, fg: C.accent },
+    danger: { bg: C.dangerSoft, fg: C.danger },
+    cream: { bg: C.primary, fg: C.primaryFg },
   }[tone];
   return (
     <View style={[styles.chip, {
@@ -221,7 +221,7 @@ export function Ring({
           strokeWidth={stroke}
           fill="none"
         />
-        {/* progress arc — starts from 12 o'clock, sweeps clockwise */}
+        {/* progress arc-starts from 12 o'clock, sweeps clockwise */}
         <AnimatedCircle
           cx={center}
           cy={center}
@@ -246,7 +246,7 @@ export function Ring({
 /* ──────────────────────  Animated entrance  ──────────────────────── */
 
 /**
- * Calm opacity fade with cubic ease-out. No translation, no spring — premium feel.
+ * Calm opacity fade with cubic ease-out. No translation, no spring-premium feel.
  */
 export function FadeInItem({
   children, delay = 0, style,
@@ -266,7 +266,7 @@ export function FadeInItem({
 const styles = StyleSheet.create({
   eyebrow: { fontFamily: FONT.medium, fontSize: 12, color: C.mutedFg, letterSpacing: 0.6, textTransform: 'uppercase' },
   h1: { fontFamily: FONT.extra, fontSize: 32, color: C.ink, letterSpacing: -0.6, lineHeight: 38 },
-  h2: { fontFamily: FONT.bold,  fontSize: 22, color: C.ink, letterSpacing: -0.3, lineHeight: 28 },
+  h2: { fontFamily: FONT.bold, fontSize: 22, color: C.ink, letterSpacing: -0.3, lineHeight: 28 },
   h3: { fontFamily: FONT.semibold, fontSize: 17, color: C.ink, letterSpacing: -0.1, lineHeight: 22 },
   body: { fontFamily: FONT.regular, fontSize: 15, color: C.ink, lineHeight: 21 },
   sub: { fontFamily: FONT.regular, fontSize: 13, color: C.mutedFg, lineHeight: 18 },
@@ -288,5 +288,5 @@ const styles = StyleSheet.create({
   chipText: { fontFamily: FONT.semibold, letterSpacing: 0.2 },
 
   ringLabel: { fontFamily: FONT.bold, color: C.ink, letterSpacing: -0.4 },
-  ringSub:   { fontFamily: FONT.regular, color: C.mutedFg, marginTop: 2 },
+  ringSub: { fontFamily: FONT.regular, color: C.mutedFg, marginTop: 2 },
 });

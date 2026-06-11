@@ -22,11 +22,11 @@ const EASE_OUT = Easing.out(Easing.cubic);
 /** Coach-marks tour, in order. The two home-* targets are registered inside
  * Home.tsx; the tab-* targets on the tab bar below. */
 const TOUR_STEPS: CoachStep[] = [
-  { id: 'home-week',    text: 'This is your week — tap a day to see your plan' },
+  { id: 'home-week', text: 'This is your week-tap a day to see your plan' },
   { id: 'home-checkin', text: 'Hit this when you get to the gym' },
-  { id: 'tab-group',    text: "See your group's pledges and nudge people who've gone quiet" },
-  { id: 'tab-progress', text: 'Your ELO score lives here — it goes up every time you show up' },
-  { id: 'tab-profile',  text: 'Your gym space, your squad on the map, and your settings' },
+  { id: 'tab-group', text: "See your group's pledges and nudge people who've gone quiet" },
+  { id: 'tab-progress', text: 'Your ELO score lives here-it goes up every time you show up' },
+  { id: 'tab-profile', text: 'Your gym space, your squad on the map, and your settings' },
 ];
 
 type Screen =
@@ -54,7 +54,7 @@ function GymJamApp() {
   const progressTabTarget = useCoachTarget('tab-progress');
   const profileTabTarget = useCoachTarget('tab-profile');
 
-  // Keep every device in sync — poll every 30 s and also refresh when the app
+  // Keep every device in sync-poll every 30 s and also refresh when the app
   // returns to the foreground (e.g. user switches back from another app).
   usePolling(refreshAll, 30000);
 
@@ -63,7 +63,7 @@ function GymJamApp() {
     // Wait until the account itself has loaded before deciding where to route.
     // Otherwise a warm launch (where `ready` flips true from the cache before
     // `me` is populated) would briefly see null tag/gym and wrongly show the
-    // account-setup screen — and then get stuck there.
+    // account-setup screen-and then get stuck there.
     if (!userId) return;
 
     const setUp = !!tag && !!gymId;
@@ -95,22 +95,22 @@ function GymJamApp() {
   const render = () => {
     switch (screen) {
       case 'account-setup': return <AccountSetup onDone={() => setScreen('gym-browser')} />;
-      case 'onboarding':   return <Onboarding onDone={() => setScreen('gym-browser')} />;
-      case 'home':         return <Home onCheckIn={() => setScreen('check-in')} onPlan={() => setScreen('plan-week')} onPot={() => setScreen('pot-tracker')} onGroup={() => setScreen('group')} />;
-      case 'check-in':     return <CheckIn onClose={() => setScreen('home')} />;
-      case 'plan-week':    return <PlanWeek onDone={() => setScreen('home')} onCancel={() => setScreen('home')} />;
-      case 'group':        return groupId
-                              ? <GroupView onBrowse={() => setScreen('gym-browser')} onLeaderboard={() => setScreen('leaderboard')} />
-                              : <NoGroup onBrowse={() => setScreen('gym-browser')} />;
-      case 'gym-browser':  return <GymBrowser onBack={() => setScreen(groupId ? 'group' : 'home')} onJoined={() => setScreen('home')} onCreated={() => setScreen('group')} />;
-      case 'leaderboard':  return <Leaderboard onBack={() => setScreen(groupId ? 'group' : 'home')} />;
-      case 'pot-tracker':  return <PotTracker onBack={() => setScreen('home')} />;
-      case 'progress':     return <Progress onGymSpace={() => setScreen('gym-space')} />;
-      case 'gym-space':    return <GymSpace onBack={() => setScreen('progress')} />;
-      case 'profile':      return <ProfileView onSettings={() => setScreen('settings')} onSquadMap={() => setScreen('squad-map')} />;
-      case 'squad-map':    return <SquadMapScreen onBack={() => setScreen('profile')} />;
-      case 'settings':     return <AppSettings onBack={() => setScreen('profile')} />;
-      default:             return <Home onCheckIn={() => setScreen('check-in')} onPlan={() => setScreen('plan-week')} onPot={() => setScreen('pot-tracker')} onGroup={() => setScreen('group')} />;
+      case 'onboarding': return <Onboarding onDone={() => setScreen('gym-browser')} />;
+      case 'home': return <Home onCheckIn={() => setScreen('check-in')} onPlan={() => setScreen('plan-week')} onPot={() => setScreen('pot-tracker')} onGroup={() => setScreen('group')} />;
+      case 'check-in': return <CheckIn onClose={() => setScreen('home')} />;
+      case 'plan-week': return <PlanWeek onDone={() => setScreen('home')} onCancel={() => setScreen('home')} />;
+      case 'group': return groupId
+        ? <GroupView onBrowse={() => setScreen('gym-browser')} onLeaderboard={() => setScreen('leaderboard')} />
+        : <NoGroup onBrowse={() => setScreen('gym-browser')} />;
+      case 'gym-browser': return <GymBrowser onBack={() => setScreen(groupId ? 'group' : 'home')} onJoined={() => setScreen('home')} onCreated={() => setScreen('group')} />;
+      case 'leaderboard': return <Leaderboard onBack={() => setScreen(groupId ? 'group' : 'home')} />;
+      case 'pot-tracker': return <PotTracker onBack={() => setScreen('home')} />;
+      case 'progress': return <Progress onGymSpace={() => setScreen('gym-space')} />;
+      case 'gym-space': return <GymSpace onBack={() => setScreen('progress')} />;
+      case 'profile': return <ProfileView onSettings={() => setScreen('settings')} onSquadMap={() => setScreen('squad-map')} />;
+      case 'squad-map': return <SquadMapScreen onBack={() => setScreen('profile')} />;
+      case 'settings': return <AppSettings onBack={() => setScreen('profile')} />;
+      default: return <Home onCheckIn={() => setScreen('check-in')} onPlan={() => setScreen('plan-week')} onPot={() => setScreen('pot-tracker')} onGroup={() => setScreen('group')} />;
     }
   };
 
@@ -121,7 +121,7 @@ function GymJamApp() {
 
   // First-run onboarding: the welcome wizard shows once the user is in the main
   // shell (post account-setup); the coach-mark tour follows once the wizard is
-  // done, deferred until the user is actually on Home — that's where its first
+  // done, deferred until the user is actually on Home-that's where its first
   // targets live. Both flags are null until AsyncStorage resolves, which keeps
   // everything hidden until we know.
   const showWizard = showTabs && hasSeenWizard === false;
@@ -130,7 +130,7 @@ function GymJamApp() {
   return (
     <View style={styles.fill}>
       <SafeAreaView style={styles.root} edges={fullBleed ? [] : ['top']}>
-        {/* Persistent ELO bar — a fixed top header, part of the layout (not an
+        {/* Persistent ELO bar-a fixed top header, part of the layout (not an
             overlay), so it stays put while the content below scrolls. */}
         {showTabs && !fullBleed && (
           <View style={styles.statHeader}>
@@ -145,10 +145,10 @@ function GymJamApp() {
 
         {showTabs && (
           <View style={styles.tabBar}>
-            <Tab label="Home"     icon="home"          active={screen === 'home'} onPress={() => setScreen('home')} />
-            <Tab label="Group"    icon="group"         active={['group', 'gym-browser', 'leaderboard', 'pot-tracker'].includes(screen)} onPress={() => setScreen('group')} targetRef={groupTabTarget} />
-            <Tab label="Progress" icon="trending-up"   active={['progress', 'gym-space'].includes(screen)} onPress={() => setScreen('progress')} targetRef={progressTabTarget} />
-            <Tab label="Profile"  icon="person"        active={['profile', 'squad-map'].includes(screen)} onPress={() => setScreen('profile')} targetRef={profileTabTarget} />
+            <Tab label="Home" icon="home" active={screen === 'home'} onPress={() => setScreen('home')} />
+            <Tab label="Group" icon="group" active={['group', 'gym-browser', 'leaderboard', 'pot-tracker'].includes(screen)} onPress={() => setScreen('group')} targetRef={groupTabTarget} />
+            <Tab label="Progress" icon="trending-up" active={['progress', 'gym-space'].includes(screen)} onPress={() => setScreen('progress')} targetRef={progressTabTarget} />
+            <Tab label="Profile" icon="person" active={['profile', 'squad-map'].includes(screen)} onPress={() => setScreen('profile')} targetRef={profileTabTarget} />
           </View>
         )}
       </SafeAreaView>
@@ -188,7 +188,7 @@ const styles = StyleSheet.create({
   splashCenter: { alignItems: 'center' },
   splashBrand: { fontFamily: FONT.extra, fontSize: 44, color: C.ink, letterSpacing: -1.2 },
 
-  // Floating ELO badge — absolutely positioned so it overlays the top-right
+  // Floating ELO badge-absolutely positioned so it overlays the top-right
   // corner without adding any vertical buffer to the screen, and stays put
   // while content scrolls underneath.
   statHeader: {

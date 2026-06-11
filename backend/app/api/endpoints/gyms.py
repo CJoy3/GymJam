@@ -40,7 +40,7 @@ def resolve_gym(payload: GymResolve) -> dict:
     }).execute()
     if inserted.data:
         return inserted.data[0]
-    # Lost a race (unique-index conflict) — re-read by osm_id.
+    # Lost a race (unique-index conflict)-re-read by osm_id.
     again = (
         sb.table("gyms").select("*").eq("osm_id", payload.osm_id).limit(1).execute()
     ).data or []
@@ -51,14 +51,14 @@ def resolve_gym(payload: GymResolve) -> dict:
 
 @router.get("/leaderboard", response_model=list[GymLeaderboardEntry])
 def gyms_leaderboard() -> list[dict]:
-    """Gyms ranked by their members' ELO — exactly like the group leaderboard,
+    """Gyms ranked by their members' ELO-exactly like the group leaderboard,
     but membership is each user's **home gym** (`users.gym_id`). Returns total and
     average ELO so the client can sort either way; only gyms with members appear."""
     count, elo_total, active = _crowd_stats()
     if not count:
         return []
     # Only load the gyms that actually have members (bounded by the user base),
-    # never the whole table — PostgREST caps selects at ~1000 rows and the gyms
+    # never the whole table-PostgREST caps selects at ~1000 rows and the gyms
     # table now holds the full UK chain list.
     sb = get_supabase()
     gyms = (sb.table("gyms").select("id, name").in_("id", list(count.keys())).execute()).data or []
@@ -76,8 +76,8 @@ def gyms_leaderboard() -> list[dict]:
 
 
 def _crowd_stats() -> tuple[dict[str, int], dict[str, int], dict[str, int]]:
-    """Per-gym crowd counters — (member_count, elo_total, active_today) keyed by
-    gym id — computed from users + this week's plans. Bounded by the number of
+    """Per-gym crowd counters-(member_count, elo_total, active_today) keyed by
+    gym id-computed from users + this week's plans. Bounded by the number of
     users (not gyms), so it's safe against the gyms table's size."""
     sb = get_supabase()
     users = (sb.table("users").select("id, gym_id, elo").execute()).data or []
@@ -161,7 +161,7 @@ def gyms_map(
 
     if rows:
         count, elo_total, active = _crowd_stats()
-        # Nearest-first to the viewport centre, then capped — a dense area returns
+        # Nearest-first to the viewport centre, then capped-a dense area returns
         # the closest gyms rather than an arbitrary slice.
         rows.sort(key=lambda g: abs(g["latitude"] - cy) + abs(g["longitude"] - cx))
         out: list[dict] = []
@@ -179,7 +179,7 @@ def gyms_map(
             })
         return out
 
-    # Pre-seed safety net: nothing stored in this box yet — fetch live from OSM.
+    # Pre-seed safety net: nothing stored in this box yet-fetch live from OSM.
     try:
         osm = fetch_gyms((s, w, n, e))
     except Exception:

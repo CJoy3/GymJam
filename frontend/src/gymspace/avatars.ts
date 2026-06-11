@@ -1,5 +1,5 @@
 /**
- * Memoji-style pixel avatars — 8 characterful 16×16 heads (people + critters),
+ * Memoji-style pixel avatars-8 characterful 16×16 heads (people + critters),
  * painted in the warm theme palette (`PX` in pixel.tsx). Drawn on a grid so
  * widths are always correct. Keep the count at 8; ids a1..a8 are stable so a
  * saved choice keeps mapping to the same avatar.

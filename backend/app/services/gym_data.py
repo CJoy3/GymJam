@@ -2,7 +2,7 @@
 
 Gyms are pulled live from OSM rather than hand-entered lat/lng. The query is
 bounded to a caller-supplied viewport (clamped to a UK-wide box) so the map works
-anywhere in the country, not just London — pan to Manchester, "Search this area",
+anywhere in the country, not just London-pan to Manchester, "Search this area",
 and you get Manchester gyms. Each viewport's result is cached in-process for a few
 hours since gym locations rarely change and Overpass is rate-limited; on any
 failure callers fall back to whatever is in our own `gyms` table.
@@ -20,7 +20,7 @@ UK_BBOX = (49.8, -8.65, 60.9, 1.78)
 # Default viewport when the caller doesn't supply one (Greater London).
 LONDON_BBOX = (51.28, -0.51, 51.69, 0.34)
 
-# Public Overpass instances are frequently overloaded — single-server requests
+# Public Overpass instances are frequently overloaded-single-server requests
 # 504 (timeout) or 429 (rate-limit) intermittently, which made the map "hit or
 # miss" outside London. We try mirrors in turn so one failing falls through to the
 # next. overpass-api.de is the primary (fast + full planet coverage); the others
@@ -88,7 +88,7 @@ def _is_established(*values: str | None) -> bool:
 # Established gyms that are genuinely missing from OpenStreetMap. OSM is
 # volunteer-mapped, so some real, well-known branches simply aren't in it (e.g.
 # The Gym Group's Acton branch in Royale Leisure Park). We merge these curated
-# entries — with coordinates geocoded from each branch's real address — into the
+# entries-with coordinates geocoded from each branch's real address-into the
 # live OSM results and de-duplicate, so recognisable gyms always show even where
 # OSM has a gap. Only add a branch here if you have its real coordinates; a wrong
 # pin is worse than a missing one. Extend as further gaps are reported.
@@ -108,7 +108,7 @@ def _within(bbox: tuple[float, float, float, float], lat: float, lon: float) -> 
 
 
 def _metres_apart(a_lat: float, a_lon: float, b_lat: float, b_lon: float) -> float:
-    """Cheap planar distance in metres — accurate enough at city scale."""
+    """Cheap planar distance in metres-accurate enough at city scale."""
     dlat = (a_lat - b_lat) * 111_000
     dlon = (a_lon - b_lon) * 111_000 * math.cos(math.radians(a_lat))
     return math.hypot(dlat, dlon)
@@ -148,7 +148,7 @@ def _build_query(bbox: tuple[float, float, float, float]) -> str:
     # brands in Python (`_is_established`). A server-side regex filter is heavier
     # for Overpass and made it 504 far more often; a plain index-based bbox query
     # is much more likely to succeed. The `out` cap is high so the brand filter
-    # never loses a gym — a 5-mile viewport stays well under it even in London.
+    # never loses a gym-a 5-mile viewport stays well under it even in London.
     return (
         "[out:json][timeout:20];"
         "("
@@ -172,7 +172,7 @@ def _query_overpass(query: str) -> dict:
             )
             with urllib.request.urlopen(req, timeout=_REQUEST_TIMEOUT) as resp:
                 return json.loads(resp.read().decode("utf-8"))
-        except Exception as exc:  # noqa: BLE001 — try the next mirror on any failure
+        except Exception as exc:  # noqa: BLE001-try the next mirror on any failure
             last_err = exc
             continue
     raise last_err or RuntimeError("all Overpass mirrors failed")

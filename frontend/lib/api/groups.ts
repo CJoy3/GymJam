@@ -39,7 +39,7 @@ export interface Pot {
   contributor_count: number;
 }
 
-/** All groups on the platform — groups are global (not filtered by gym). */
+/** All groups on the platform-groups are global (not filtered by gym). */
 export const listAllGroups = () => apiGet<GroupSummary[]>('/groups');
 
 export const listGroupsAtGym = (gym_id: string) =>
@@ -117,7 +117,7 @@ export interface SquadMapMember {
   is_live?: boolean;
 }
 
-/** Group members located at their home gyms — for the Squad Map. */
+/** Group members located at their home gyms-for the Squad Map. */
 export const getSquadMap = (group_id: string) =>
   apiGet<SquadMapMember[]>(`/groups/${group_id}/squad-map`);
 

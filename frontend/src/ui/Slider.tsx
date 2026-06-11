@@ -8,7 +8,7 @@ import { C, RADIUS } from '../theme/tokens';
  * so it needs no native slider module.
  *
  * Dragging maps the touch's *absolute* screen X (gestureState.moveX) against the
- * track's measured window position — not `locationX`, which is relative to
+ * track's measured window position-not `locationX`, which is relative to
  * whichever child view (thumb/fill) the finger is over and makes the value jump.
  */
 export function Slider({

@@ -71,7 +71,7 @@ def _fill_week(days: list[dict] | None) -> list[dict]:
 
 def list_all(current_user_id: str) -> list[dict]:
     """Return every group on the platform, enriched with member_count + my
-    membership state. Groups are global — they are no longer filtered by gym."""
+    membership state. Groups are global-they are no longer filtered by gym."""
     sb = get_supabase()
     groups = (
         sb.table("groups")
@@ -128,7 +128,7 @@ def get_group(group_id: str) -> dict:
 
 
 def update_stake_type(group_id: str, user_id: str, stake_type: str) -> dict:
-    """Switch a private group's pot between ELO and money — leader only.
+    """Switch a private group's pot between ELO and money-leader only.
 
     The change only takes effect from NEXT week: the current week keeps the
     currency it started with. We freeze the current week's pot_conditions to its
@@ -248,7 +248,7 @@ def create_group(
     # the leader's chosen rules. After the practice week it continues as usual.
     #
     # If seeding fails the group would otherwise live without conditions and
-    # the next pot read would silently install defaults (3, 100) — so we roll
+    # the next pot read would silently install defaults (3, 100)-so we roll
     # back the group + membership rows and surface the underlying error.
     from app.services import pot as pot_svc
     from app.core.time_utils import current_day_of_week, current_week_start, next_week_start
@@ -398,7 +398,7 @@ def list_members(group_id: str) -> list[dict]:
 
 
 def squad_map(group_id: str, current_user_id: str) -> list[dict]:
-    """Each member of the group, located at their home gym — for plotting on
+    """Each member of the group, located at their home gym-for plotting on
     the Squad Map. Members without a home gym (or an un-geocoded gym) are
     still returned with null coordinates so the client can list them
     separately rather than dropping them silently."""

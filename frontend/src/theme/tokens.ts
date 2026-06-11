@@ -1,4 +1,4 @@
-// GymJam design system — warm dark "sanctuary" aesthetic.
+// GymJam design system-warm dark "sanctuary" aesthetic.
 // Deep espresso surfaces, cream high-contrast primary, restrained accents
 // (peach for warmth/streaks, sage for done/on-track).
 //
@@ -46,7 +46,7 @@ export const C = {
 export const RADIUS = { xs: 8, sm: 12, md: 16, lg: 20, xl: 28, xxl: 36, pill: 999 };
 export const SPACE  = { xs: 4, sm: 8, md: 12, lg: 16, xl: 22, xxl: 32 };
 
-// Font family aliases — wired to Plus Jakarta Sans variants loaded in _layout.tsx.
+// Font family aliases-wired to Plus Jakarta Sans variants loaded in _layout.tsx.
 export const FONT = {
   regular:  'PlusJakartaSans_400Regular',
   medium:   'PlusJakartaSans_500Medium',

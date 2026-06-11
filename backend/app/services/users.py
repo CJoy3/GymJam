@@ -130,7 +130,7 @@ def set_tag(user_id: str, tag: str) -> dict:
     The 1-change limit only kicks in AFTER the account is fully set up. Account
     setup requires picking both a tag and a home gym, so we treat "has a home
     gym" as the marker that setup is complete. During setup (no gym yet) the user
-    can pick/adjust their tag as many times as they like — only once the account
+    can pick/adjust their tag as many times as they like-only once the account
     exists does the tag become limited to a single change.
     """
     clean = tag.strip().lower()

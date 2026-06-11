@@ -1,5 +1,5 @@
 /**
- * Hand-rolled coach-marks ("spotlight tour") — no external tour library.
+ * Hand-rolled coach-marks ("spotlight tour")-no external tour library.
  *
  * Pieces:
  *  - `CoachMarksProvider` + `useCoachTarget(id)`: a ref registry. Any component
@@ -59,7 +59,7 @@ export function useCoachTarget(id: string): (node: View | null) => void {
 const SPOT_PAD = SPACE.sm;   // breathing room around the highlighted element
 const MEASURE_RETRIES = 20;  // ~1s before an unmeasurable step is skipped
 const RETRY_MS = 50;
-// Dim + on-cream text tones derived from C.bg / C.primaryFg — the same rgba
+// Dim + on-cream text tones derived from C.bg / C.primaryFg-the same rgba
 // treatment the cream cards use elsewhere (see styles.eyebrowOnCream).
 const DIM = 'rgba(27,23,20,0.78)';
 const ON_CREAM_SOFT = 'rgba(27,23,20,0.55)';
@@ -83,7 +83,7 @@ export function CoachMarksOverlay({
 
   const goNext = useCallback(() => {
     // Deliberately keep the current spotlight + tooltip on screen while the
-    // next target measures — clearing them caused a visible blank-dim hiccup
+    // next target measures-clearing them caused a visible blank-dim hiccup
     // between steps. The new rect lands a frame or two later and the spotlight
     // jumps straight to it.
     if (index >= steps.length - 1) onDone();
@@ -100,7 +100,7 @@ export function CoachMarksOverlay({
     const retryOrSkip = () => {
       tries += 1;
       if (tries >= MEASURE_RETRIES) {
-        if (!cancelled) goNext(); // target never appeared — skip the step
+        if (!cancelled) goNext(); // target never appeared-skip the step
       } else {
         setTimeout(attempt, RETRY_MS);
       }
@@ -142,7 +142,7 @@ export function CoachMarksOverlay({
   return (
     <View ref={rootRef} style={StyleSheet.absoluteFill} onLayout={onLayout}>
       {/* Swallow every touch so the app underneath is inert during the tour. */}
-      <Pressable style={StyleSheet.absoluteFill} onPress={() => {}} accessible={false} />
+      <Pressable style={StyleSheet.absoluteFill} onPress={() => { }} accessible={false} />
 
       {cutout && size.w > 0 && (
         <View style={StyleSheet.absoluteFill} pointerEvents="none">

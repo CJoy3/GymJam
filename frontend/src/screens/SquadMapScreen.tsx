@@ -15,7 +15,7 @@ const RADIUS_MILES = 5; // only ever load gyms within this radius of the map's f
 const DEFAULT_CENTER = { lat: 51.5072, lng: -0.1276 }; // central London, used when the squad isn't located
 
 /** Where to centre the initial gym fetch: the squad's centroid, else central
- *  London. (When a private current location is known it takes priority — see
+ *  London. (When a private current location is known it takes priority-see
  *  the caller.) */
 function squadCenter(members: SquadMapMember[]): { lat: number; lng: number } {
   const pts = members.filter((m) => m.latitude != null && m.longitude != null);
@@ -27,13 +27,13 @@ function squadCenter(members: SquadMapMember[]): { lat: number; lng: number } {
   return { lat, lng };
 }
 
-/* Squad Map — group members on a real map, by their home gym + today's status */
+/* Squad Map-group members on a real map, by their home gym + today's status */
 
 export function SquadMapScreen({ onBack }: { onBack: () => void }) {
   const { groupId, groupName, groupMembers, todayDow, nudge, nudgeCooldowns, myLocation, refreshMyLocation } = useAppState();
 
   // My LIVE position while the map is open. Tracked continuously so my pin follows
-  // me as I move — and, crucially, so a stale stored fix (e.g. "you were at the
+  // me as I move-and, crucially, so a stale stored fix (e.g. "you were at the
   // gym earlier") never pins me to the wrong place. Device-only; never uploaded.
   const [liveLoc, setLiveLoc] = useState<Coords | null>(null);
   useEffect(() => {
@@ -46,7 +46,7 @@ export function SquadMapScreen({ onBack }: { onBack: () => void }) {
     refreshMyLocation().then((c) => { if (c && !cancelled) setLiveLoc(c); });
     // 3) Keep watching so the pin follows you as you move. Ignore sub-~24m jitter
     //    (returning the previous value makes React bail) so standing still doesn't
-    //    re-render the live pin every GPS tick — that churn leaked the native
+    //    re-render the live pin every GPS tick-that churn leaked the native
     //    marker view and crashed the map over a long session.
     let sub: { remove: () => void } | null = null;
     watchLocation((c) =>
@@ -59,8 +59,8 @@ export function SquadMapScreen({ onBack }: { onBack: () => void }) {
     // Only on mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  // My live position (fresh fix + ongoing watch). Stays null — so my pin falls
-  // back to my home gym and the map frames the squad — until we have a real fix;
+  // My live position (fresh fix + ongoing watch). Stays null-so my pin falls
+  // back to my home gym and the map frames the squad-until we have a real fix;
   // never the stale stored value.
   const meLoc = liveLoc;
   const [members, setMembers] = useState<SquadMapMember[]>([]);
@@ -82,11 +82,11 @@ export function SquadMapScreen({ onBack }: { onBack: () => void }) {
   }, [groupId, myLocation]);
   useEffect(() => { load(); }, [load]);
 
-  // "Search this area" — refetch gyms within 5 miles of the new viewport's centre.
+  // "Search this area"-refetch gyms within 5 miles of the new viewport's centre.
   const searchArea = useCallback((bounds: GymMapBounds) => {
     const lat = (bounds.south + bounds.north) / 2;
     const lng = (bounds.west + bounds.east) / 2;
-    getGymsMap(boundsAround(lat, lng, RADIUS_MILES)).then(setGyms).catch(() => {});
+    getGymsMap(boundsAround(lat, lng, RADIUS_MILES)).then(setGyms).catch(() => { });
   }, []);
 
   // Memoised so it's a STABLE object across the app's background re-renders (the
@@ -102,7 +102,7 @@ export function SquadMapScreen({ onBack }: { onBack: () => void }) {
   }, [groupMembers, todayDow]);
 
   // Plot MYSELF at my real current location, not my home gym. myLocation is the
-  // PRIVATE device fix — used only to draw my own pin here; it is never uploaded,
+  // PRIVATE device fix-used only to draw my own pin here; it is never uploaded,
   // so teammates still only see me live if I opt into public sharing. (See the
   // location-privacy split in lib/location.ts.)
   const displayMembers = useMemo(() => {

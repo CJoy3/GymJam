@@ -41,7 +41,7 @@ async function request<T>(
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
   } catch {
-    // fetch only rejects on network failure (DNS, offline, CORS) — surface a
+    // fetch only rejects on network failure (DNS, offline, CORS)-surface a
     // clean status-0 ApiError so callers can show a friendly "network" message
     // instead of a raw TypeError. See mappers.userFacingMessage.
     throw new ApiError('Network request failed', 0);
@@ -49,7 +49,7 @@ async function request<T>(
   const text = await res.text();
   if (!res.ok) {
     // Don't propagate server-fault bodies (stack traces / "Internal Server
-    // Error") to the UI — keep the status so the UI layer can genericise 5xx.
+    // Error") to the UI-keep the status so the UI layer can genericise 5xx.
     const detail = res.status >= 500 ? `HTTP ${res.status}` : extractDetail(text) || `HTTP ${res.status}`;
     throw new ApiError(detail, res.status);
   }

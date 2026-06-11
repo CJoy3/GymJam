@@ -9,7 +9,7 @@ import { useAppState } from '../state/AppState';
 import { GymScene, ALL_UNLOCKS, TIERS, SLOT_BY_ID } from '../gymspace';
 import { pageWrap, styles } from './_shared';
 
-/* Gym space — the expanded, editable pixel-art scene + unlock collection */
+/* Gym space-the expanded, editable pixel-art scene + unlock collection */
 
 export function GymSpace({ onBack }: { onBack: () => void }) {
   const { elo, roomItems, placeRoomItem } = useAppState();
@@ -81,7 +81,7 @@ export function GymSpace({ onBack }: { onBack: () => void }) {
           </Card>
         </FadeInItem>
 
-        {/* Equipment — tap an unlocked item to place / remove it. */}
+        {/* Equipment-tap an unlocked item to place / remove it. */}
         <FadeInItem delay={280} style={{ marginTop: 24 }}>
           <View style={[styles.rowBetween, { marginBottom: 12 }]}>
             <Eyebrow>Equipment</Eyebrow>

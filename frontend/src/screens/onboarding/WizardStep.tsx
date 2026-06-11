@@ -1,7 +1,7 @@
 /**
  * One step of the first-run welcome wizard: eyebrow + title + body, an optional
  * illustration block, progress dots, and the Continue / Skip footer. Pure
- * layout — the overlay owns step state and persistence.
+ * layout-the overlay owns step state and persistence.
  */
 import React, { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';

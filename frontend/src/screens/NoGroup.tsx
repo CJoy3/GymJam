@@ -7,7 +7,7 @@ import { Btn, FadeInItem, H1, Sub } from '../ui/components';
 import { BlobBackground } from '../ui/Blob';
 import { styles } from './_shared';
 
-/* NoGroup — empty state */
+/* NoGroup-empty state */
 
 export function NoGroup({ onBrowse }: { onBrowse: () => void }) {
   return (

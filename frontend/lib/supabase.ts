@@ -18,7 +18,7 @@ async function initialize(): Promise<SupabaseClient> {
     auth: {
       storage: AsyncStorage,
       autoRefreshToken: true,
-      // Don't persist the session across app launches — the app should ALWAYS
+      // Don't persist the session across app launches-the app should ALWAYS
       // open on the sign-in / create-account page. The session lives in memory
       // for the running app (so navigation works after logging in), but a cold
       // start has no session and therefore lands on Login.

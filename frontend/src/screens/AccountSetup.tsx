@@ -24,7 +24,7 @@ function useDebounce<T>(value: T, delay: number): T {
   return debounced;
 }
 
-// A selectable home-gym option — either a curated DB gym (has a real id) or a
+// A selectable home-gym option-either a curated DB gym (has a real id) or a
 // live map (OSM) gym that must be resolved into a real gym row when chosen.
 type GymOption = {
   key: string;
@@ -65,7 +65,7 @@ export function AccountSetup({ onDone }: { onDone: () => void }) {
   }, [myLocation, nearby, fetchNearby]);
 
   // Grant the PRIVATE device location, then pull real nearby gyms from the map.
-  // Stays on-device — not the public squad-map sharing.
+  // Stays on-device-not the public squad-map sharing.
   const useMyLocation = async () => {
     setLocating(true);
     try {
@@ -127,14 +127,14 @@ export function AccountSetup({ onDone }: { onDone: () => void }) {
     setSaving(true);
     try {
       // Every gym on the map is a real `gyms` row now (seeded from OpenStreetMap),
-      // so the picked option already carries its id — no resolve round-trip.
+      // so the picked option already carries its id-no resolve round-trip.
       await Promise.all([
         updateTag(tag.trim()),
         setGym(selected.gymId),
       ]);
       onDone();
     } catch (e: unknown) {
-      // Failures stay silent (no error popup) — log only for debugging.
+      // Failures stay silent (no error popup)-log only for debugging.
       if (__DEV__) console.warn('Account setup failed', userFacingMessage(e), e);
     } finally {
       setSaving(false);
@@ -160,7 +160,7 @@ export function AccountSetup({ onDone }: { onDone: () => void }) {
           <Eyebrow>Welcome to GymJam</Eyebrow>
           <H1 style={{ marginTop: 6 }}>Set up your account</H1>
           <Sub style={{ marginTop: 8 }}>
-            Choose a unique tag and home gym — you can always change your gym later.
+            Choose a unique tag and home gym-you can always change your gym later.
           </Sub>
         </FadeInItem>
 
@@ -173,7 +173,7 @@ export function AccountSetup({ onDone }: { onDone: () => void }) {
               </View>
               <View style={{ flex: 1 }}>
                 <Eyebrow>Your tag</Eyebrow>
-                <Sub style={{ marginTop: 2 }}>Your unique handle — visible to your group.</Sub>
+                <Sub style={{ marginTop: 2 }}>Your unique handle-visible to your group.</Sub>
               </View>
             </View>
 
@@ -211,7 +211,7 @@ export function AccountSetup({ onDone }: { onDone: () => void }) {
             {hasNearby ? 'Choose your home gym · gyms near you' : myLocation ? 'Choose your home gym · nearest first' : 'Choose your home gym'}
           </Eyebrow>
 
-          {/* Use your location to find real gyms near you. Private — on-device only. */}
+          {/* Use your location to find real gyms near you. Private-on-device only. */}
           <Pressable
             style={[localS.locBtn, myLocation && localS.locBtnOn]}
             onPress={useMyLocation}
@@ -226,11 +226,11 @@ export function AccountSetup({ onDone }: { onDone: () => void }) {
               </>
             )}
           </Pressable>
-          <Text style={localS.locHint}>Private — used only to find nearby gyms, never shared.</Text>
+          <Text style={localS.locHint}>Private-used only to find nearby gyms, never shared.</Text>
 
           {myLocation && nearby !== null && nearby.length === 0 && !loadingNearby && (
             <Text style={[localS.locHint, { marginTop: 10 }]}>
-              No gyms found nearby — pick one of ours below for now.
+              No gyms found nearby-pick one of ours below for now.
             </Text>
           )}
 

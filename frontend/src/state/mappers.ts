@@ -111,7 +111,7 @@ export function reportError(action: string, e: unknown): void {
 /**
  * Never surface raw server internals to the user. Server faults (HTTP 5xx) and
  * network failures collapse to a generic line; only intentional, user-actionable
- * client errors (4xx — e.g. "tag already taken", "already requested") keep their
+ * client errors (4xx-e.g. "tag already taken", "already requested") keep their
  * specific message. This is the frontend half of "don't show internal server
  * errors"; the backend also masks unhandled 500s (see app/main.py).
  */
@@ -121,6 +121,6 @@ export function userFacingMessage(e: unknown): string {
     if (e.status === 0) return 'Network error. Check your connection and try again.';
     return e.message || 'Something went wrong. Please try again.';
   }
-  // Non-API errors are almost always fetch/network failures — keep them generic.
+  // Non-API errors are almost always fetch/network failures-keep them generic.
   return 'Something went wrong. Please try again.';
 }

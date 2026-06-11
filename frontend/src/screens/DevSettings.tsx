@@ -178,9 +178,9 @@ export function AppSettings({ onBack }: { onBack: () => void }) {
                   <Text style={valueText}>#{tag ?? '—'}</Text>
                   {!canChangeTag
                     ? <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
-                        <MaterialIcons name="lock" size={12} color={C.mutedFg} />
-                        <Text style={hint}>Tag is locked</Text>
-                      </View>
+                      <MaterialIcons name="lock" size={12} color={C.mutedFg} />
+                      <Text style={hint}>Tag is locked</Text>
+                    </View>
                     : <Text style={[hint, { marginTop: 4 }]}>1 change remaining</Text>
                   }
                 </View>
@@ -272,9 +272,9 @@ export function AppSettings({ onBack }: { onBack: () => void }) {
             <Eyebrow style={{ marginBottom: 16 }}>Simulated Clock</Eyebrow>
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <ClockBtn label="← Week" loading={steppingClock === 'prevWeek'} disabled={!!steppingClock} onPress={step('prevWeek', goToPreviousWeek)} />
-              <ClockBtn label="← Day"  loading={steppingClock === 'prevDay'}  disabled={!!steppingClock} onPress={step('prevDay',  goToPreviousDay)}  />
-              <ClockBtn label="Day →"  loading={steppingClock === 'nextDay'}  disabled={!!steppingClock} onPress={step('nextDay',  goToNextDay)}       />
-              <ClockBtn label="Week →" loading={steppingClock === 'nextWeek'} disabled={!!steppingClock} onPress={step('nextWeek', goToNextWeek)}       />
+              <ClockBtn label="← Day" loading={steppingClock === 'prevDay'} disabled={!!steppingClock} onPress={step('prevDay', goToPreviousDay)} />
+              <ClockBtn label="Day →" loading={steppingClock === 'nextDay'} disabled={!!steppingClock} onPress={step('nextDay', goToNextDay)} />
+              <ClockBtn label="Week →" loading={steppingClock === 'nextWeek'} disabled={!!steppingClock} onPress={step('nextWeek', goToNextWeek)} />
             </View>
           </Card>
         </FadeInItem>
@@ -305,14 +305,14 @@ export function AppSettings({ onBack }: { onBack: () => void }) {
           <Card padding={SPACE.xl}>
             <Eyebrow style={{ marginBottom: 4 }}>Onboarding tour</Eyebrow>
             <Text style={subText}>
-              Dev only — clears the seen flags so the welcome wizard replays, with the coach marks following on Home.
+              Dev only-clears the seen flags so the welcome wizard replays, with the coach marks following on Home.
             </Text>
             <Btn
               label="Reset onboarding tour"
               variant="ghost"
               onPress={() => {
                 resetOnboarding();
-                showToast('Onboarding reset — the tour will replay', 'success');
+                showToast('Onboarding reset-the tour will replay', 'success');
               }}
             />
           </Card>

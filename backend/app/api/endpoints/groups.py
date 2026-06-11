@@ -21,7 +21,7 @@ router = APIRouter()
 
 @router.get("", response_model=list[GroupSummary])
 def list_all_groups(current: dict = Depends(get_current_user)) -> list[dict]:
-    """All groups on the platform — global, not filtered by the user's home gym."""
+    """All groups on the platform-global, not filtered by the user's home gym."""
     return groups_svc.list_all(current["id"])
 
 
@@ -110,7 +110,7 @@ def list_group_members(group_id: str) -> list[dict]:
 
 @router.get("/{group_id}/squad-map", response_model=list[SquadMapMember])
 def get_squad_map(group_id: str, current: dict = Depends(get_current_user)) -> list[dict]:
-    """Members of the group plotted at their home gyms — the 'Squad Map'."""
+    """Members of the group plotted at their home gyms-the 'Squad Map'."""
     return groups_svc.squad_map(group_id, current["id"])
 
 

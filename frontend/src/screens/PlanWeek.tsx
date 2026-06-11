@@ -12,7 +12,7 @@ import { showToast } from '../ui/toast';
 import { useAppState, DayStatus } from '../state/AppState';
 import { LABELS, pageWrap, styles } from './_shared';
 
-/* Plan next week — local state + PotConditionsEditor */
+/* Plan next week-local state + PotConditionsEditor */
 
 export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: () => void }) {
   const {
@@ -23,13 +23,13 @@ export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: (
   const isMoney = nextStakeType === 'money';
   const [changingStakeType, setChangingStakeType] = useState(false);
   const canChangeStakeType = isLeader && joinType === 'request';
-  // The pot type, like the pot rules, can only be changed on Monday — after
+  // The pot type, like the pot rules, can only be changed on Monday-after
   // that it's locked in for next week.
   const isMonday = todayDow === 0;
   // For money groups stake_per_miss is pence; show it as £. For ELO it's points.
   const fmtStake = (amount: number) =>
     isMoney ? `£${(amount / 100).toFixed(2)}` : `${amount.toLocaleString()} ELO`;
-  // The rule setter rotates weekly — only the setter for next week may edit it.
+  // The rule setter rotates weekly-only the setter for next week may edit it.
   const isNextSetter = !!potNext && potNext.setter_user_id != null && potNext.setter_user_id === userId;
   const [local, setLocal] = useState<DayStatus['state'][]>(() => nextWeek.map((d) => d.state));
   const [saving, setSaving] = useState(false);
@@ -86,7 +86,7 @@ export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: (
             </Pressable>
           </View>
           <Sub style={{ marginTop: 10 }}>
-            Pledging is optional. Pick up to {required} {required === 1 ? 'day' : 'days'} — edit any time before Sunday.
+            Pledging is optional. Pick up to {required} {required === 1 ? 'day' : 'days'}-edit any time before Sunday.
           </Sub>
         </FadeInItem>
 
@@ -127,13 +127,13 @@ export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: (
                 <View style={{ flex: 1 }}>
                   <H3>Pot type</H3>
                   <Sub style={{ marginTop: 2 }}>
-                    {isMonday ? 'Takes effect from next week' : 'Locked — can only be changed on Monday'}
+                    {isMonday ? 'Takes effect from next week' : 'Locked-can only be changed on Monday'}
                   </Sub>
                 </View>
                 {!isMonday && <MaterialIcons name="lock" size={18} color={C.mutedFg} />}
               </View>
               {isMonday ? (
-                /* Editable — Monday only */
+                /* Editable-Monday only */
                 <View style={{ flexDirection: 'row', gap: 8 }}>
                   <Pressable
                     style={[stakeToggleBtn, !isMoney && stakeToggleBtnOn]}
@@ -163,7 +163,7 @@ export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: (
                   </Pressable>
                 </View>
               ) : (
-                /* Locked — read-only display of next week's chosen type */
+                /* Locked-read-only display of next week's chosen type */
                 <View style={[styles.input, { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 0 }]}>
                   <MaterialIcons
                     name={isMoney ? 'account-balance-wallet' : 'emoji-events'}
@@ -209,7 +209,7 @@ export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: (
               <Sub>{otherMembers.length} {otherMembers.length === 1 ? 'member' : 'members'}</Sub>
             </View>
             <Sub style={{ marginBottom: 12 }}>
-              Days you've picked are highlighted across the group — that's everyone you're joining.
+              Days you've picked are highlighted across the group-that's everyone you're joining.
             </Sub>
             <View style={{ gap: 10 }}>
               {otherMembers.map((m) => (
@@ -257,19 +257,19 @@ function MemberPlanRow({ days, highlightDows }: { days: DayStatus[]; highlightDo
         const isMissed = d.state === 'missed';
         const bg = matched && isPlanned ? C.primary
           : isDone ? C.success
-          : isPlanned ? 'transparent'
-          : isMissed ? C.dangerSoft
-          : 'transparent';
+            : isPlanned ? 'transparent'
+              : isMissed ? C.dangerSoft
+                : 'transparent';
         const fg = matched && isPlanned ? C.primaryFg
           : isPlanned ? C.success
-          : isDone ? C.primaryFg
-          : isMissed ? C.danger
-          : C.mutedFg;
+            : isDone ? C.primaryFg
+              : isMissed ? C.danger
+                : C.mutedFg;
         const border = matched && isPlanned ? C.primary
           : isPlanned ? C.success
-          : isDone ? C.success
-          : isMissed ? C.dangerSoft
-          : C.border;
+            : isDone ? C.success
+              : isMissed ? C.dangerSoft
+                : C.border;
         return (
           <View
             key={i}
@@ -296,7 +296,7 @@ function MemberPlanRow({ days, highlightDows }: { days: DayStatus[]; highlightDo
 
 /**
  * Editor for next-week pot rules, shown only to the current rotational rule
- * setter. Only editable on Monday — after that the conditions are locked.
+ * setter. Only editable on Monday-after that the conditions are locked.
  */
 function PotConditionsEditor({
   potNext, onSave, isMonday, isMoney,
@@ -347,7 +347,7 @@ function PotConditionsEditor({
           <H3 style={{ marginTop: 4 }}>Next week's pot rules</H3>
           <Sub style={{ marginTop: 4 }}>
             {isMonday
-              ? "The rule setter rotates weekly — it's your turn to set next week's conditions."
+              ? "The rule setter rotates weekly-it's your turn to set next week's conditions."
               : 'Rules can only be set on Monday. These conditions are now locked for next week.'}
           </Sub>
         </View>
@@ -355,7 +355,7 @@ function PotConditionsEditor({
       </View>
 
       {!isMonday ? (
-        /* Locked — read-only display */
+        /* Locked-read-only display */
         <View style={{ flexDirection: 'row', gap: 12 }}>
           <View style={{ flex: 1 }}>
             <Eyebrow>Sessions / week</Eyebrow>
@@ -371,7 +371,7 @@ function PotConditionsEditor({
           </View>
         </View>
       ) : (
-        /* Editable — Monday only */
+        /* Editable-Monday only */
         <>
           <View>
             <Eyebrow>Sessions / week</Eyebrow>

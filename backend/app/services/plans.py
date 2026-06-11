@@ -75,7 +75,7 @@ def _mark_missed_for_past_days(plan_row: dict) -> None:
     sb = get_supabase()
     today_dow = current_day_of_week()
     if today_dow <= 0:
-        return  # Monday — nothing in the past
+        return  # Monday-nothing in the past
     sb.table("plan_days").update({"state": "missed"}).eq(
         "plan_id", plan_row["id"]
     ).lt("day_of_week", today_dow).in_("state", ["planned", "locked"]).execute()
@@ -91,7 +91,7 @@ def _is_practice_week(group_id: str | None, week: str) -> bool:
 
 
 def _joined_mid_current_week(user_id: str) -> bool:
-    """True if the user joined their group during the current week — i.e. after
+    """True if the user joined their group during the current week-i.e. after
     the Sunday-midnight lock for this week. Such "mid-week joiners" missed the
     lock, so the current week is a no-stakes practice week for them individually,
     even when the group is past its own first (practice) week. Anchored to the
@@ -150,7 +150,7 @@ def _recompute_stake(plan_id: str) -> int:
 def _soft_unlock_next_week(plan_row: dict) -> None:
     """Reset a next-week plan to editable state. Days previously 'locked' become 'planned'
     again so the user keeps their selection. Used to support re-editing before the week
-    actually starts — once Monday rolls around the plan becomes 'this-week' and is fixed."""
+    actually starts-once Monday rolls around the plan becomes 'this-week' and is fixed."""
     if not plan_row.get("is_locked"):
         return
     sb = get_supabase()

@@ -77,7 +77,7 @@ export const SLOT_BY_ID: Record<string, number> = {};
 for (const it of FLOOR_ITEMS) SLOT_BY_ID[it.id] = it.slot;
 for (const it of WALL_ITEMS) if (it.slot !== undefined) SLOT_BY_ID[it.id] = it.slot;
 
-/** Everything *placeable* (excludes structural decor), in ELO order — used by
+/** Everything *placeable* (excludes structural decor), in ELO order-used by
  * the collection checklist and the editor. */
 export const ALL_UNLOCKS = [...FLOOR_ITEMS, ...WALL_ITEMS]
   .filter((it) => !('structural' in it && it.structural))

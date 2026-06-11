@@ -229,7 +229,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       const user = await usersApi.registerViaAuth();
       setMe(user);
       await loadClock(resetClockOnStartup);
-      // Fire every independent fetch in parallel instead of one-by-one — this
+      // Fire every independent fetch in parallel instead of one-by-one-this
       // is the single biggest startup latency win against the serverless API.
       const groupsPromise = loadGroupsForGym(user.gym_id, user.id);
       const [mine] = await Promise.all([
@@ -242,7 +242,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       // Only this depends on the resolved group id, so it runs after the batch.
       await refreshGroupContext(mine?.id ?? null, mine?.isLeader);
       // Loading the pot can settle a finished week as a side effect (paying
-      // shares straight onto personal ELO) — re-sync `me` so a freshly-credited
+      // shares straight onto personal ELO)-re-sync `me` so a freshly-credited
       // payout shows up immediately rather than waiting for the next refresh.
       if (mine?.id) {
         try { setMe(await usersApi.getMe()); } catch { /* keep the registered snapshot */ }
@@ -330,7 +330,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     if (!target) return false;
     const isOpen = target.joinType === 'open';
 
-    // Optimistic local mutation — UI updates before the network call returns.
+    // Optimistic local mutation-UI updates before the network call returns.
     const optimistic = snapshot.map((g) => {
       if (g.id !== groupId) return g;
       return isOpen
@@ -410,7 +410,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     required_pledges: number;
     stake_per_miss: number;
   }) => {
-    if (!me) return false;  // groups are global — no home gym required to create one
+    if (!me) return false;  // groups are global-no home gym required to create one
     try {
       const created = await groupsApi.createGroup({
         gym_id: me.gym_id,
@@ -493,7 +493,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     try {
       const plan = await plansApi.toggleNextDay(i);
       setNextWeek(planToWeek(plan));
-      // Refresh pot/members in the background — don't block the interaction.
+      // Refresh pot/members in the background-don't block the interaction.
       void refreshGroupContext(myGroupSummary?.id ?? null, myGroupSummary?.isLeader);
     } catch (e) {
       setNextWeek(snapshotNextWeek);
@@ -585,12 +585,12 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       setMe((prev) => (prev ? { ...prev, elo: res.new_elo } : prev));
       if (res.outcome === 'moved') {
         const target = res.moved_to_dow != null ? DAYS[res.moved_to_dow] : 'next week';
-        showToast(`Session moved to ${target} — no penalty`, 'success');
+        showToast(`Session moved to ${target}-no penalty`, 'success');
       } else {
         showToast(
           res.penalty_elo > 0
-            ? `Next week is full — 50% penalty applied (−${res.penalty_elo} ELO)`
-            : 'Next week is full — session excused',
+            ? `Next week is full-50% penalty applied (−${res.penalty_elo} ELO)`
+            : 'Next week is full-session excused',
           'info',
         );
       }
@@ -649,7 +649,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Ask permission + re-read GPS, storing it locally only. Returns the fix (or
-  // null if denied). Does NOT push to the backend — stays private.
+  // null if denied). Does NOT push to the backend-stays private.
   const refreshMyLocation = useCallback(async () => {
     const c = await requestAndStoreLocation();
     if (c) setMyLocation(c);
@@ -693,7 +693,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   }, [me]);
 
   // While sharing, refresh my location on a gentle cadence + whenever the app
-  // returns to the foreground — never while backgrounded.
+  // returns to the foreground-never while backgrounded.
   const sharing = me?.share_location ?? false;
   useEffect(() => {
     if (!sharing) return;
@@ -738,7 +738,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       showToast('Nudge sent 👟', 'success');
     } catch (e) {
       if (e instanceof ApiError && e.status === 429) {
-        // Already nudged recently — keep the cooldown and surface the message.
+        // Already nudged recently-keep the cooldown and surface the message.
         showToast(e.message, 'info');
       } else {
         setNudgeCooldowns((prev) => {
@@ -794,7 +794,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       // the clock several weeks ahead.
       const clock = goingForward ? await devApi.advanceWeek() : await devApi.resetClock();
       if (clock.persisted === false) {
-        showToast('Dev clock not saved — run schema.sql (dev_clock table missing)', 'error');
+        showToast('Dev clock not saved-run schema.sql (dev_clock table missing)', 'error');
         return;
       }
       setWeekOffsetDays(clock.offset_days);
@@ -806,7 +806,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }
   }, [bootstrap, weekOffsetDays]);
 
-  // Fine-grained dev clock controls — step the simulated "today" forward or
+  // Fine-grained dev clock controls-step the simulated "today" forward or
   // backward by a single day or week, so testers can walk through pledge state
   // transitions (planned → locked → checked-in/missed, week rollovers, …) one
   // step at a time rather than only jumping a whole week.
@@ -814,7 +814,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     try {
       const clock = await action();
       if (clock.persisted === false) {
-        showToast('Dev clock not saved — run schema.sql (dev_clock table missing)', 'error');
+        showToast('Dev clock not saved-run schema.sql (dev_clock table missing)', 'error');
         return;
       }
       setWeekOffsetDays(clock.offset_days);
@@ -846,7 +846,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const updateStakeType = useCallback(async (stakeType: 'elo' | 'money') => {
     if (!myGroupSummary?.id) return;
     const groupId = myGroupSummary.id;
-    // Only NEXT week changes — optimistically reflect it on potNext; leave
+    // Only NEXT week changes-optimistically reflect it on potNext; leave
     // potCurrent (and the group's current-week display) untouched.
     const snapshotNext = potNext;
     setPotNext((prev) => (prev ? { ...prev, stake_type: stakeType } : prev));

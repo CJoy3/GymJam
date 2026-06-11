@@ -1,5 +1,5 @@
 /**
- * First-run welcome wizard — a full-screen overlay that sits above the app
+ * First-run welcome wizard-a full-screen overlay that sits above the app
  * shell (the shell stays mounted underneath). Four steps introducing pledges,
  * groups, and the gym space; finishing or skipping marks the wizard seen via
  * the onboarding state (AsyncStorage-backed), so it never re-shows.
@@ -42,14 +42,14 @@ const STEPS: StepDef[] = [
   {
     eyebrow: 'Your pledge',
     title: 'Make a pledge each week',
-    body: "Every Sunday you lock in which days you'll hit the gym that week. Your group can see your pledge — and whether you keep it.",
+    body: "Every Sunday you lock in which days you'll hit the gym that week. Your group can see your pledge-and whether you keep it.",
     illustration: <DayPicker days={DEMO_PLEDGE} />,
     skippable: true,
   },
   {
     eyebrow: 'Your group',
     title: 'Your group keeps you honest',
-    body: "Group members see each other's attendance and can nudge anyone who goes quiet. You all share a weekly pot — missed pledges feed it.",
+    body: "Group members see each other's attendance and can nudge anyone who goes quiet. You all share a weekly pot-missed pledges feed it.",
     illustration: null,
     skippable: true,
   },
@@ -70,7 +70,7 @@ export function WizardOverlay({ onDone }: { onDone: () => void }) {
   return (
     <View style={[StyleSheet.absoluteFill, s.root]}>
       {/* Claim every touch so nothing leaks through to the shell underneath. */}
-      <Pressable style={StyleSheet.absoluteFill} onPress={() => {}} accessible={false} />
+      <Pressable style={StyleSheet.absoluteFill} onPress={() => { }} accessible={false} />
       <BlobBackground variant="celebrate" />
       <SafeAreaView edges={['top', 'bottom']} style={s.fill}>
         {/* Keyed so each step re-runs the entrance fade. */}

@@ -1,10 +1,10 @@
 /**
- * First-run onboarding flags — whether the user has seen the welcome wizard
+ * First-run onboarding flags-whether the user has seen the welcome wizard
  * (phase 1) and the coach-marks tour (phase 2). Backed by AsyncStorage so each
  * shows exactly once **per account** (keys are namespaced by user id, so every
  * new sign-up on a shared device gets the full tour). `null` means the flags
- * haven't resolved yet — either storage is still loading or no account is
- * signed in — so callers must treat it as "don't show anything".
+ * haven't resolved yet-either storage is still loading or no account is
+ * signed in-so callers must treat it as "don't show anything".
  */
 import React, {
   createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode,
@@ -40,7 +40,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   const [hasSeenTour, setHasSeenTour] = useState<boolean | null>(null);
 
   useEffect(() => {
-    // Account changed (or hasn't loaded yet) — back to undecided so nothing
+    // Account changed (or hasn't loaded yet)-back to undecided so nothing
     // shows until this account's own flags are read.
     setHasSeenWizard(null);
     setHasSeenTour(null);
@@ -57,7 +57,7 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
       })
       .catch(() => {
         if (cancelled) return;
-        // Storage unavailable — claim "seen" so the tour can never loop forever.
+        // Storage unavailable-claim "seen" so the tour can never loop forever.
         setHasSeenWizard(true);
         setHasSeenTour(true);
       });
@@ -68,18 +68,18 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
   // state flips immediately so the UI dismisses without waiting on disk.
   const completeWizard = useCallback(() => {
     setHasSeenWizard(true);
-    if (userId) AsyncStorage.setItem(keysFor(userId)[0], 'true').catch(() => {});
+    if (userId) AsyncStorage.setItem(keysFor(userId)[0], 'true').catch(() => { });
   }, [userId]);
 
   const completeTour = useCallback(() => {
     setHasSeenTour(true);
-    if (userId) AsyncStorage.setItem(keysFor(userId)[1], 'true').catch(() => {});
+    if (userId) AsyncStorage.setItem(keysFor(userId)[1], 'true').catch(() => { });
   }, [userId]);
 
   const resetOnboarding = useCallback(() => {
     setHasSeenWizard(false);
     setHasSeenTour(false);
-    if (userId) AsyncStorage.multiRemove([...keysFor(userId)]).catch(() => {});
+    if (userId) AsyncStorage.multiRemove([...keysFor(userId)]).catch(() => { });
   }, [userId]);
 
   const value = useMemo<OnboardingShape>(

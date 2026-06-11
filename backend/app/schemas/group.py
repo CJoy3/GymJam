@@ -11,7 +11,7 @@ RequestStatus = Literal["pending", "approved", "rejected"]
 
 
 class GroupCreate(BaseModel):
-    # Optional origin hint only — groups are global and not gated by gym.
+    # Optional origin hint only-groups are global and not gated by gym.
     gym_id: Optional[str] = None
     name: str = Field(min_length=1, max_length=64)
     weekly_stake_elo: int = Field(default=500, ge=0, le=100000)

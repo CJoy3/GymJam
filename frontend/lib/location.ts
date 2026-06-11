@@ -1,12 +1,12 @@
 /**
- * Private device location — kept deliberately separate from the *public*
+ * Private device location-kept deliberately separate from the *public*
  * location-sharing on the squad map (`users.share_location` + `users.latitude`,
  * which teammates can see). This one is stored only on the device (AsyncStorage)
  * and is NEVER sent to the backend; it's used purely client-side to:
  *   - centre the map on you when it opens, and
  *   - sort gyms by how near they are to you.
  * Granting it (e.g. the "Find gyms near me" button on login) reveals your spot to
- * no one — it just lets the app find nearby gyms for you.
+ * no one-it just lets the app find nearby gyms for you.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Location from 'expo-location';
@@ -33,7 +33,7 @@ export async function getStoredLocation(): Promise<Coords | null> {
 /**
  * Ask for permission, read the current GPS fix, store it locally, and return it.
  * Returns null if permission is denied or the fix fails. Does NOT touch the
- * backend — this stays private to the device.
+ * backend-this stays private to the device.
  */
 export async function requestAndStoreLocation(): Promise<Coords | null> {
   try {
@@ -49,7 +49,7 @@ export async function requestAndStoreLocation(): Promise<Coords | null> {
 }
 
 /**
- * The OS's last-known fix, but only if it's RECENT (≤5 min) — used to zoom the
+ * The OS's last-known fix, but only if it's RECENT (≤5 min)-used to zoom the
  * map onto you instantly on open while a precise fresh fix is still resolving.
  * The freshness cap means we never snap to a stale spot (e.g. a gym you left
  * hours ago); if there's nothing recent we return null and wait for the live fix.
@@ -72,7 +72,7 @@ export async function getQuickLocation(): Promise<Coords | null> {
  * Continuously track the device's live position (e.g. while the map is open) and
  * call `onUpdate` as it moves. Also refreshes the stored fix so the next launch
  * starts from where you actually are, not a stale spot. Returns a subscription to
- * `.remove()` on unmount, or null if permission is denied. Stays on-device — the
+ * `.remove()` on unmount, or null if permission is denied. Stays on-device-the
  * live fix is NEVER sent to the backend (that's the opt-in share-location path).
  */
 export async function watchLocation(
@@ -102,7 +102,7 @@ export async function clearStoredLocation(): Promise<void> {
   await AsyncStorage.removeItem(KEY).catch(() => {});
 }
 
-/** Rough great-circle distance in miles — fine for sorting nearby gyms. */
+/** Rough great-circle distance in miles-fine for sorting nearby gyms. */
 export function milesBetween(a: Coords, b: { lat: number; lng: number }): number {
   const dLat = (a.lat - b.lat) * 69;
   const dLng = (a.lng - b.lng) * 69 * Math.cos((a.lat * Math.PI) / 180);

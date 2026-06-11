@@ -11,7 +11,7 @@ import { usePolling } from '../ui/usePolling';
 import { useAppState } from '../state/AppState';
 import { pageWrap, styles } from './_shared';
 
-/* Pot tracker — conditions + member breakdown */
+/* Pot tracker-conditions + member breakdown */
 
 export function PotTracker({ onBack }: { onBack: () => void }) {
   const { potCurrent, groupMembers, refreshGroup, stakeType } = useAppState();
@@ -20,7 +20,7 @@ export function PotTracker({ onBack }: { onBack: () => void }) {
   const fmtStake = (amount: number) =>
     isMoney ? `£${(amount / 100).toFixed(2)}` : `${amount.toLocaleString()} ELO`;
   const refresh = useRefreshControl();
-  // The pot moves as teammates check in / miss — keep it live while viewing.
+  // The pot moves as teammates check in / miss-keep it live while viewing.
   usePolling(refreshGroup, 9000);
   // Pot rows don't carry avatars; reuse the group members already in state.
   const avatarByUser: Record<string, string | null> = {};
@@ -83,7 +83,7 @@ export function PotTracker({ onBack }: { onBack: () => void }) {
             </View>
             <Sub style={{ marginTop: 18 }}>
               {potCurrent.is_practice
-                ? `Practice week — no ${isMoney ? 'money' : 'ELO'} at stake. The real pot starts next week.`
+                ? `Practice week-no ${isMoney ? 'money' : 'ELO'} at stake. The real pot starts next week.`
                 : `${potCurrent.setter_display_name || 'A member'} set these conditions as this week's rule setter (the role rotates weekly).`}
             </Sub>
           </Card>

@@ -18,7 +18,7 @@ values
     ('Leeds Strength & Conditioning', 'Leeds, UK')
 on conflict do nothing;
 
--- Backfill coordinates (members' home gyms are plotted on the Squad Map — these
+-- Backfill coordinates (members' home gyms are plotted on the Squad Map-these
 -- are approximate city-centre coordinates, keyed by name so re-running is safe).
 update gyms set latitude = 53.4808, longitude = -2.2426 where name = 'PureGym Manchester' and latitude is null;
 update gyms set latitude = 53.4831, longitude = -2.2447 where name = 'The Gym Group' and latitude is null;

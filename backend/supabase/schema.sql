@@ -1,6 +1,6 @@
 -- GymJam database schema
 -- Run this in the Supabase SQL editor (Project → SQL Editor → New query) and execute.
--- It is idempotent — safe to re-run.
+-- It is idempotent-safe to re-run.
 
 ------------------------------------------------------------
 -- Tables
@@ -137,7 +137,7 @@ create table if not exists group_memberships (
 ); 
 
 -- Additive migration for existing deployments. NULL on legacy rows means
--- "established member" — never treated as a mid-week joiner.
+-- "established member"-never treated as a mid-week joiner.
 alter table group_memberships
     add column if not exists joined_week_start date;
 
@@ -179,7 +179,7 @@ create table if not exists plan_days (
 );
 
 -- Allow the 'rescheduled' state on existing deployments (a missed day that was
--- excused for "unforeseen circumstances" — either moved to next week or settled
+-- excused for "unforeseen circumstances"-either moved to next week or settled
 -- with a 50% penalty when next week was full).
 alter table plan_days drop constraint if exists plan_days_state_check;
 alter table plan_days add constraint plan_days_state_check
@@ -199,7 +199,7 @@ create table if not exists pot_conditions (
         check (stake_per_miss >= 0),
     is_finalized boolean not null default false,
     -- Pot currency for THIS week ('elo' or 'money'). Stored per-week so changing
-    -- a group's stake type only affects future weeks — the current week keeps the
+    -- a group's stake type only affects future weeks-the current week keeps the
     -- type it started with. Defaults to 'elo'; seeded from the group at creation.
     stake_type text not null default 'elo' check (stake_type in ('elo', 'money')),
     -- The first week after a group is created is a no-stakes "practice" week.
