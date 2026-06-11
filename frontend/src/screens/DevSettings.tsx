@@ -6,6 +6,7 @@ import { Btn, Card, Eyebrow, FadeInItem, H1 } from '../ui/components';
 import { BlobBackground } from '../ui/Blob';
 import { showToast } from '../ui/toast';
 import { useAppState } from '../state/AppState';
+import { useOnboarding } from '../state/OnboardingState';
 import { checkTagAvailable } from '../../lib/api/users';
 import { milesTo, sortByProximity } from '../../lib/location';
 import { pageWrap } from './_shared';
@@ -27,6 +28,7 @@ export function AppSettings({ onBack }: { onBack: () => void }) {
     goToPreviousWeek, goToNextWeek, goToPreviousDay, goToNextDay,
     setElo, setMoney, shareLocation, setShareLocation, myLocation,
   } = useAppState();
+  const { resetOnboarding } = useOnboarding();
   const sortedGyms = sortByProximity(gyms, myLocation);
 
   // ── Tag ──────────────────────────────────────────────────────────────────
@@ -296,6 +298,23 @@ export function AppSettings({ onBack }: { onBack: () => void }) {
             <View style={{ marginTop: 10 }}>
               <Btn label={settingMoney ? 'Saving…' : 'Set money'} disabled={settingMoney || isNaN(parseFloat(moneyDraft))} onPress={handleSetMoney} />
             </View>
+          </Card>
+        </FadeInItem>
+
+        <FadeInItem delay={280} style={{ marginTop: 14 }}>
+          <Card padding={SPACE.xl}>
+            <Eyebrow style={{ marginBottom: 4 }}>Onboarding tour</Eyebrow>
+            <Text style={subText}>
+              Dev only — clears the seen flags so the welcome wizard replays, with the coach marks following on Home.
+            </Text>
+            <Btn
+              label="Reset onboarding tour"
+              variant="ghost"
+              onPress={() => {
+                resetOnboarding();
+                showToast('Onboarding reset — the tour will replay', 'success');
+              }}
+            />
           </Card>
         </FadeInItem>
 

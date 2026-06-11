@@ -16,6 +16,7 @@ import type { Session } from '@supabase/supabase-js';
 
 import { ensureSupabase } from '../lib/supabase';
 import { AppStateProvider } from '../src/state/AppState';
+import { OnboardingProvider } from '../src/state/OnboardingState';
 import { ToastProvider } from '../src/ui/toast';
 import { LoginScreen } from '../src/screens/Login';
 
@@ -75,12 +76,14 @@ export default function RootLayout() {
   return (
     <ToastProvider>
       <AppStateProvider>
-        <ThemeProvider value={DarkTheme}>
-          <Stack>
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          </Stack>
-          <StatusBar style="light" />
-        </ThemeProvider>
+        <OnboardingProvider>
+          <ThemeProvider value={DarkTheme}>
+            <Stack>
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            </Stack>
+            <StatusBar style="light" />
+          </ThemeProvider>
+        </OnboardingProvider>
       </AppStateProvider>
     </ToastProvider>
   );
