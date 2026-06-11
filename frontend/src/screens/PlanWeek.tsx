@@ -3,7 +3,7 @@ import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 
 import { C, FONT, RADIUS, SPACE } from '../theme/tokens';
-import { Btn, Card, Chip, Eyebrow, FadeInItem, H1, H3, Num, Sub } from '../ui/components';
+import { Btn, Card, Chip, Eyebrow, FadeInItem, H1, H3, IconButton, Num, Sub } from '../ui/components';
 import { Avatar } from '../ui/Avatar';
 import { DayPicker } from '../ui/DayPicker';
 import { Slider } from '../ui/Slider';
@@ -81,9 +81,7 @@ export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: (
               <Eyebrow>{groupName || 'Solo'}</Eyebrow>
               <H1 style={{ marginTop: 6 }}>Plan next week</H1>
             </View>
-            <Pressable onPress={onCancel} style={styles.closeBtn}>
-              <MaterialIcons name="close" size={20} color={C.ink} />
-            </Pressable>
+            <IconButton icon="close" onPress={onCancel} />
           </View>
           <Sub style={{ marginTop: 10 }}>
             Pledging is optional. Pick up to {required} {required === 1 ? 'day' : 'days'}-edit any time before Sunday.

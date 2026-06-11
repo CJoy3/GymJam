@@ -28,6 +28,10 @@ export interface CoachStep {
   /** App screen this step lives on. The overlay reports it via onStepChange so
    * the host can switch the background page to follow the tour. */
   screen?: string;
+  /** Optional second target to spotlight alongside `id` — e.g. the nav-bar tab
+   * for this page, so the user sees both which page they're on and where on it
+   * the feature lives. */
+  navId?: string;
 }
 
 type TargetRect = { x: number; y: number; w: number; h: number };
@@ -80,6 +84,8 @@ export function CoachMarksOverlay({
   const registry = useContext(Ctx);
   const [index, setIndex] = useState(0);
   const [rect, setRect] = useState<TargetRect | null>(null);
+  // Optional second spotlight (e.g. the nav-bar tab for this step's page).
+  const [navRect, setNavRect] = useState<TargetRect | null>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [tipH, setTipH] = useState(0);
   const rootRef = useRef<View>(null);
@@ -130,6 +136,14 @@ export function CoachMarksOverlay({
         rootRef.current?.measureInWindow((rx, ry) => {
           if (cancelled) return;
           setRect({ x: x - rx, y: y - ry, w, h });
+          // Measure the optional second target (e.g. the nav tab). It's not
+          // required, so we never retry/skip on it — just hide it if absent.
+          const navNode = step?.navId ? registry?.getTarget(step.navId) : null;
+          if (!navNode) { setNavRect(null); return; }
+          navNode.measureInWindow((nx, ny, nw, nh) => {
+            if (cancelled) return;
+            setNavRect(nw > 0 && nh > 0 ? { x: nx - rx, y: ny - ry, w: nw, h: nh } : null);
+          });
         });
       });
     };
@@ -140,12 +154,11 @@ export function CoachMarksOverlay({
   const onLayout = (e: LayoutChangeEvent) =>
     setSize({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height });
 
-  const cutout = rect && {
-    x: rect.x - SPOT_PAD,
-    y: rect.y - SPOT_PAD,
-    w: rect.w + SPOT_PAD * 2,
-    h: rect.h + SPOT_PAD * 2,
-  };
+  const pad = (r: TargetRect) => ({
+    x: r.x - SPOT_PAD, y: r.y - SPOT_PAD, w: r.w + SPOT_PAD * 2, h: r.h + SPOT_PAD * 2,
+  });
+  const cutout = rect && pad(rect);
+  const navCutout = navRect && pad(navRect);
 
   const below = rect ? rect.y + rect.h / 2 < size.h / 2 : true;
   const tipTop = cutout
@@ -166,10 +179,16 @@ export function CoachMarksOverlay({
               <Mask id="coach-spotlight">
                 <Rect x={0} y={0} width={size.w} height={size.h} fill="#FFFFFF" />
                 <Rect x={cutout.x} y={cutout.y} width={cutout.w} height={cutout.h} rx={RADIUS.md} fill="#000000" />
+                {navCutout && (
+                  <Rect x={navCutout.x} y={navCutout.y} width={navCutout.w} height={navCutout.h} rx={RADIUS.md} fill="#000000" />
+                )}
               </Mask>
             </Defs>
             <Rect x={0} y={0} width={size.w} height={size.h} fill={DIM} mask="url(#coach-spotlight)" />
             <Rect x={cutout.x} y={cutout.y} width={cutout.w} height={cutout.h} rx={RADIUS.md} stroke={C.accent} strokeWidth={1.5} fill="none" />
+            {navCutout && (
+              <Rect x={navCutout.x} y={navCutout.y} width={navCutout.w} height={navCutout.h} rx={RADIUS.md} stroke={C.accent} strokeWidth={1.5} fill="none" />
+            )}
           </Svg>
         </View>
       )}

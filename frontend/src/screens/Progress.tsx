@@ -8,6 +8,7 @@ import { BlobBackground } from '../ui/Blob';
 import { useRefreshControl } from '../ui/useRefresh';
 import { useAppState } from '../state/AppState';
 import { GymScene, ALL_UNLOCKS } from '../gymspace';
+import { useCoachTarget } from '../ui/CoachMarks';
 import { pageWrap, styles } from './_shared';
 
 /* Progress-ELO ladder + badges */
@@ -32,6 +33,7 @@ const TIERS = [
 export function Progress({ onGymSpace }: { onGymSpace: () => void }) {
   const { elo, badges: badgeFlags, roomItems } = useAppState();
   const refresh = useRefreshControl();
+  const tourTarget = useCoachTarget('tour-progress');
   const placedItemIds = new Set(roomItems.map((r) => r.item_id));
   const ti = TIERS.findIndex((t) => elo >= t.min && elo < t.max);
   const cur = TIERS[ti] ?? TIERS[0];
@@ -51,7 +53,7 @@ export function Progress({ onGymSpace }: { onGymSpace: () => void }) {
 
         {/* Pixel-art gym-front and centre. Grows as you climb the arena. */}
         <FadeInItem delay={80} style={{ marginTop: 20 }}>
-          <Pressable onPress={onGymSpace}>
+          <Pressable ref={tourTarget} collapsable={false} onPress={onGymSpace}>
             <GymScene elo={elo} placedItemIds={placedItemIds} />
             <View style={[styles.rowBetween, { marginTop: 12 }]}>
               <View style={{ flex: 1 }}>

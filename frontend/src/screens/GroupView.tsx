@@ -3,8 +3,9 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 
 import { C, FONT, SPACE } from '../theme/tokens';
-import { Card, Chip, Eyebrow, FadeInItem, H1, H3, Sub } from '../ui/components';
+import { Card, Chip, Eyebrow, FadeInItem, H1, H3, IconButton, Sub } from '../ui/components';
 import { Avatar } from '../ui/Avatar';
+import { useCoachTarget } from '../ui/CoachMarks';
 import { DayPicker } from '../ui/DayPicker';
 import { BlobBackground } from '../ui/Blob';
 import { useRefreshControl } from '../ui/useRefresh';
@@ -31,6 +32,7 @@ export function GroupView({ onBrowse, onLeaderboard }: { onBrowse: () => void; o
     activity, refreshActivity, approveRequest, rejectRequest, nudge, nudgeCooldowns,
   } = useAppState();
   const refresh = useRefreshControl();
+  const tourTarget = useCoachTarget('tour-group');
   const [showFeed, setShowFeed] = useState(false);
   // Locally-dismissed notification ids, persisted so they stay cleared across
   // sessions. Join requests are never dismissable (they're actionable), so they
@@ -69,7 +71,7 @@ export function GroupView({ onBrowse, onLeaderboard }: { onBrowse: () => void; o
       <BlobBackground variant="group" />
       <ScrollView refreshControl={refresh} contentContainerStyle={pageWrap} showsVerticalScrollIndicator={false}>
         <FadeInItem>
-          <View style={styles.rowBetween}>
+          <View ref={tourTarget} collapsable={false} style={styles.rowBetween}>
             <View style={{ flex: 1 }}>
               <Eyebrow>Your group</Eyebrow>
               <H1 style={{ marginTop: 6 }}>{groupName}</H1>
@@ -78,20 +80,19 @@ export function GroupView({ onBrowse, onLeaderboard }: { onBrowse: () => void; o
               </Sub>
             </View>
             <View style={[styles.rowGap, { gap: 8 }]}>
-              <Pressable onPress={toggleFeed} style={styles.iconBtn}>
-                <MaterialIcons name={showFeed ? 'notifications-active' : 'notifications-none'} size={20} color={showFeed ? C.accent : C.ink} />
+              <IconButton
+                icon={showFeed ? 'notifications-active' : 'notifications-none'}
+                color={showFeed ? C.accent : C.ink}
+                onPress={toggleFeed}
+              >
                 {actionableCount > 0 && (
                   <View style={badge.dot}>
                     <Text style={badge.text}>{actionableCount}</Text>
                   </View>
                 )}
-              </Pressable>
-              <Pressable onPress={onLeaderboard} style={styles.iconBtn}>
-                <MaterialIcons name="emoji-events" size={20} color={C.ink} />
-              </Pressable>
-              <Pressable onPress={onBrowse} style={styles.iconBtn}>
-                <MaterialIcons name="swap-horiz" size={20} color={C.ink} />
-              </Pressable>
+              </IconButton>
+              <IconButton icon="emoji-events" onPress={onLeaderboard} />
+              <IconButton icon="swap-horiz" onPress={onBrowse} />
             </View>
           </View>
         </FadeInItem>

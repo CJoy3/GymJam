@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import Animated, { Easing, FadeIn } from 'react-native-reanimated';
 
@@ -14,28 +14,34 @@ import { useOnboarding } from '../../src/state/OnboardingState';
 import { usePolling } from '../../src/ui/usePolling';
 import { BlobBackground } from '../../src/ui/Blob';
 import { CoachMarksOverlay, CoachMarksProvider, useCoachTarget, type CoachStep } from '../../src/ui/CoachMarks';
+import { Glass } from '../../src/ui/Glass';
 import { WizardOverlay } from '../../src/screens/onboarding/WizardOverlay';
 import { C, FONT, RADIUS, SPACE } from '../../src/theme/tokens';
 
 const EASE_OUT = Easing.out(Easing.cubic);
 
-// The tab bar floats over the content (absolutely positioned) rather than
-// taking a fixed row in the layout, so screen content shows continuously
-// behind/around it. Screens reserve matching bottom space via TAB_BAR_CLEARANCE
-// (see _shared) so the floating bar overlays content, not an empty dark band,
-// and core actions still scroll clear of it.
-const TAB_BAR_GAP = 14; // bar's gap from the bottom edge when there's no safe-area inset
+// The tab bar floats over the content (absolutely positioned). It's inset by
+// the SAME margin on the left, right and bottom, so its rounded (capsule)
+// corners sit concentric with the iPhone's screen corners — i.e. a constant gap
+// follows the curve, the way a professional Apple-style floating bar aligns.
+// (margin + barRadius ≈ device-corner radius.) Screens reserve TAB_BAR_CLEARANCE
+// (see _shared) so the bar overlays content, not an empty dark band.
+const BAR_MARGIN = SPACE.lg;          // equal float inset: left = right = bottom
+const TAB_GAP = SPACE.sm;             // equal gap around the active pill (sides = top/bottom)
 
-/** Coach-marks tour, in order. The two home-* targets are registered inside
- * Home.tsx; the tab-* targets on the tab bar below. `screen` is the page each
- * step lives on — the overlay reports it so the tour walks the app, switching
- * the background page as it highlights each tab. */
+/** Coach-marks tour, in order. Each step highlights a real element ON its page
+ * (registered there via useCoachTarget): the two home-* targets live in
+ * Home.tsx, and tour-group / tour-progress / tour-profile in those screens.
+ * `screen` is reported by the overlay so the tour navigates the app, switching
+ * the background page to spotlight each one in turn. `navId` adds a second
+ * spotlight on that page's nav-bar tab, so the user sees both which page
+ * they're on and where the feature is. */
 const TOUR_STEPS: CoachStep[] = [
   { id: 'home-week', text: 'This is your week-tap a day to see your plan', screen: 'home' },
   { id: 'home-checkin', text: 'Hit this when you get to the gym', screen: 'home' },
-  { id: 'tab-group', text: "See your group's pledges and nudge people who've gone quiet", screen: 'group' },
-  { id: 'tab-progress', text: 'Your ELO score lives here-it goes up every time you show up', screen: 'progress' },
-  { id: 'tab-profile', text: 'Your gym space, your squad on the map, and your settings', screen: 'profile' },
+  { id: 'tour-group', text: "See your group's pledges and nudge people who've gone quiet", screen: 'group', navId: 'tab-group' },
+  { id: 'tour-progress', text: 'Your ELO score lives here-it goes up every time you show up', screen: 'progress', navId: 'tab-progress' },
+  { id: 'tour-profile', text: 'Your gym space, your squad on the map, and your settings', screen: 'profile', navId: 'tab-profile' },
 ];
 
 type Screen =
@@ -57,10 +63,6 @@ function GymJamApp() {
   const { ready, userId, gymId, groupId, tag, elo, refreshAll } = useAppState();
   const { hasSeenWizard, hasSeenTour, completeWizard, completeTour } = useOnboarding();
   const [screen, setScreen] = useState<Screen | null>(null);
-  const insets = useSafeAreaInsets();
-
-  // Where the floating bar sits above the bottom edge (clears the home indicator).
-  const tabBarBottom = (insets.bottom || TAB_BAR_GAP);
 
   // Tab-bar coach-mark targets (Home registers its own two from inside).
   const groupTabTarget = useCoachTarget('tab-group');
@@ -161,7 +163,8 @@ function GymJamApp() {
         <View style={{ flex: 1 }}>{render()}</View>
 
         {showTabs && (
-          <View style={[styles.tabBar, { bottom: tabBarBottom }]}>
+          <View style={styles.tabBar}>
+            <Glass radius={RADIUS.pill} dim={0.22} style={StyleSheet.absoluteFill} />
             <Tab label="Home" icon="home" active={screen === 'home'} onPress={() => setScreen('home')} />
             <Tab label="Group" icon="group" active={['group', 'gym-browser', 'leaderboard', 'pot-tracker'].includes(screen)} onPress={() => setScreen('group')} targetRef={groupTabTarget} />
             <Tab label="Progress" icon="trending-up" active={['progress', 'gym-space'].includes(screen)} onPress={() => setScreen('progress')} targetRef={progressTabTarget} />
@@ -244,15 +247,22 @@ const styles = StyleSheet.create({
   // so nothing renders behind it.
   tabBar: {
     position: 'absolute',
-    left: SPACE.lg,
-    right: SPACE.lg,
+    left: BAR_MARGIN,
+    right: BAR_MARGIN,
+    bottom: BAR_MARGIN,
     flexDirection: 'row',
-    backgroundColor: C.card,
+    // No solid fill — the liquid-glass layer (see <Glass> above) is the bar's
+    // material; this view just positions it, draws the hairline edge and shadow.
+    // Full capsule: the most an Apple-style short bar can curve, and with the
+    // equal BAR_MARGIN inset it reads as concentric with the screen corners.
     borderRadius: RADIUS.pill,
+    overflow: 'visible',
     borderWidth: 1,
     borderColor: C.borderHi,
-    paddingTop: 8,
-    paddingBottom: 8,
+    // Equal vertical inset → the active pill's top/bottom gap matches its side
+    // gap (see tabIconWrap.marginHorizontal). Keep these two values identical.
+    paddingTop: TAB_GAP,
+    paddingBottom: TAB_GAP,
     shadowColor: '#000',
     shadowOpacity: 0.18,
     shadowRadius: 20,
@@ -260,7 +270,12 @@ const styles = StyleSheet.create({
     elevation: 12,
   },
   tab: { flex: 1 },
-  tabInner: { alignItems: 'center', justifyContent: 'center', paddingVertical: 4 },
-  tabIconWrap: { width: 44, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  // alignItems:'stretch' lets the pill fill the cell width minus its side
+  // margins, so its left/right gap to the bar equals the bar's vertical padding.
+  tabInner: { alignItems: 'stretch', justifyContent: 'center' },
+  // Active pill: a wide rounded capsule with an EQUAL gap on every side — the
+  // side margin matches the bar's vertical padding (both TAB_GAP), so on the end
+  // tabs (Home / Profile) the gap to the bar edge is identical to the top/bottom.
+  tabIconWrap: { height: 44, borderRadius: 22, marginHorizontal: TAB_GAP, alignItems: 'center', justifyContent: 'center' },
   tabIconActive: { backgroundColor: C.primary },
 });

@@ -4,10 +4,11 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { C, FONT, RADIUS, SPACE, tierForElo } from '../theme/tokens';
-import { Btn, Card, Chip, Eyebrow, FadeInItem, H1, Sub } from '../ui/components';
+import { Btn, Card, Chip, Eyebrow, FadeInItem, H1, IconButton, Sub } from '../ui/components';
 import { Avatar } from '../ui/Avatar';
 import { BlobBackground } from '../ui/Blob';
 import { ProfileMap, type Presence } from '../ui/ProfileMap';
+import { useCoachTarget } from '../ui/CoachMarks';
 import { useRefreshControl } from '../ui/useRefresh';
 import { useAppState } from '../state/AppState';
 import { AVATAR_IDS } from '../gymspace';
@@ -25,6 +26,7 @@ export function ProfileView({ onSettings, onSquadMap }: { onSettings: () => void
     tag, updateDisplayName, updateAvatar,
   } = useAppState();
   const refresh = useRefreshControl();
+  const tourTarget = useCoachTarget('tour-profile');
 
   const statusById: Record<string, Presence> = {};
   for (const m of groupMembers) {
@@ -66,22 +68,25 @@ export function ProfileView({ onSettings, onSquadMap }: { onSettings: () => void
           <Eyebrow>Profile</Eyebrow>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 }}>
             <H1>Your space</H1>
-            <Pressable onPress={onSettings} style={styles.settingsBtn}>
-              <MaterialIcons name="settings" size={20} color={C.ink} />
-            </Pressable>
+            <IconButton icon="settings" onPress={onSettings} />
           </View>
         </FadeInItem>
 
         {/* Profile hero card */}
         <FadeInItem delay={80} style={{ marginTop: 24 }}>
+          <View ref={tourTarget} collapsable={false}>
           <Card padding={0} style={{ overflow: 'hidden' }}>
             {/* The whole hero is the map; identity is overlaid on top of it. */}
             <Pressable onPress={onSquadMap} style={StyleSheet.absoluteFill}>
               <ProfileMap members={squadMembers} gyms={gyms} statusById={statusById} />
             </Pressable>
-            <Pressable onPress={onSquadMap} style={styles.expandBtn}>
-              <MaterialIcons name="open-in-full" size={15} color={C.ink} />
-            </Pressable>
+            <IconButton
+              icon="open-in-full"
+              onPress={onSquadMap}
+              size={30}
+              iconSize={15}
+              style={{ position: 'absolute', top: 10, right: 10, zIndex: 2 }}
+            />
 
             <View style={styles.heroContent}>
               <Pressable onPress={() => setPickerOpen((o) => !o)} style={styles.avatarWrap}>
@@ -151,6 +156,7 @@ export function ProfileView({ onSettings, onSquadMap }: { onSettings: () => void
               )}
             </View>
           </Card>
+          </View>
         </FadeInItem>
 
         {/* Wallet */}
@@ -206,14 +212,6 @@ const styles = StyleSheet.create({
   iconChip: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(199,160,110,0.15)', alignItems: 'center', justifyContent: 'center' },
 
   avatarWrap: { position: 'relative' },
-  expandBtn: {
-    position: 'absolute', top: 10, right: 10,
-    width: 30, height: 30, borderRadius: 15,
-    backgroundColor: 'rgba(27,23,20,0.82)',
-    borderWidth: 1, borderColor: C.borderHi,
-    alignItems: 'center', justifyContent: 'center',
-    zIndex: 2,
-  },
   // The map fills the whole card; this padding leaves the upper band of the map
   // visible above the avatar, with identity content overlaid on the darker base.
   heroContent: { paddingTop: 96, paddingHorizontal: SPACE.xl, paddingBottom: SPACE.xl, alignItems: 'center' },
@@ -224,11 +222,6 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   avatarGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 12 },
-  settingsBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: C.card, borderWidth: 1, borderColor: C.borderHi,
-    alignItems: 'center', justifyContent: 'center',
-  },
   name: { fontFamily: FONT.bold, fontSize: 22, color: C.ink, letterSpacing: -0.3 },
   tagDisplay: { fontFamily: FONT.semibold, fontSize: 14, color: C.mutedFg, marginTop: 4, letterSpacing: 0.2 },
   nameInput: {

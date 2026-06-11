@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { C, FONT, RADIUS, SPACE } from '../theme/tokens';
-import { Btn, Card, Eyebrow, FadeInItem, H1 } from '../ui/components';
+import { Btn, Card, Eyebrow, FadeInItem, H1, IconButton } from '../ui/components';
 import { BlobBackground } from '../ui/Blob';
 import { showToast } from '../ui/toast';
 import { useAppState } from '../state/AppState';
@@ -126,9 +126,7 @@ export function AppSettings({ onBack }: { onBack: () => void }) {
               <Eyebrow>Account</Eyebrow>
               <H1 style={{ marginTop: 6 }}>Settings</H1>
             </View>
-            <Pressable onPress={onBack} style={closeBtn}>
-              <MaterialIcons name="close" size={20} color={C.ink} />
-            </Pressable>
+            <IconButton icon="close" onPress={onBack} />
           </View>
         </FadeInItem>
 
@@ -334,11 +332,6 @@ function ClockBtn({ label, loading, disabled, onPress }: { label: string; loadin
   );
 }
 
-const closeBtn = {
-  width: 40, height: 40, borderRadius: 20,
-  backgroundColor: C.card, borderWidth: 1, borderColor: C.borderHi,
-  alignItems: 'center' as const, justifyContent: 'center' as const,
-};
 
 const sectionIcon = {
   width: 28, height: 28, borderRadius: 8,

@@ -1,9 +1,8 @@
 import React, { useCallback, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
 
 import { C, FONT, SPACE } from '../theme/tokens';
-import { Card, Chip, Eyebrow, FadeInItem, H1, Sub } from '../ui/components';
+import { Card, Chip, Eyebrow, FadeInItem, H1, IconButton, Sub } from '../ui/components';
 import { Avatar } from '../ui/Avatar';
 import { BlobBackground } from '../ui/Blob';
 import { useRefreshControl } from '../ui/useRefresh';
@@ -52,9 +51,7 @@ export function Leaderboard({ onBack }: { onBack: () => void }) {
       <ScrollView refreshControl={refresh} contentContainerStyle={pageWrap} showsVerticalScrollIndicator={false}>
         <FadeInItem>
           <View style={styles.rowBetween}>
-            <Pressable onPress={onBack} style={styles.iconBtn}>
-              <MaterialIcons name="arrow-back" size={20} color={C.ink} />
-            </Pressable>
+            <IconButton icon="arrow-back" onPress={onBack} />
           </View>
         </FadeInItem>
 

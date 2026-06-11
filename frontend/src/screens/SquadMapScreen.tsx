@@ -11,6 +11,7 @@ import { getSquadMap, type SquadMapMember } from '../../lib/api/groups';
 import { boundsAround, getGymsMap, type GymMapBounds, type GymMapPoint } from '../../lib/api/gyms';
 import { getQuickLocation, milesBetween, watchLocation, type Coords } from '../../lib/location';
 import { TAB_BAR_CLEARANCE } from './_shared';
+import { IconButton } from '../ui/components';
 
 const RADIUS_MILES = 5; // only ever load gyms within this radius of the map's focus
 const DEFAULT_CENTER = { lat: 51.5072, lng: -0.1276 }; // central London, used when the squad isn't located
@@ -142,9 +143,7 @@ export function SquadMapScreen({ onBack }: { onBack: () => void }) {
 
       {/* Header overlay */}
       <View style={styles.header} pointerEvents="box-none">
-        <Pressable onPress={onBack} style={styles.backBtn}>
-          <MaterialIcons name="arrow-back" size={20} color={C.ink} />
-        </Pressable>
+        <IconButton icon="arrow-back" onPress={onBack} />
         <View style={styles.titlePill}>
           <Text style={styles.title}>{groupName || 'Squad'} map</Text>
         </View>
@@ -229,12 +228,6 @@ const styles = StyleSheet.create({
     position: 'absolute', top: 0, left: 0, right: 0,
     paddingTop: 52, paddingHorizontal: SPACE.xl, paddingBottom: 12,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-  },
-  backBtn: {
-    width: 40, height: 40, borderRadius: 20,
-    backgroundColor: 'rgba(27,23,20,0.82)',
-    borderWidth: 1, borderColor: C.borderHi,
-    alignItems: 'center', justifyContent: 'center',
   },
   titlePill: {
     backgroundColor: 'rgba(27,23,20,0.78)',

@@ -8,6 +8,7 @@ import Animated, {
 import Svg, { Circle } from 'react-native-svg';
 import { MaterialIcons } from '@expo/vector-icons';
 import { C, FONT, RADIUS, SPACE } from '../theme/tokens';
+import { Glass } from './Glass';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
@@ -124,6 +125,43 @@ export function Btn({
         )}
       </Pressable>
     </Animated.View>
+  );
+}
+
+/* ─────────────────────  Icon button (glass)  ─────────────────────── */
+
+/** Round icon button on the liquid-glass material — back / notifications /
+ * close and similar chrome. Pass an icon; an optional `children` overlay (e.g.
+ * a notification badge) renders above it. Real Liquid Glass on iOS 26, frosted
+ * blur elsewhere (see ./Glass). */
+export function IconButton({
+  icon, onPress, color = C.ink, size = 40, iconSize = 20, style, disabled, children,
+}: {
+  icon: keyof typeof MaterialIcons.glyphMap;
+  onPress?: () => void;
+  color?: string;
+  size?: number;
+  iconSize?: number;
+  style?: ViewStyle;
+  disabled?: boolean;
+  children?: React.ReactNode;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      style={({ pressed }) => [
+        styles.iconButton,
+        { width: size, height: size, borderRadius: size / 2 },
+        disabled && { opacity: 0.4 },
+        pressed && { opacity: 0.85 },
+        style,
+      ]}
+    >
+      <Glass radius={size / 2} interactive dim={0.18} style={StyleSheet.absoluteFill} />
+      <MaterialIcons name={icon} size={iconSize} color={color} />
+      {children}
+    </Pressable>
   );
 }
 
@@ -274,6 +312,12 @@ const styles = StyleSheet.create({
   statValue: { fontFamily: FONT.bold, fontSize: 28, color: C.ink, letterSpacing: -0.4, marginTop: 4 },
 
   card: { borderRadius: RADIUS.xl, borderWidth: 1 },
+
+  iconButton: {
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: C.borderHi,
+    overflow: 'visible',
+  },
 
   btn: {
     borderRadius: RADIUS.pill,

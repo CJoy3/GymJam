@@ -3,7 +3,7 @@ import { Alert, Platform, Pressable, ScrollView, Text, TextInput, View } from 'r
 import { MaterialIcons } from '@expo/vector-icons';
 
 import { C, FONT, SPACE } from '../theme/tokens';
-import { Btn, Card, Chip, Eyebrow, FadeInItem, H1, H3, Sub } from '../ui/components';
+import { Btn, Card, Chip, Eyebrow, FadeInItem, H1, H3, IconButton, Sub } from '../ui/components';
 import { Slider } from '../ui/Slider';
 import { BlobBackground } from '../ui/Blob';
 import { useRefreshControl } from '../ui/useRefresh';
@@ -87,9 +87,7 @@ export function GymBrowser({ onBack, onJoined, onCreated }: { onBack: () => void
       <ScrollView refreshControl={refresh} contentContainerStyle={pageWrap} showsVerticalScrollIndicator={false}>
         <FadeInItem>
           <View style={styles.rowBetween}>
-            <Pressable onPress={onBack} style={styles.iconBtn}>
-              <MaterialIcons name="arrow-back" size={20} color={C.ink} />
-            </Pressable>
+            <IconButton icon="arrow-back" onPress={onBack} />
           </View>
         </FadeInItem>
 

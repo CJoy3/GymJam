@@ -3,7 +3,7 @@ import { Pressable, ScrollView, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 
 import { C, SPACE, tierForElo } from '../theme/tokens';
-import { Card, Chip, Eyebrow, FadeInItem, H1, Sub } from '../ui/components';
+import { Card, Chip, Eyebrow, FadeInItem, H1, IconButton, Sub } from '../ui/components';
 import { BlobBackground } from '../ui/Blob';
 import { useAppState } from '../state/AppState';
 import { GymScene, ALL_UNLOCKS, TIERS, SLOT_BY_ID } from '../gymspace';
@@ -27,9 +27,7 @@ export function GymSpace({ onBack }: { onBack: () => void }) {
       <BlobBackground variant="progress" />
       <ScrollView contentContainerStyle={pageWrap} showsVerticalScrollIndicator={false}>
         <FadeInItem>
-          <Pressable onPress={onBack} style={styles.iconBtn}>
-            <MaterialIcons name="arrow-back" size={20} color={C.ink} />
-          </Pressable>
+          <IconButton icon="arrow-back" onPress={onBack} />
         </FadeInItem>
 
         <FadeInItem delay={60} style={{ marginTop: 18 }}>
