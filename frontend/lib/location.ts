@@ -48,6 +48,55 @@ export async function requestAndStoreLocation(): Promise<Coords | null> {
   }
 }
 
+/**
+ * The OS's last-known fix, but only if it's RECENT (≤5 min) — used to zoom the
+ * map onto you instantly on open while a precise fresh fix is still resolving.
+ * The freshness cap means we never snap to a stale spot (e.g. a gym you left
+ * hours ago); if there's nothing recent we return null and wait for the live fix.
+ */
+export async function getQuickLocation(): Promise<Coords | null> {
+  try {
+    const perm = await Location.getForegroundPermissionsAsync();
+    if (perm.status !== 'granted') return null;
+    const last = await Location.getLastKnownPositionAsync({ maxAge: 5 * 60 * 1000 });
+    if (last && Number.isFinite(last.coords.latitude) && Number.isFinite(last.coords.longitude)) {
+      return { lat: last.coords.latitude, lng: last.coords.longitude };
+    }
+  } catch {
+    // fall through
+  }
+  return null;
+}
+
+/**
+ * Continuously track the device's live position (e.g. while the map is open) and
+ * call `onUpdate` as it moves. Also refreshes the stored fix so the next launch
+ * starts from where you actually are, not a stale spot. Returns a subscription to
+ * `.remove()` on unmount, or null if permission is denied. Stays on-device — the
+ * live fix is NEVER sent to the backend (that's the opt-in share-location path).
+ */
+export async function watchLocation(
+  onUpdate: (c: Coords) => void,
+): Promise<{ remove: () => void } | null> {
+  try {
+    let perm = await Location.getForegroundPermissionsAsync();
+    if (perm.status !== 'granted') {
+      perm = await Location.requestForegroundPermissionsAsync();
+      if (perm.status !== 'granted') return null;
+    }
+    return await Location.watchPositionAsync(
+      { accuracy: Location.Accuracy.Balanced, timeInterval: 4000, distanceInterval: 20 },
+      (pos) => {
+        const c: Coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        AsyncStorage.setItem(KEY, JSON.stringify(c)).catch(() => {});
+        onUpdate(c);
+      },
+    );
+  } catch {
+    return null;
+  }
+}
+
 /** Forget the stored private location (e.g. on sign-out). */
 export async function clearStoredLocation(): Promise<void> {
   await AsyncStorage.removeItem(KEY).catch(() => {});
