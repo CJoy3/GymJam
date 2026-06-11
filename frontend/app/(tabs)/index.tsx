@@ -15,6 +15,7 @@ import { usePolling } from '../../src/ui/usePolling';
 import { BlobBackground } from '../../src/ui/Blob';
 import { CoachMarksOverlay, CoachMarksProvider, useCoachTarget, type CoachStep } from '../../src/ui/CoachMarks';
 import { Glass } from '../../src/ui/Glass';
+import { ToastViewport } from '../../src/ui/toast';
 import { WizardOverlay } from '../../src/screens/onboarding/WizardOverlay';
 import { C, FONT, RADIUS, SPACE } from '../../src/theme/tokens';
 
@@ -151,6 +152,7 @@ function GymJamApp() {
         {showTabs && !fullBleed && (
           <View style={styles.statHeader}>
             <View style={styles.statBadge}>
+              <Glass radius={RADIUS.pill} dim={0.2} style={StyleSheet.absoluteFill} />
               <MaterialIcons name="emoji-events" size={13} color={C.accent} />
               <Text style={styles.statText}>{elo.toLocaleString()}</Text>
             </View>
@@ -171,6 +173,11 @@ function GymJamApp() {
             <Tab label="Profile" icon="person" active={['profile', 'squad-map'].includes(screen)} onPress={() => setScreen('profile')} targetRef={profileTabTarget} />
           </View>
         )}
+
+        {/* Toasts render here (inside the screen layer) so their liquid-glass
+            bubbles can refract the content behind them — a blur view can only
+            sample its own native layer, not across the navigator boundary. */}
+        <ToastViewport />
       </SafeAreaView>
 
       {/* First-run overlays sit outside the SafeAreaView so they cover the full
@@ -236,7 +243,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: 4,
     paddingHorizontal: 10, paddingVertical: 5,
     borderRadius: RADIUS.pill,
-    backgroundColor: C.card,
     borderWidth: 1, borderColor: C.borderHi,
   },
   statText: { fontFamily: FONT.semibold, fontSize: 13, color: C.ink },

@@ -4,6 +4,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 
 import { C, FONT, RADIUS, SPACE } from '../theme/tokens';
 import { Avatar } from '../ui/Avatar';
+import { Glass } from '../ui/Glass';
 import { FullMap, gymInitials } from '../ui/FullMap';
 import { type Presence } from '../ui/ProfileMap';
 import { useAppState } from '../state/AppState';
@@ -145,6 +146,7 @@ export function SquadMapScreen({ onBack }: { onBack: () => void }) {
       <View style={styles.header} pointerEvents="box-none">
         <IconButton icon="arrow-back" onPress={onBack} />
         <View style={styles.titlePill}>
+          <Glass radius={RADIUS.pill} dim={0.18} style={StyleSheet.absoluteFill} />
           <Text style={styles.title}>{groupName || 'Squad'} map</Text>
         </View>
         <View style={{ width: 40 }} />
@@ -154,6 +156,7 @@ export function SquadMapScreen({ onBack }: { onBack: () => void }) {
       {selectedMember && (
         <View style={styles.sheet} pointerEvents="box-none">
           <View style={styles.sheetCard}>
+            <Glass radius={RADIUS.lg} dim={0.22} style={StyleSheet.absoluteFill} />
             <Avatar id={selectedMember.avatar} name={selectedMember.display_name} size={44} accent={selectedMember.is_me} />
             <View style={{ flex: 1 }}>
               <Text style={styles.sheetName}>{selectedMember.is_me ? 'You' : selectedMember.display_name}</Text>
@@ -182,6 +185,7 @@ export function SquadMapScreen({ onBack }: { onBack: () => void }) {
       {selectedGymPoint && (
         <View style={styles.sheet} pointerEvents="box-none">
           <View style={styles.sheetCard}>
+            <Glass radius={RADIUS.lg} dim={0.22} style={StyleSheet.absoluteFill} />
             <View style={styles.gymBadge}>
               <Text style={styles.gymBadgeText}>{gymInitials(selectedGymPoint.name)}</Text>
             </View>
@@ -230,8 +234,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
   titlePill: {
-    backgroundColor: 'rgba(27,23,20,0.78)',
+    overflow: 'hidden',
     borderRadius: RADIUS.pill,
+    borderWidth: 1, borderColor: C.borderHi,
     paddingHorizontal: 16, paddingVertical: 8,
     alignItems: 'center',
   },
@@ -243,7 +248,7 @@ const styles = StyleSheet.create({
   sheet: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: SPACE.xl, paddingBottom: TAB_BAR_CLEARANCE },
   sheetCard: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: C.card,
+    overflow: 'hidden',
     borderRadius: RADIUS.lg, borderWidth: 1, borderColor: C.borderHi,
     padding: SPACE.lg,
   },

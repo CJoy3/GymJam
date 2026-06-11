@@ -17,6 +17,7 @@ import MapView, { Marker, PROVIDER_DEFAULT, type Region } from 'react-native-map
 
 import { C, FONT } from '../theme/tokens';
 import { Avatar } from './Avatar';
+import { Glass } from './Glass';
 import type { SquadMapMember } from '../../lib/api/groups';
 import type { GymMapBounds, GymMapPoint } from '../../lib/api/gyms';
 import type { Presence } from './ProfileMap';
@@ -365,6 +366,7 @@ export const FullMap = React.memo(function FullMap({
             onPress={() => { setSearchRegion(region); onSearchArea?.(regionToBounds(region)); }}
             style={styles.searchBtn}
           >
+            <Glass radius={999} dim={0.18} style={StyleSheet.absoluteFill} />
             <MaterialIcons name="search" size={15} color={C.ink} />
             <Text style={styles.searchText}>Search this area</Text>
           </Pressable>
@@ -387,7 +389,6 @@ const styles = StyleSheet.create({
   searchWrap: { position: 'absolute', top: 100, left: 0, right: 0, alignItems: 'center' },
   searchBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: 'rgba(27,23,20,0.86)',
     borderWidth: 1, borderColor: C.borderHi,
     borderRadius: 999, paddingHorizontal: 14, paddingVertical: 9,
     shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 6, shadowOffset: { width: 0, height: 2 },
