@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import Animated, { Easing, FadeIn } from 'react-native-reanimated';
 
@@ -19,14 +19,23 @@ import { C, FONT, RADIUS, SPACE } from '../../src/theme/tokens';
 
 const EASE_OUT = Easing.out(Easing.cubic);
 
+// The tab bar floats over the content (absolutely positioned) rather than
+// taking a fixed row in the layout, so screen content shows continuously
+// behind/around it. Screens reserve matching bottom space via TAB_BAR_CLEARANCE
+// (see _shared) so the floating bar overlays content, not an empty dark band,
+// and core actions still scroll clear of it.
+const TAB_BAR_GAP = 14; // bar's gap from the bottom edge when there's no safe-area inset
+
 /** Coach-marks tour, in order. The two home-* targets are registered inside
- * Home.tsx; the tab-* targets on the tab bar below. */
+ * Home.tsx; the tab-* targets on the tab bar below. `screen` is the page each
+ * step lives on — the overlay reports it so the tour walks the app, switching
+ * the background page as it highlights each tab. */
 const TOUR_STEPS: CoachStep[] = [
-  { id: 'home-week', text: 'This is your week-tap a day to see your plan' },
-  { id: 'home-checkin', text: 'Hit this when you get to the gym' },
-  { id: 'tab-group', text: "See your group's pledges and nudge people who've gone quiet" },
-  { id: 'tab-progress', text: 'Your ELO score lives here-it goes up every time you show up' },
-  { id: 'tab-profile', text: 'Your gym space, your squad on the map, and your settings' },
+  { id: 'home-week', text: 'This is your week-tap a day to see your plan', screen: 'home' },
+  { id: 'home-checkin', text: 'Hit this when you get to the gym', screen: 'home' },
+  { id: 'tab-group', text: "See your group's pledges and nudge people who've gone quiet", screen: 'group' },
+  { id: 'tab-progress', text: 'Your ELO score lives here-it goes up every time you show up', screen: 'progress' },
+  { id: 'tab-profile', text: 'Your gym space, your squad on the map, and your settings', screen: 'profile' },
 ];
 
 type Screen =
@@ -48,6 +57,10 @@ function GymJamApp() {
   const { ready, userId, gymId, groupId, tag, elo, refreshAll } = useAppState();
   const { hasSeenWizard, hasSeenTour, completeWizard, completeTour } = useOnboarding();
   const [screen, setScreen] = useState<Screen | null>(null);
+  const insets = useSafeAreaInsets();
+
+  // Where the floating bar sits above the bottom edge (clears the home indicator).
+  const tabBarBottom = (insets.bottom || TAB_BAR_GAP);
 
   // Tab-bar coach-mark targets (Home registers its own two from inside).
   const groupTabTarget = useCoachTarget('tab-group');
@@ -120,12 +133,13 @@ function GymJamApp() {
   const fullBleed = screen === 'squad-map';
 
   // First-run onboarding: the welcome wizard shows once the user is in the main
-  // shell (post account-setup); the coach-mark tour follows once the wizard is
-  // done, deferred until the user is actually on Home-that's where its first
-  // targets live. Both flags are null until AsyncStorage resolves, which keeps
-  // everything hidden until we know.
+  // shell (post account-setup). When it finishes we route to Home (see its
+  // onDone below), then the coach-mark tour runs — it drives its own navigation,
+  // walking the pages as it highlights each tab, so it no longer needs to be
+  // gated on the current screen. Both flags are null until AsyncStorage resolves,
+  // which keeps everything hidden until we know.
   const showWizard = showTabs && hasSeenWizard === false;
-  const showTour = !showWizard && hasSeenWizard === true && hasSeenTour === false && screen === 'home';
+  const showTour = !showWizard && hasSeenWizard === true && hasSeenTour === false;
 
   return (
     <View style={styles.fill}>
@@ -141,10 +155,13 @@ function GymJamApp() {
           </View>
         )}
 
+        {/* Content fills the full height and sits under the floating bar, so the
+            bar overlays real content instead of an empty dark band. Screens
+            reserve TAB_BAR_CLEARANCE at the bottom so nothing hides behind it. */}
         <View style={{ flex: 1 }}>{render()}</View>
 
         {showTabs && (
-          <View style={styles.tabBar}>
+          <View style={[styles.tabBar, { bottom: tabBarBottom }]}>
             <Tab label="Home" icon="home" active={screen === 'home'} onPress={() => setScreen('home')} />
             <Tab label="Group" icon="group" active={['group', 'gym-browser', 'leaderboard', 'pot-tracker'].includes(screen)} onPress={() => setScreen('group')} targetRef={groupTabTarget} />
             <Tab label="Progress" icon="trending-up" active={['progress', 'gym-space'].includes(screen)} onPress={() => setScreen('progress')} targetRef={progressTabTarget} />
@@ -155,8 +172,18 @@ function GymJamApp() {
 
       {/* First-run overlays sit outside the SafeAreaView so they cover the full
           window (status-bar area included). */}
-      {showWizard && <WizardOverlay onDone={completeWizard} />}
-      {showTour && <CoachMarksOverlay steps={TOUR_STEPS} onDone={completeTour} onSkip={completeTour} />}
+      {/* Finishing the wizard lands on Home so the tour's first targets (the
+          week + check-in, registered by Home) are mounted before it starts. */}
+      {showWizard && <WizardOverlay onDone={() => { completeWizard(); setScreen('home'); }} />}
+      {showTour && (
+        <CoachMarksOverlay
+          steps={TOUR_STEPS}
+          // Walk the app: switch the background page to each step's screen.
+          onStepChange={(s) => { if (s.screen) setScreen(s.screen as Screen); }}
+          onDone={() => { completeTour(); setScreen('home'); }}
+          onSkip={() => { completeTour(); setScreen('home'); }}
+        />
+      )}
     </View>
   );
 }
@@ -170,12 +197,15 @@ function Tab({ label, icon, active, onPress, targetRef }: {
   targetRef?: (node: View | null) => void;
 }) {
   return (
-    <View ref={targetRef} collapsable={false} style={styles.tab}>
-      <Pressable onPress={onPress} style={styles.tabInner}>
-        <View style={[styles.tabIconWrap, active && styles.tabIconActive]}>
+    <View style={styles.tab}>
+      {/* Icons only — no text labels. The coach-mark target is the icon chip
+          (not the full cell) so the tour spotlight is a neat rounded box that
+          fits inside the floating bar instead of overflowing its edges. The
+          label is kept for accessibility. */}
+      <Pressable onPress={onPress} style={styles.tabInner} accessibilityRole="button" accessibilityLabel={label}>
+        <View ref={targetRef} collapsable={false} style={[styles.tabIconWrap, active && styles.tabIconActive]}>
           <MaterialIcons name={icon} size={22} color={active ? C.primaryFg : C.mutedFg} />
         </View>
-        <Text style={[styles.tabLabel, { color: active ? C.ink : C.mutedFg }]}>{label}</Text>
       </Pressable>
     </View>
   );
@@ -208,17 +238,29 @@ const styles = StyleSheet.create({
   },
   statText: { fontFamily: FONT.semibold, fontSize: 13, color: C.ink },
 
+  // Floating tab bar: detached from the bottom edge with side margins, rounded
+  // corners and a shadow so it reads as an overlay. `bottom` is set inline from
+  // the safe-area inset. Screens reserve `tabBarClearance` below their content
+  // so nothing renders behind it.
   tabBar: {
+    position: 'absolute',
+    left: SPACE.lg,
+    right: SPACE.lg,
     flexDirection: 'row',
-    backgroundColor: C.bgSoft,
-    borderTopWidth: 1,
-    borderTopColor: C.border,
+    backgroundColor: C.card,
+    borderRadius: RADIUS.pill,
+    borderWidth: 1,
+    borderColor: C.borderHi,
     paddingTop: 8,
-    paddingBottom: 18,
+    paddingBottom: 8,
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 12,
   },
   tab: { flex: 1 },
-  tabInner: { alignItems: 'center', justifyContent: 'center', gap: 4 },
+  tabInner: { alignItems: 'center', justifyContent: 'center', paddingVertical: 4 },
   tabIconWrap: { width: 44, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   tabIconActive: { backgroundColor: C.primary },
-  tabLabel: { fontFamily: FONT.medium, fontSize: 10.5, letterSpacing: 0.3 },
 });

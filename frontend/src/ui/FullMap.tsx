@@ -101,13 +101,22 @@ const movedAway = (a: Region, b: Region | null) => {
  */
 function useRenderUntilLaid() {
   const [tracks, setTracks] = useState(true);
+  const settle = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     // Safety net in case onLayout somehow doesn't fire.
     const t = setTimeout(() => setTracks(false), 2000);
-    return () => clearTimeout(t);
+    return () => { clearTimeout(t); if (settle.current) clearTimeout(settle.current); };
   }, []);
-  // Stable so callers can safely include it in a useMemo dep list.
-  const onLaidOut = useCallback(() => setTracks(false), []);
+  // Stop tracking a short beat AFTER layout, not synchronously on it. `onLayout`
+  // fires when the view is *measured*, but the avatar / pixel-sprite children
+  // paint a frame or two later. Snapshotting on layout captured an empty bitmap,
+  // so Apple Maps fell back to its default RED dropped-pin annotation. Waiting
+  // for paint captures the real custom view; we still settle to false (once)
+  // so markers go static and don't churn the map (see the crash note above).
+  const onLaidOut = useCallback(() => {
+    if (settle.current) return;
+    settle.current = setTimeout(() => setTracks(false), 200);
+  }, []);
   return { tracks, onLaidOut };
 }
 

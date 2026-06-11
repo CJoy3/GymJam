@@ -11,7 +11,13 @@ import { Easing } from 'react-native-reanimated';
 import { C, FONT, RADIUS, SPACE } from '../theme/tokens';
 
 export const EASE_OUT = Easing.out(Easing.cubic);
-export const pageWrap = { padding: SPACE.xl, paddingTop: 56, paddingBottom: 32 } as const;
+
+// Bottom space reserved at the end of scrollable content (and Home's pinned
+// footer) so the floating tab bar overlays *content* rather than an empty dark
+// band, while still letting the last item / buttons scroll clear of the bar.
+// Generous enough to cover the bar height + the largest home-indicator inset.
+export const TAB_BAR_CLEARANCE = 116;
+export const pageWrap = { padding: SPACE.xl, paddingTop: 56, paddingBottom: TAB_BAR_CLEARANCE } as const;
 export const LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 export const styles = StyleSheet.create({

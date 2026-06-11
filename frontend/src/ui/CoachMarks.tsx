@@ -25,6 +25,9 @@ import { Body, Btn, Card } from './components';
 export interface CoachStep {
   id: string;
   text: string;
+  /** App screen this step lives on. The overlay reports it via onStepChange so
+   * the host can switch the background page to follow the tour. */
+  screen?: string;
 }
 
 type TargetRect = { x: number; y: number; w: number; h: number };
@@ -65,11 +68,14 @@ const DIM = 'rgba(27,23,20,0.78)';
 const ON_CREAM_SOFT = 'rgba(27,23,20,0.55)';
 
 export function CoachMarksOverlay({
-  steps, onDone, onSkip,
+  steps, onDone, onSkip, onStepChange,
 }: {
   steps: CoachStep[];
   onDone: () => void;
   onSkip: () => void;
+  /** Fired whenever the active step changes (incl. on mount) so the host can
+   * navigate the background to the step's screen, making the tour walk pages. */
+  onStepChange?: (step: CoachStep, index: number) => void;
 }) {
   const registry = useContext(Ctx);
   const [index, setIndex] = useState(0);
@@ -80,6 +86,15 @@ export function CoachMarksOverlay({
 
   const step = steps[index];
   const isLast = index === steps.length - 1;
+
+  // Tell the host which screen this step belongs to, so it can switch the
+  // background page *before* we measure the step's target. Tab targets live in
+  // the always-present floating bar, so they stay measurable across pages.
+  useEffect(() => {
+    if (step) onStepChange?.(step, index);
+    // Only re-run when the step changes; onStepChange is stable from the host.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [index]);
 
   const goNext = useCallback(() => {
     // Deliberately keep the current spotlight + tooltip on screen while the

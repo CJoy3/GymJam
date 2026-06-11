@@ -10,6 +10,7 @@ import { useAppState } from '../state/AppState';
 import { getSquadMap, type SquadMapMember } from '../../lib/api/groups';
 import { boundsAround, getGymsMap, type GymMapBounds, type GymMapPoint } from '../../lib/api/gyms';
 import { getQuickLocation, milesBetween, watchLocation, type Coords } from '../../lib/location';
+import { TAB_BAR_CLEARANCE } from './_shared';
 
 const RADIUS_MILES = 5; // only ever load gyms within this radius of the map's focus
 const DEFAULT_CENTER = { lat: 51.5072, lng: -0.1276 }; // central London, used when the squad isn't located
@@ -244,7 +245,9 @@ const styles = StyleSheet.create({
   title: { fontFamily: FONT.bold, fontSize: 15, color: C.ink },
   subtitle: { fontFamily: FONT.medium, fontSize: 11, color: C.inkSoft, marginTop: 1 },
 
-  sheet: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: SPACE.xl, paddingBottom: 36 },
+  // Sits above the floating tab bar (which overlays this full-bleed map) so the
+  // selected member / gym card is never hidden behind it.
+  sheet: { position: 'absolute', left: 0, right: 0, bottom: 0, padding: SPACE.xl, paddingBottom: TAB_BAR_CLEARANCE },
   sheetCard: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     backgroundColor: C.card,
@@ -276,7 +279,7 @@ const styles = StyleSheet.create({
   nudgeText: { fontFamily: FONT.bold, fontSize: 12, color: C.ink },
 
   empty: {
-    position: 'absolute', left: 24, right: 24, bottom: 40,
+    position: 'absolute', left: 24, right: 24, bottom: TAB_BAR_CLEARANCE,
     backgroundColor: 'rgba(27,23,20,0.78)', borderRadius: RADIUS.md, padding: 14,
   },
   emptyText: { fontFamily: FONT.medium, fontSize: 13, color: C.inkSoft, textAlign: 'center' },
