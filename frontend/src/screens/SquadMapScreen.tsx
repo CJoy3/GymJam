@@ -89,11 +89,17 @@ export function SquadMapScreen({ onBack }: { onBack: () => void }) {
     getGymsMap(boundsAround(lat, lng, RADIUS_MILES)).then(setGyms).catch(() => {});
   }, []);
 
-  const statusById: Record<string, Presence> = {};
-  for (const m of groupMembers) {
-    const s = m.thisWeek[todayDow]?.state;
-    statusById[m.userId] = s === 'checked-in' ? 'in' : s === 'planned' || s === 'locked' ? 'pledged' : 'rest';
-  }
+  // Memoised so it's a STABLE object across the app's background re-renders (the
+  // 60s location push, sibling-screen polls, etc.). A fresh object every render
+  // would defeat FullMap's React.memo and keep re-rendering the native map.
+  const statusById = useMemo(() => {
+    const out: Record<string, Presence> = {};
+    for (const m of groupMembers) {
+      const s = m.thisWeek[todayDow]?.state;
+      out[m.userId] = s === 'checked-in' ? 'in' : s === 'planned' || s === 'locked' ? 'pledged' : 'rest';
+    }
+    return out;
+  }, [groupMembers, todayDow]);
 
   // Plot MYSELF at my real current location, not my home gym. myLocation is the
   // PRIVATE device fix — used only to draw my own pin here; it is never uploaded,

@@ -177,7 +177,7 @@ const MemberMarker = React.memo(function MemberMarker({ member, presence, onPres
   );
 });
 
-export function FullMap({
+export const FullMap = React.memo(function FullMap({
   members,
   gyms,
   statusById,
@@ -287,6 +287,11 @@ export function FullMap({
   // selection (that re-render churn was the disappear/crash bug — see GymMarker).
   const handleGymPress = useCallback((id: string) => onSelectGym?.(id), [onSelectGym]);
   const handleMemberPress = useCallback((id: string) => onSelect?.(id), [onSelect]);
+  const handleMapReady = useCallback(() => setMapReady(true), []);
+  const handleRegionChangeComplete = useCallback((r: Region) => {
+    setRegion(r);
+    setSearchRegion((prev) => prev ?? r);
+  }, []);
 
   // Gyms confined to the searched area, nearest-first, capped. Memoised so it
   // only recomputes when the data or searched area changes — not when a marker is
@@ -317,11 +322,11 @@ export function FullMap({
         style={StyleSheet.absoluteFill}
         provider={PROVIDER_DEFAULT}
         initialRegion={DEFAULT_REGION}
-        onMapReady={() => setMapReady(true)}
+        onMapReady={handleMapReady}
         // Only update on *complete* (gesture/animation end), never per-frame.
         // Updating region state on every frame re-creates all markers ~60×/s and
         // crashes the native map while panning/searching.
-        onRegionChangeComplete={(r) => { setRegion(r); setSearchRegion((prev) => prev ?? r); }}
+        onRegionChangeComplete={handleRegionChangeComplete}
       >
         {/* Gym pins — native markers, glued to their coordinate through rotation.
             Hidden when zoomed too far out (see tooZoomedOut). */}
@@ -358,7 +363,7 @@ export function FullMap({
       )}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   pin: {
