@@ -117,11 +117,19 @@ export function SquadMapScreen({ onBack }: { onBack: () => void }) {
   // Fetch gyms within a 5-mile radius of a centre (keeps the payload + marker
   // count small; UK-wide loads were crashing the map). Reconciled so unchanged
   // gyms keep their object identity (no needless marker re-renders), and errors
-  // keep the existing pins instead of blanking the layer mid-session.
+  // keep the existing pins instead of blanking the layer mid-session. The
+  // sequence guard makes the LATEST search win: rapid re-searches used to let
+  // a slow earlier response land after a newer one, swapping the gym set twice
+  // and double-churning the native markers.
+  const fetchSeq = useRef(0);
   const fetchGyms = useCallback((lat: number, lng: number) => {
     gymCenterRef.current = { lat, lng };
+    const seq = ++fetchSeq.current;
     getGymsMap(boundsAround(lat, lng, RADIUS_MILES))
-      .then((list) => setGyms((prev) => reconcileById(prev, list, (g) => g.id)))
+      .then((list) => {
+        if (seq !== fetchSeq.current) return; // a newer search superseded this one
+        setGyms((prev) => reconcileById(prev, list, (g) => g.id));
+      })
       .catch(() => { });
   }, []);
 

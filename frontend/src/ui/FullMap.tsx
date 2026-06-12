@@ -40,11 +40,12 @@ const FOCUS_DELTA = 0.0024;
 const FLY_IN_FROM_DELTA = 0.25;
 // How long the zoom-in glide takes.
 const FLY_IN_MS = 1100;
-// Hard cap on rendered native markers. Each is a custom-view marker that
-// re-rasterises on mount/remount (open, pan, "Search this area"), and Apple Maps
-// crashes once too many do so at once-we saw it at ~150, and 50 still drifted
-// into crashes over a long pan+tap+search session. 24 nearest-to-centre pins is
-// plenty on screen and keeps the rasterisation spike well inside safe limits.
+// Hard cap on gym markers (= the pool size; see GymSlotMarker). Each is a
+// custom-view marker that re-rasterises whenever its content changes (open,
+// "Search this area"), and Apple Maps crashes once too many do so at once-we
+// saw it at ~150, and 50 still drifted into crashes over a long pan+tap+search
+// session. 24 nearest-to-centre pins is plenty on screen and keeps the
+// rasterisation spike well inside safe limits.
 const MAX_GYMS = 24;
 // Zoomed out beyond this latitude span (~24 miles), we stop showing gyms and hide
 // the "Search this area" button-rendering many pins over a huge area crashed
@@ -144,15 +145,59 @@ function useRenderUntilLaid() {
  * in SquadMapScreen, not by mutating the pin. Keep all props here primitive/stable
  * and never feed selection into the rendered <View>.
  */
-const GymMarker = React.memo(function GymMarker({ gym, onPress }: { gym: GymMapPoint; onPress: (id: string) => void }) {
-  const { tracks, onLaidOut } = useRenderUntilLaid();
-  const d = gymDiameter(gym.avg_elo);
-  const initials = gymInitials(gym.name);
-  // Keep the child element referentially stable across re-renders (same trick
-  // as MemberMarker below). If a re-render slips through the memo (e.g. a
-  // refetch produced a new-but-identical gym object), handing react-native-maps
-  // a brand-new child while tracksViewChanges=false blanks the cached bitmap
-  // and re-rasterises-the churn that crashed Apple Maps over long sessions.
+/** Where an empty pool slot parks its native marker: a valid coordinate in the
+ *  Gulf of Guinea, thousands of miles off-screen, drawn at opacity 0. */
+const PARKED = { latitude: 0, longitude: 0 };
+
+/**
+ * A pooled gym marker. The pool is the load-bearing crash fix for "searching
+ * the map crashes": every search used to unmount the pins that left the result
+ * set and mount the new ones, and zooming out unmounted ALL of them-and
+ * Apple Maps removing/adding batches of custom annotation views (often during
+ * a region animation) is what kept crashing long sessions. A slot's native
+ * marker now mounts ONCE and never unmounts while the map is open: when its
+ * gym changes it just updates coordinate/content in place, and when its slot
+ * is empty it parks off-screen at opacity 0.
+ *
+ * Re-rasterisation on content change is handled with the derived-state-during-
+ * render pattern: `tracks` flips true in the SAME commit that renders the new
+ * child. Re-tracking one render late (from an effect) is what blanked pins
+ * before-react-native-maps wipes the cached bitmap if children change while
+ * tracksViewChanges is false (see the useRenderUntilLaid note above).
+ */
+const GymSlotMarker = React.memo(function GymSlotMarker({ gym, onPress }: { gym: GymMapPoint | null; onPress: (id: string) => void }) {
+  const gymId = gym?.id ?? null;
+  const [tracks, setTracks] = useState(true);
+  const [lastId, setLastId] = useState<string | null>(gymId);
+  if (gymId !== lastId) {
+    // Render-phase derived state (supported React pattern): the slot's gym
+    // changed, so rasterise the new content in this very commit.
+    setLastId(gymId);
+    if (!tracks) setTracks(true);
+  }
+  const settle = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    // Freeze the freshly rasterised view shortly after each content change.
+    // The fallback covers swaps that don't change layout (onLayout won't fire
+    // when the new gym's pin is the same size as the old one).
+    const fallback = setTimeout(() => setTracks(false), 900);
+    return () => {
+      clearTimeout(fallback);
+      if (settle.current) { clearTimeout(settle.current); settle.current = null; }
+    };
+  }, [gymId]);
+  const onLaidOut = useCallback(() => {
+    if (settle.current) return;
+    // A short beat after layout so the paint is captured, not an empty bitmap
+    // (snapshotting on layout itself showed Apple's default red pin).
+    settle.current = setTimeout(() => setTracks(false), 200);
+  }, []);
+
+  const d = gym ? gymDiameter(gym.avg_elo) : 30;
+  const initials = gym ? gymInitials(gym.name) : '';
+  // Child stays referentially stable unless the content really changed-
+  // re-renders that slip through the memo must never hand the native marker a
+  // new child element while it isn't tracking (that blanks the pin).
   const child = useMemo(() => (
     <View
       onLayout={onLaidOut}
@@ -168,9 +213,10 @@ const GymMarker = React.memo(function GymMarker({ gym, onPress }: { gym: GymMapP
   ), [d, initials, onLaidOut]);
   return (
     <Marker
-      coordinate={{ latitude: gym.latitude, longitude: gym.longitude }}
+      coordinate={gym ? { latitude: gym.latitude, longitude: gym.longitude } : PARKED}
       anchor={{ x: 0.5, y: 0.5 }}
-      onPress={() => onPress(gym.id)}
+      onPress={() => { if (gym) onPress(gym.id); }}
+      opacity={gym ? 1 : 0}
       tracksViewChanges={tracks}
       zIndex={1}
     >
@@ -313,7 +359,7 @@ export const FullMap = React.memo(function FullMap({
   }, [located.length, size.w, mapReady, focusLocation]);
 
   // Stable per-tap handlers so the memoised markers don't all re-render on every
-  // selection (that re-render churn was the disappear/crash bug-see GymMarker).
+  // selection (that re-render churn was the disappear/crash bug-see GymSlotMarker).
   const handleGymPress = useCallback((id: string) => onSelectGym?.(id), [onSelectGym]);
   const handleMemberPress = useCallback((id: string) => onSelect?.(id), [onSelect]);
   const handleMapReady = useCallback(() => setMapReady(true), []);
@@ -325,12 +371,18 @@ export const FullMap = React.memo(function FullMap({
     setSearchRegion((prev) => prev ?? r);
   }, []);
 
+  // When zoomed out a long way, disable the gym-search feature entirely: no
+  // gym pins (the pool parks them; nothing unmounts) and no search button
+  // (prevents the large-area crash).
+  const tooZoomedOut = region.latitudeDelta > SEARCH_MAX_DELTA;
+  const showSearch = !tooZoomedOut && movedAway(region, searchRegion);
+
   // Gyms confined to the searched area, nearest-first, capped. Memoised so it
-  // only recomputes when the data or searched area changes-not when a marker is
-  // tapped (selection mustn't churn the whole list; that re-mounts markers).
+  // only recomputes when the data or searched area changes-not when a marker
+  // is tapped (selection mustn't churn the list and re-rasterise the pool).
   const searchIn = searchRegion ?? region;
   const visibleGyms = useMemo(
-    () => (gyms ?? [])
+    () => tooZoomedOut ? [] : (gyms ?? [])
       .filter((g) => validPoint(g.latitude, g.longitude) && inBounds(g.latitude, g.longitude, searchIn))
       .sort((a, b) =>
         (Math.abs(a.latitude - searchIn.latitude) + Math.abs(a.longitude - searchIn.longitude)) -
@@ -339,13 +391,30 @@ export const FullMap = React.memo(function FullMap({
     // Depend on searchIn's *fields*, not the object-`searchRegion ?? region`
     // is a fresh object each render and would defeat the memo.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [gyms, searchIn.latitude, searchIn.longitude, searchIn.latitudeDelta, searchIn.longitudeDelta],
+    [gyms, tooZoomedOut, searchIn.latitude, searchIn.longitude, searchIn.latitudeDelta, searchIn.longitudeDelta],
   );
 
-  // When zoomed out a long way, disable the gym-search feature entirely: don't
-  // render gym pins and hide the search button (prevents the large-area crash).
-  const tooZoomedOut = region.latitudeDelta > SEARCH_MAX_DELTA;
-  const showSearch = !tooZoomedOut && movedAway(region, searchRegion);
+  // Assign the visible gyms to POOL SLOTS. A gym already in a slot stays in
+  // that slot (its marker doesn't even re-render); newcomers fill vacated
+  // slots. The pool only ever grows (to MAX_GYMS) and slots are keyed by
+  // index, so a search NEVER unmounts or mounts a native marker-the
+  // add/remove churn that crashed Apple Maps. Idempotent, so safe in the memo.
+  const slotsRef = useRef<(GymMapPoint | null)[]>([]);
+  const slots = useMemo(() => {
+    const byId = new Map(visibleGyms.map((g) => [g.id, g]));
+    const next: (GymMapPoint | null)[] = slotsRef.current.map(
+      (g) => (g && byId.get(g.id)) || null,
+    );
+    const placed = new Set(next.filter(Boolean).map((g) => (g as GymMapPoint).id));
+    for (const g of visibleGyms) {
+      if (placed.has(g.id)) continue;
+      const free = next.indexOf(null);
+      if (free >= 0) next[free] = g;
+      else next.push(g);
+    }
+    slotsRef.current = next;
+    return next;
+  }, [visibleGyms]);
 
   return (
     <View style={[{ flex: 1 }, style]} onLayout={onLayout}>
@@ -360,11 +429,13 @@ export const FullMap = React.memo(function FullMap({
         // crashes the native map while panning/searching.
         onRegionChangeComplete={handleRegionChangeComplete}
       >
-        {/* Gym pins-native markers, glued to their coordinate through rotation.
-            Hidden when zoomed too far out (see tooZoomedOut). */}
-        {!tooZoomedOut && visibleGyms.map((g) => (
-          <GymMarker
-            key={g.id}
+        {/* Gym pins-a fixed pool of native markers keyed by SLOT, not gym id.
+            Searches and zooming out only update slot contents (or park them
+            off-screen); native annotation views are never added/removed after
+            mount, which is what crashed Apple Maps when searching. */}
+        {slots.map((g, i) => (
+          <GymSlotMarker
+            key={`gym-slot-${i}`}
             gym={g}
             onPress={handleGymPress}
           />

@@ -17,12 +17,27 @@ import { C, FONT, RADIUS } from '../theme/tokens';
 import { AnimatedPixelSprite, PixelSprite, spriteSize } from './pixel';
 import { CHARACTER_FRAMES } from './characters';
 import {
-  CHARACTER_BAND, FLOOR_ITEMS, Tier, TIERS, WALL_ITEMS, tierForScene,
+  FLOOR_ITEMS, TIERS, WALL_ITEMS, tierForScene,
 } from './manifest';
 
 const WALL_FRAC = 0.6;
 const VIRTUAL_COLS = 70;
 const CURL_FPS = 2.2;
+
+/** Floor spots for the community roster, in fill order. Slot 0 is the classic
+ *  solo position (centre of the floor), so a single character renders exactly
+ *  where it always has. The rest are spread around the floor items so a full
+ *  squad reads as a busy shared gym rather than a pile of sprites. */
+const CHAR_SLOTS: { x: number; band: number }[] = [
+  { x: 0.50, band: 0.50 },
+  { x: 0.26, band: 0.62 },
+  { x: 0.70, band: 0.54 },
+  { x: 0.42, band: 0.82 },
+  { x: 0.86, band: 0.62 },
+  { x: 0.14, band: 0.40 },
+  { x: 0.62, band: 0.92 },
+  { x: 0.90, band: 0.30 },
+];
 
 export function GymScene({
   elo,
@@ -31,6 +46,8 @@ export function GymScene({
   placedItemIds,
   onToggleItem,
   unlockElo,
+  characters,
+  cols,
   style,
 }: {
   elo: number;
@@ -42,6 +59,14 @@ export function GymScene({
    *  Defaults to `elo`. The community gym passes Infinity so every item a
    *  member contributed renders, whatever the group's average tier. */
   unlockElo?: number;
+  /** Community mode: one character per entry (their build follows their own
+   *  ELO tier), spread across the floor. Omitted ⇒ the classic single
+   *  character driven by `elo`. Capped to the available floor spots. */
+  characters?: { id: string; elo: number }[];
+  /** Virtual pixel columns (default 70). More columns ⇒ smaller sprites
+   *  relative to the room, making the space read as a LARGER gym-used by the
+   *  community gym so the whole squad fits comfortably. */
+  cols?: number;
   style?: StyleProp<ViewStyle>;
 }) {
   const [w, setW] = useState(0);
@@ -49,15 +74,17 @@ export function GymScene({
   const { tier } = tierForScene(elo);
   const unlock = unlockElo ?? elo;
 
-  // Gentle whole-body bob layered under the curl frames.
+  // Gentle whole-body bob layered under the curl frames. Two phases so a
+  // roster of characters doesn't bob in eerie unison.
   const bob = useSharedValue(0);
   useEffect(() => {
     bob.value = withRepeat(withTiming(1, { duration: 1700, easing: Easing.inOut(Easing.sin) }), -1, true);
   }, [bob]);
   const charStyle = useAnimatedStyle(() => ({ transform: [{ translateY: bob.value * -1.5 }] }));
+  const charStyleAlt = useAnimatedStyle(() => ({ transform: [{ translateY: (1 - bob.value) * -1.5 }] }));
 
   const h = w / aspect;
-  const px = w / VIRTUAL_COLS;
+  const px = w / (cols ?? VIRTUAL_COLS);
   const floorLine = h * WALL_FRAC;
   const placed = placedItemIds ?? new Set<string>();
 
@@ -68,8 +95,19 @@ export function GymScene({
     return editable ? 'ghost' : null;
   };
 
-  const frames = CHARACTER_FRAMES[tier.character] ?? CHARACTER_FRAMES.scrawny;
-  const charSize = spriteSize(frames[0]);
+  // The cast: either the classic solo character (slot 0, same spot as ever) or
+  // the community roster, each with their own tier's build and a slightly
+  // staggered animation so the room feels alive.
+  const roster: CharNode[] = (characters?.length ? characters : [{ id: 'solo', elo }])
+    .slice(0, CHAR_SLOTS.length)
+    .map((c, i) => ({
+      id: `char-${c.id}`,
+      frames: CHARACTER_FRAMES[tierForScene(c.elo).tier.character] ?? CHARACTER_FRAMES.scrawny,
+      fps: CURL_FPS + (i % 3) * 0.4,
+      alt: i % 2 === 1,
+      x: CHAR_SLOTS[i].x,
+      band: CHAR_SLOTS[i].band,
+    }));
 
   return (
     <View style={[styles.frame, { aspectRatio: aspect }, style]} onLayout={onLayout}>
@@ -109,20 +147,19 @@ export function GymScene({
             );
           })}
 
-          {/* Floor props + character, drawn back-to-front by depth. */}
-          {buildFloorNodes(unlock, tier).map((node) => {
-            const isChar = node.isCharacter;
-            const rows = isChar ? frames[0] : node.sprite!;
-            const s = isChar ? charSize : spriteSize(rows);
+          {/* Floor props + characters, drawn back-to-front by depth. */}
+          {buildFloorNodes(unlock, roster).map((node) => {
+            const rows = node.char ? node.char.frames[0] : node.sprite!;
+            const s = spriteSize(rows);
             const baseY = floorLine + node.band * (h - floorLine);
             const left = node.x * w - (s.w * px) / 2;
             const top = baseY - s.h * px;
 
-            if (isChar) {
+            if (node.char) {
               return (
-                <Animated.View key="character" entering={FadeIn.duration(500)} style={[{ position: 'absolute', left, top }, charStyle]}>
+                <Animated.View key={node.id} entering={FadeIn.duration(500)} style={[{ position: 'absolute', left, top }, node.char.alt ? charStyleAlt : charStyle]}>
                   <View style={{ position: 'absolute', left: s.w * px * 0.12, top: s.h * px - px * 1.5, width: s.w * px * 0.76, height: px * 2.5, borderRadius: px * 2, backgroundColor: 'rgba(0,0,0,0.28)' }} />
-                  <AnimatedPixelSprite frames={frames} pixel={px} fps={CURL_FPS} />
+                  <AnimatedPixelSprite frames={node.char.frames} pixel={px} fps={node.char.fps} />
                 </Animated.View>
               );
             }
@@ -181,13 +218,17 @@ function PropNode({
   );
 }
 
-type FloorNode = { id: string; sprite?: string[]; x: number; band: number; isCharacter?: boolean };
+/** A character to draw on the floor: its frame set (build = its owner's tier),
+ *  a slightly staggered animation, and a floor spot. */
+type CharNode = { id: string; frames: string[][]; fps: number; alt: boolean; x: number; band: number };
 
-function buildFloorNodes(elo: number, tier: Tier): FloorNode[] {
+type FloorNode = { id: string; sprite?: string[]; x: number; band: number; char?: CharNode };
+
+function buildFloorNodes(elo: number, roster: CharNode[]): FloorNode[] {
   const nodes: FloorNode[] = FLOOR_ITEMS.filter((it) => elo >= it.elo).map((it) => ({
     id: it.id, sprite: it.sprite, x: it.x, band: it.band,
   }));
-  nodes.push({ id: 'character', x: 0.5, band: CHARACTER_BAND, isCharacter: true });
+  for (const c of roster) nodes.push({ id: c.id, x: c.x, band: c.band, char: c });
   return nodes.sort((a, b) => a.band - b.band);
 }
 

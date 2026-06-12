@@ -48,6 +48,15 @@ export function CommunityGym({ onBrowse }: { onBrowse: () => void }) {
     [data],
   );
 
+  // Everyone trains together: one character per member (their build follows
+  // their own ELO tier). You go first so your character takes the centre spot.
+  const characters = useMemo(
+    () => [...(data?.members ?? [])]
+      .sort((a, b) => Number(b.is_me) - Number(a.is_me))
+      .map((m) => ({ id: m.user_id, elo: m.elo })),
+    [data],
+  );
+
   if (!groupId) {
     return (
       <View style={styles.screen}>
@@ -88,9 +97,23 @@ export function CommunityGym({ onBrowse }: { onBrowse: () => void }) {
 
         {/* The shared scene: tier from the group's average ELO, equipment is the
             union of every member's placed items (unlockElo=Infinity so a
-            contribution always renders, whatever the average tier). */}
+            contribution always renders, whatever the average tier). A taller
+            aspect + more virtual columns scale the sprites down so the room
+            reads as one LARGER gym with the whole squad training inside it. */}
         <FadeInItem delay={120} style={{ marginTop: 22 }}>
-          <GymScene elo={data?.avg_elo ?? 0} unlockElo={Infinity} aspect={1.3} placedItemIds={placed} />
+          <GymScene
+            elo={data?.avg_elo ?? 0}
+            unlockElo={Infinity}
+            aspect={1.1}
+            cols={100}
+            placedItemIds={placed}
+            characters={characters}
+          />
+          {(data?.member_count ?? 0) > 8 && (
+            <Sub style={{ marginTop: 8, textAlign: 'center' }}>
+              Showing 8 of {data!.member_count} members on the floor.
+            </Sub>
+          )}
         </FadeInItem>
 
         <FadeInItem delay={180} style={{ marginTop: 24 }}>

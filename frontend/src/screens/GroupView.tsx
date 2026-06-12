@@ -34,6 +34,9 @@ export function GroupView({ onBrowse, onLeaderboard }: { onBrowse: () => void; o
   } = useAppState();
   const refresh = useRefreshControl();
   const tourTarget = useCoachTarget('tour-group');
+  // Two pages in one screen: the group itself, and your friends (people you
+  // follow who may be in other groups). Switched by the segmented tabs below.
+  const [page, setPage] = useState<'group' | 'friends'>('group');
   const [showFeed, setShowFeed] = useState(false);
   // Locally-dismissed notification ids, persisted so they stay cleared across
   // sessions. Join requests are never dismissable (they're actionable), so they
@@ -73,11 +76,15 @@ export function GroupView({ onBrowse, onLeaderboard }: { onBrowse: () => void; o
       <ScrollView refreshControl={refresh} contentContainerStyle={pageWrap} showsVerticalScrollIndicator={false}>
         <FadeInItem>
           <View ref={tourTarget} collapsable={false} style={styles.rowBetween}>
+            {/* Header follows the page: the group's name on the group page,
+                a friends header on the friends page (and back again). */}
             <View style={{ flex: 1 }}>
-              <Eyebrow>Your group</Eyebrow>
-              <H1 style={{ marginTop: 6 }}>{groupName}</H1>
+              <Eyebrow>{page === 'group' ? 'Your group' : 'Your friends'}</Eyebrow>
+              <H1 style={{ marginTop: 6 }}>{page === 'group' ? groupName : 'Friends'}</H1>
               <Sub style={{ marginTop: 6 }}>
-                {groupMembers.length} {groupMembers.length === 1 ? 'member' : 'members'} · this week
+                {page === 'group'
+                  ? `${groupMembers.length} ${groupMembers.length === 1 ? 'member' : 'members'} · this week`
+                  : 'Pledges from friends in any group'}
               </Sub>
             </View>
             <View style={[styles.rowGap, { gap: 8 }]}>
@@ -95,6 +102,28 @@ export function GroupView({ onBrowse, onLeaderboard }: { onBrowse: () => void; o
               <IconButton icon="emoji-events" onPress={onLeaderboard} />
               <IconButton icon="swap-horiz" onPress={onBrowse} />
             </View>
+          </View>
+        </FadeInItem>
+
+        {/* Page switcher: the group's pledges, or your friends' (read-only). */}
+        <FadeInItem delay={60} style={{ marginTop: 18 }}>
+          <View style={styles.tabBar}>
+            <Pressable
+              style={[styles.tab, page === 'group' && styles.tabOn]}
+              onPress={() => setPage('group')}
+            >
+              <Text style={[styles.tabText, { color: page === 'group' ? C.primaryFg : C.mutedFg }]}>
+                Group
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[styles.tab, page === 'friends' && styles.tabOn]}
+              onPress={() => setPage('friends')}
+            >
+              <Text style={[styles.tabText, { color: page === 'friends' ? C.primaryFg : C.mutedFg }]}>
+                Friends
+              </Text>
+            </Pressable>
           </View>
         </FadeInItem>
 
@@ -143,7 +172,7 @@ export function GroupView({ onBrowse, onLeaderboard }: { onBrowse: () => void; o
           </FadeInItem>
         )}
 
-        {setterName && (
+        {page === 'group' && setterName && (
           <FadeInItem delay={80} style={{ marginTop: 18 }}>
             <Card padding={SPACE.lg} tone="sage">
               <View style={styles.rowGap}>
@@ -161,7 +190,7 @@ export function GroupView({ onBrowse, onLeaderboard }: { onBrowse: () => void; o
           </FadeInItem>
         )}
 
-        {groupMembers.length === 0 ? (
+        {page === 'group' && (groupMembers.length === 0 ? (
           <FadeInItem delay={140} style={{ marginTop: 18 }}>
             <Card padding={SPACE.xl}><Sub style={{ textAlign: 'center' }}>No members yet.</Sub></Card>
           </FadeInItem>
@@ -212,11 +241,11 @@ export function GroupView({ onBrowse, onLeaderboard }: { onBrowse: () => void; o
               );
             })}
           </View>
-        )}
+        ))}
 
-        {/* Friends live alongside the group: follow the pledges of people who
-            aren't in it (read-only-no nudging or joining their days). */}
-        <FriendsSection delay={200} />
+        {/* Friends page: follow the pledges of people who aren't in the group
+            (read-only-no nudging or joining their days). */}
+        {page === 'friends' && <FriendsSection delay={100} showTitle={false} />}
       </ScrollView>
     </View>
   );

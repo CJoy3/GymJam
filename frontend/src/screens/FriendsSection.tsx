@@ -21,7 +21,12 @@ import { styles } from './_shared';
  * joining their days). Self-contained: fetches its own data so it can render
  * on any screen without touching the global app state.
  */
-export function FriendsSection({ delay = 0 }: { delay?: number }) {
+export function FriendsSection({ delay = 0, showTitle = true }: {
+  delay?: number;
+  /** Hide the section's own "Friends" eyebrow when the host screen already
+   *  provides a Friends header (e.g. the Group screen's friends page). */
+  showTitle?: boolean;
+}) {
   const [friends, setFriends] = useState<Friend[]>([]);
   const [requests, setRequests] = useState<FriendRequest[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -94,9 +99,9 @@ export function FriendsSection({ delay = 0 }: { delay?: number }) {
 
   return (
     <View>
-      <FadeInItem delay={delay} style={{ marginTop: 28 }}>
-        <View style={[styles.rowBetween, { marginBottom: 12 }]}>
-          <Eyebrow>Friends</Eyebrow>
+      <FadeInItem delay={delay} style={{ marginTop: showTitle ? 28 : 18 }}>
+        <View style={[styles.rowBetween, { marginBottom: 12 }, !showTitle && { justifyContent: 'flex-end' }]}>
+          {showTitle && <Eyebrow>Friends</Eyebrow>}
           <Pressable onPress={() => setShowAdd((s) => !s)} hitSlop={8} style={styles.linkBtn}>
             <MaterialIcons name={showAdd ? 'close' : 'person-add'} size={15} color={C.ink} />
             <Text style={styles.linkText}>{showAdd ? 'Cancel' : 'Add friend'}</Text>
