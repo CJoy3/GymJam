@@ -88,7 +88,7 @@ export function LoginScreen() {
               <Text style={s.logoText}>GJ</Text>
             </View>
             <Text style={s.brand}>GymJam</Text>
-            <Text style={s.tagline}>Train together. Stay accountable.</Text>
+            <Text style={s.tagline}>Just nuke it.</Text>
           </View>
 
           {/* Tab switcher */}
