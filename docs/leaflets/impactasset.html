@@ -103,7 +103,7 @@
   .blob .b-num .u{font-size:30px;}
   .blob .b-txt{
     font-family:var(--display);font-weight:600;font-size:14px;line-height:1.4;
-    color:#E8DCC9;margin-top:8px;transform:rotate(-1.5deg);transform-origin:left center;
+    color:#E8DCC9;margin-top:8px;
   }
 
   /* boxed testimonial (right, top) */
@@ -157,12 +157,12 @@
   }
   .sec-head .br{color:var(--peach);}
   .subhead{
-    font-family:var(--display);font-weight:800;font-size:15px;letter-spacing:0.01em;
-    color:var(--peach);margin:14px 0 5px;
+    font-family:var(--display);font-weight:800;font-size:17px;letter-spacing:0.01em;
+    color:var(--peach);margin:16px 0 6px;
   }
   .subhead:first-of-type{margin-top:0;}
   p.body{
-    font-size:15px;line-height:1.62;color:#E4D8C5;text-align:justify;hyphens:auto;margin:0 0 13px;
+    font-size:17px;line-height:1.6;color:#E4D8C5;text-align:justify;hyphens:auto;margin:0 0 14px;
   }
   p.body:last-child{margin-bottom:0;}
   p.body b{color:var(--cream);}
@@ -170,13 +170,13 @@
   .data.sage{color:var(--sage);}
 
   /* ---------- FOOTER ---------- */
-  .foot{
-    margin-top:30px;padding-top:14px;border-top:1px solid var(--line);
-    display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;
+  .foot{margin-top:28px;padding-top:14px;border-top:1px solid var(--line);}
+  .foot .src-head{
+    display:block;font-family:var(--body);text-transform:uppercase;letter-spacing:0.26em;
+    font-size:10px;font-weight:700;color:var(--peach);margin-bottom:7px;
   }
-  .foot .mark{font-family:var(--display);font-weight:800;font-size:15px;letter-spacing:-0.02em;color:var(--cream);}
-  .foot .mark .jam{color:var(--peach);}
-  .foot .refs{font-size:9.5px;color:var(--cream-dim);line-height:1.5;max-width:60%;text-align:right;}
+  .foot .refs{display:block;font-size:10px;color:var(--cream-dim);line-height:1.6;}
+  .foot .ref{display:block;word-break:break-word;}
 
   @media (max-width:820px){
     .inner{padding:28px 22px 26px;}
@@ -189,7 +189,10 @@
     .foot .refs{max-width:100%;text-align:left;}
   }
   @media print{
-    body{background:#fff;padding:0;}
+    /* Print the colours, fill the page edge-to-edge, no browser margins. */
+    *{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    @page{margin:0;}
+    body{background:var(--ink);padding:0;}
     .poster{box-shadow:none;border:0;max-width:none;border-radius:0;}
   }
 </style>
@@ -267,7 +270,7 @@
             <p class="pull">
               Make fitness work
               <span class="circle-wrap">with<svg viewBox="0 0 120 64" preserveAspectRatio="none"><path class="loop" d="M12,34 C9,16 50,8 78,11 C108,14 116,26 110,40 C104,54 60,56 36,50 C16,45 14,40 18,30"/></svg></span>
-              your friends — not against your willpower.
+              your friends not against your willpower.
             </p>
             <div class="phones">
               <div class="phone p1"><img class="shot" src="img/plan-next-week.png" alt="Plan next week"><span class="cap">Plan Week</span></div>
@@ -278,7 +281,7 @@
 
           <h2 class="sec-head">Where the Habit Is Won <span class="br">or Lost</span></h2>
 
-          <h3 class="subhead">The Critical Month</h3>
+          <h3 class="subhead">The Critical Period</h3>
           <p class="body">
             University is where the gym habit often starts, yet it is also where it
             frequently dies. Students sign up with friends, but without structured
@@ -291,10 +294,10 @@
           <h3 class="subhead">The GymJam Contract</h3>
           <p class="body">
             GymJam intervenes before friend groups flake. By making weekly fitness
-            pledges transparent to the squad and introducing small loss-aversion stakes
+            pledges transparent to the squad and introducing small loss aversion stakes
             via the <b>Group Pot</b>, skipping a workout means letting your friends down
             <em>and</em> losing your money. We replace fragile willpower with ironclad
-            social accountability — turning flaky intentions into lifelong health habits.
+            social accountability turning flaky intentions into lifelong health habits.
           </p>
         </section>
 
@@ -302,9 +305,10 @@
 
       <!-- FOOTER -->
       <div class="foot">
+        <span class="src-head">Sources</span>
         <span class="refs">
-          [1] https://fitnessimage.com.au/what-percentage-of-people-quit-the-gym/
-          [2] https://palife.co.uk/news/workplace-wellbeing/brits-waste-503-million-on-unused-gym-memberships-in-2025/
+          <span class="ref">[1] fitnessimage.com.au/what-percentage-of-people-quit-the-gym/</span>
+          <span class="ref">[2] palife.co.uk/news/workplace-wellbeing/brits-waste-503-million-on-unused-gym-memberships-in-2025/</span>
         </span>
       </div>
 
