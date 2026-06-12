@@ -257,6 +257,25 @@ create table if not exists nudges (
 create index if not exists nudges_to_idx   on nudges(to_user_id, created_at desc);
 create index if not exists nudges_pair_idx on nudges(from_user_id, to_user_id, created_at desc);
 
+-- Friendships: a directed friend request that becomes a mutual friendship once
+-- accepted. Friends can SEE each other's weekly pledges (read-only) even when
+-- they are not in the same group. One row per pair-the expression index below
+-- blocks duplicates in either direction. Declining simply deletes the row, so
+-- only 'pending' and 'accepted' exist.
+create table if not exists friendships (
+    id uuid primary key default gen_random_uuid(),
+    requester_id uuid not null references users(id) on delete cascade,
+    addressee_id uuid not null references users(id) on delete cascade,
+    status text not null default 'pending' check (status in ('pending', 'accepted')),
+    created_at timestamptz not null default now(),
+    accepted_at timestamptz,
+    check (requester_id <> addressee_id)
+);
+create unique index if not exists friendships_pair_idx
+    on friendships (least(requester_id, addressee_id), greatest(requester_id, addressee_id));
+create index if not exists friendships_requester_idx on friendships(requester_id, status);
+create index if not exists friendships_addressee_idx on friendships(addressee_id, status);
+
 -- Single-row development clock. `offset_days` shifts the app's notion of "today"
 -- forward (in whole weeks) so the week-by-week flow can be demoed on demand.
 create table if not exists dev_clock (
@@ -356,5 +375,6 @@ alter table plan_days           disable row level security;
 alter table pot_conditions      disable row level security;
 alter table user_room_items     disable row level security;
 alter table nudges              disable row level security;
+alter table friendships         disable row level security;
 alter table dev_clock           disable row level security;
  

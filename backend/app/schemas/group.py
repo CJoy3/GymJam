@@ -80,6 +80,36 @@ class SquadMapMember(BaseModel):
     is_live: bool = False
 
 
+class CommunityGymMember(BaseModel):
+    """A group member's contribution to the shared community gym."""
+    user_id: str
+    display_name: str
+    avatar: Optional[str] = None
+    elo: int
+    is_me: bool
+    items_placed: int
+
+
+class CommunityGymItem(BaseModel):
+    """One piece of equipment in the community gym and how many members
+    contributed it (placed it in their own personalisable gym)."""
+    item_id: str
+    count: int
+
+
+class CommunityGym(BaseModel):
+    """The group's shared gym: every member's personalisable gym joined into
+    one larger space. Items are the union of what members placed; the scene
+    tier is driven by the group's average ELO."""
+    group_id: str
+    name: str
+    member_count: int
+    total_elo: int
+    avg_elo: int
+    members: list[CommunityGymMember]
+    items: list[CommunityGymItem]
+
+
 class GroupMemberDetail(BaseModel):
     """A group member with their week-by-week pledge state."""
     user_id: str

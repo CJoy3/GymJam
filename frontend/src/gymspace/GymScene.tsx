@@ -30,6 +30,7 @@ export function GymScene({
   editable = false,
   placedItemIds,
   onToggleItem,
+  unlockElo,
   style,
 }: {
   elo: number;
@@ -37,11 +38,16 @@ export function GymScene({
   editable?: boolean;
   placedItemIds?: Set<string>;
   onToggleItem?: (id: string) => void;
+  /** ELO used for the unlock checks only (room tier still follows `elo`).
+   *  Defaults to `elo`. The community gym passes Infinity so every item a
+   *  member contributed renders, whatever the group's average tier. */
+  unlockElo?: number;
   style?: StyleProp<ViewStyle>;
 }) {
   const [w, setW] = useState(0);
   const onLayout = (e: LayoutChangeEvent) => setW(e.nativeEvent.layout.width);
   const { tier } = tierForScene(elo);
+  const unlock = unlockElo ?? elo;
 
   // Gentle whole-body bob layered under the curl frames.
   const bob = useSharedValue(0);
@@ -83,7 +89,7 @@ export function GymScene({
 
           {/* Wall decor: structural always shows; placeable obeys placement. */}
           {WALL_ITEMS.map((it) => {
-            const visual = it.structural ? 'solid' : propVisual(it.id, elo >= it.elo);
+            const visual = it.structural ? 'solid' : propVisual(it.id, unlock >= it.elo);
             if (!visual) return null;
             const s = spriteSize(it.sprite);
             const left = it.x * w - (s.w * px) / 2;
@@ -104,7 +110,7 @@ export function GymScene({
           })}
 
           {/* Floor props + character, drawn back-to-front by depth. */}
-          {buildFloorNodes(elo, tier).map((node) => {
+          {buildFloorNodes(unlock, tier).map((node) => {
             const isChar = node.isCharacter;
             const rows = isChar ? frames[0] : node.sprite!;
             const s = isChar ? charSize : spriteSize(rows);

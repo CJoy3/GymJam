@@ -11,6 +11,8 @@ export { Leaderboard } from './Leaderboard';
 export { PotTracker } from './PotTracker';
 export { Progress } from './Progress';
 export { GymSpace } from './GymSpace';
+export { CommunityGym } from './CommunityGym';
+export { FriendsSection } from './FriendsSection';
 export { ProfileView } from './Profile';
 export { SquadMapScreen } from './SquadMapScreen';
 export { AppSettings, DevSettings } from './DevSettings';

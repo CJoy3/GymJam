@@ -12,6 +12,7 @@ import { useRefreshControl } from '../ui/useRefresh';
 import { usePolling } from '../ui/usePolling';
 import { useAppState } from '../state/AppState';
 import { readCache, writeCache } from '../../lib/cache';
+import { FriendsSection } from './FriendsSection';
 import { pageWrap, styles } from './_shared';
 
 const DISMISSED_KEY = 'dismissedActivity';
@@ -212,6 +213,10 @@ export function GroupView({ onBrowse, onLeaderboard }: { onBrowse: () => void; o
             })}
           </View>
         )}
+
+        {/* Friends live alongside the group: follow the pledges of people who
+            aren't in it (read-only-no nudging or joining their days). */}
+        <FriendsSection delay={200} />
       </ScrollView>
     </View>
   );

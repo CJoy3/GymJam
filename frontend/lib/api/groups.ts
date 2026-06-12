@@ -123,3 +123,31 @@ export const getSquadMap = (group_id: string) =>
 
 export const updateStakeType = (group_id: string, stake_type: StakeType) =>
   apiPatch<Group>(`/groups/${group_id}/stake-type`, { stake_type });
+
+export interface CommunityGymMember {
+  user_id: string;
+  display_name: string;
+  avatar: string | null;
+  elo: number;
+  is_me: boolean;
+  items_placed: number;
+}
+
+export interface CommunityGymItem {
+  item_id: string;
+  count: number;
+}
+
+export interface CommunityGym {
+  group_id: string;
+  name: string;
+  member_count: number;
+  total_elo: number;
+  avg_elo: number;
+  members: CommunityGymMember[];
+  items: CommunityGymItem[];
+}
+
+/** The group's members' personalisable gyms joined into one shared space. */
+export const getCommunityGym = (group_id: string) =>
+  apiGet<CommunityGym>(`/groups/${group_id}/community-gym`);

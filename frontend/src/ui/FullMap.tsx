@@ -86,6 +86,16 @@ const movedAway = (a: Region, b: Region | null) => {
   );
 };
 
+/** Apple Maps re-fires onRegionChangeComplete with (near-)identical regions
+ *  (after animations, on idle settles). Treat sub-epsilon differences as "same"
+ *  so they don't churn React state-and the whole marker tree-for nothing. */
+const EPS = 1e-6;
+const sameRegion = (a: Region, b: Region) =>
+  Math.abs(a.latitude - b.latitude) < EPS &&
+  Math.abs(a.longitude - b.longitude) < EPS &&
+  Math.abs(a.latitudeDelta - b.latitudeDelta) < EPS &&
+  Math.abs(a.longitudeDelta - b.longitudeDelta) < EPS;
+
 /**
  * A native marker only caches its custom view as a bitmap while
  * `tracksViewChanges` is true. We track until the child's `onLayout` fires (it's
@@ -137,6 +147,25 @@ function useRenderUntilLaid() {
 const GymMarker = React.memo(function GymMarker({ gym, onPress }: { gym: GymMapPoint; onPress: (id: string) => void }) {
   const { tracks, onLaidOut } = useRenderUntilLaid();
   const d = gymDiameter(gym.avg_elo);
+  const initials = gymInitials(gym.name);
+  // Keep the child element referentially stable across re-renders (same trick
+  // as MemberMarker below). If a re-render slips through the memo (e.g. a
+  // refetch produced a new-but-identical gym object), handing react-native-maps
+  // a brand-new child while tracksViewChanges=false blanks the cached bitmap
+  // and re-rasterises-the churn that crashed Apple Maps over long sessions.
+  const child = useMemo(() => (
+    <View
+      onLayout={onLaidOut}
+      style={{
+        width: d, height: d, borderRadius: d / 2,
+        alignItems: 'center', justifyContent: 'center',
+        backgroundColor: 'rgba(27,23,20,0.85)',
+        borderWidth: 2, borderColor: C.success,
+      }}
+    >
+      <Text style={{ fontFamily: FONT.bold, fontSize: Math.max(11, d * 0.34), color: C.ink }}>{initials}</Text>
+    </View>
+  ), [d, initials, onLaidOut]);
   return (
     <Marker
       coordinate={{ latitude: gym.latitude, longitude: gym.longitude }}
@@ -145,17 +174,7 @@ const GymMarker = React.memo(function GymMarker({ gym, onPress }: { gym: GymMapP
       tracksViewChanges={tracks}
       zIndex={1}
     >
-      <View
-        onLayout={onLaidOut}
-        style={{
-          width: d, height: d, borderRadius: d / 2,
-          alignItems: 'center', justifyContent: 'center',
-          backgroundColor: 'rgba(27,23,20,0.85)',
-          borderWidth: 2, borderColor: C.success,
-        }}
-      >
-        <Text style={{ fontFamily: FONT.bold, fontSize: Math.max(11, d * 0.34), color: C.ink }}>{gymInitials(gym.name)}</Text>
-      </View>
+      {child}
     </Marker>
   );
 });
@@ -299,7 +318,10 @@ export const FullMap = React.memo(function FullMap({
   const handleMemberPress = useCallback((id: string) => onSelect?.(id), [onSelect]);
   const handleMapReady = useCallback(() => setMapReady(true), []);
   const handleRegionChangeComplete = useCallback((r: Region) => {
-    setRegion(r);
+    // Functional + epsilon-guarded: Apple Maps re-fires this with identical
+    // regions; returning the previous object makes React bail out instead of
+    // re-rendering the map (and its marker tree) on every spurious settle.
+    setRegion((prev) => (sameRegion(prev, r) ? prev : r));
     setSearchRegion((prev) => prev ?? r);
   }, []);
 

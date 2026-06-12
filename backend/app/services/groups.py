@@ -452,6 +452,67 @@ def squad_map(group_id: str, current_user_id: str) -> list[dict]:
     return out
 
 
+def community_gym(group_id: str, current_user_id: str) -> dict:
+    """The group's shared 'community gym': every member's personalisable gym
+    joined into one larger space. Equipment is the UNION of items members have
+    placed in their own gyms (with contribution counts), and the scene tier is
+    driven by the group's average ELO. Read-only-members personalise their own
+    gym; this view simply aggregates."""
+    group = get_group(group_id)
+    sb = get_supabase()
+    memberships = (
+        sb.table("group_memberships")
+        .select("user_id, users(display_name, avatar, elo)")
+        .eq("group_id", group_id)
+        .order("joined_at", desc=False)
+        .execute()
+    ).data or []
+    user_ids = [m["user_id"] for m in memberships]
+
+    placements: list[dict] = []
+    if user_ids:
+        placements = (
+            sb.table("user_room_items")
+            .select("user_id, item_id")
+            .in_("user_id", user_ids)
+            .execute()
+        ).data or []
+
+    count_by_item: dict[str, int] = {}
+    placed_by_user: dict[str, int] = {}
+    for p in placements:
+        count_by_item[p["item_id"]] = count_by_item.get(p["item_id"], 0) + 1
+        placed_by_user[p["user_id"]] = placed_by_user.get(p["user_id"], 0) + 1
+
+    members: list[dict] = []
+    total_elo = 0
+    for m in memberships:
+        u = m.get("users") or {}
+        elo = u.get("elo") or 0
+        total_elo += elo
+        members.append({
+            "user_id": m["user_id"],
+            "display_name": u.get("display_name") or "Anonymous",
+            "avatar": u.get("avatar"),
+            "elo": elo,
+            "is_me": m["user_id"] == current_user_id,
+            "items_placed": placed_by_user.get(m["user_id"], 0),
+        })
+
+    return {
+        "group_id": group["id"],
+        "name": group["name"],
+        "member_count": len(members),
+        "total_elo": total_elo,
+        "avg_elo": total_elo // len(members) if members else 0,
+        "members": members,
+        "items": [
+            {"item_id": item_id, "count": count}
+            for item_id, count in sorted(count_by_item.items())
+        ],
+    }
+
+
 def list_pending_requests(group_id: str, leader_id: str) -> list[dict]:
     group = get_group(group_id)
     if group.get("leader_id") != leader_id:

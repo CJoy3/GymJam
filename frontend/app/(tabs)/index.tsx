@@ -7,7 +7,7 @@ import Animated, { Easing, FadeIn } from 'react-native-reanimated';
 import {
   Onboarding, Home, CheckIn, PlanWeek, GroupView, NoGroup,
   GymBrowser, Leaderboard, PotTracker, Progress, GymSpace, ProfileView, SquadMapScreen, AppSettings,
-  AccountSetup,
+  AccountSetup, CommunityGym,
 } from '../../src/screens';
 import { useAppState } from '../../src/state/AppState';
 import { useOnboarding } from '../../src/state/OnboardingState';
@@ -48,7 +48,7 @@ const TOUR_STEPS: CoachStep[] = [
 type Screen =
   | 'account-setup' | 'onboarding' | 'home' | 'check-in' | 'plan-week' | 'group'
   | 'gym-browser' | 'leaderboard' | 'pot-tracker' | 'progress' | 'gym-space'
-  | 'profile' | 'squad-map' | 'settings';
+  | 'community' | 'profile' | 'squad-map' | 'settings';
 
 export default function GymJamAppRoot() {
   // Coach-mark targets are registered from inside the shell (Home, the tab
@@ -123,6 +123,7 @@ function GymJamApp() {
       case 'pot-tracker': return <PotTracker onBack={() => setScreen('home')} />;
       case 'progress': return <Progress onGymSpace={() => setScreen('gym-space')} />;
       case 'gym-space': return <GymSpace onBack={() => setScreen('progress')} />;
+      case 'community': return <CommunityGym onBrowse={() => setScreen('gym-browser')} />;
       case 'profile': return <ProfileView onSettings={() => setScreen('settings')} onSquadMap={() => setScreen('squad-map')} />;
       case 'squad-map': return <SquadMapScreen onBack={() => setScreen('profile')} />;
       case 'settings': return <AppSettings onBack={() => setScreen('profile')} />;
@@ -169,6 +170,7 @@ function GymJamApp() {
             <Glass radius={RADIUS.pill} dim={0.22} style={StyleSheet.absoluteFill} />
             <Tab label="Home" icon="home" active={screen === 'home'} onPress={() => setScreen('home')} />
             <Tab label="Group" icon="group" active={['group', 'gym-browser', 'leaderboard', 'pot-tracker'].includes(screen)} onPress={() => setScreen('group')} targetRef={groupTabTarget} />
+            <Tab label="Community" icon="public" active={screen === 'community'} onPress={() => setScreen('community')} />
             <Tab label="Progress" icon="trending-up" active={['progress', 'gym-space'].includes(screen)} onPress={() => setScreen('progress')} targetRef={progressTabTarget} />
             <Tab label="Profile" icon="person" active={['profile', 'squad-map'].includes(screen)} onPress={() => setScreen('profile')} targetRef={profileTabTarget} />
           </View>

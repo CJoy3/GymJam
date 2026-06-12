@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 
@@ -28,6 +28,37 @@ function squadCenter(members: SquadMapMember[]): { lat: number; lng: number } {
   const lat = pts.reduce((s, m) => s + (m.latitude as number), 0) / pts.length;
   const lng = pts.reduce((s, m) => s + (m.longitude as number), 0) / pts.length;
   return { lat, lng };
+}
+
+/** Field-level equality for flat API rows (members / gym points). */
+function shallowEqual<T extends object>(a: T, b: T): boolean {
+  const ka = Object.keys(a) as (keyof T)[];
+  const kb = Object.keys(b);
+  if (ka.length !== kb.length) return false;
+  for (const k of ka) if (a[k] !== b[k]) return false;
+  return true;
+}
+
+/**
+ * Merge a freshly-fetched list into the previous one, KEEPING the previous
+ * object for every row whose fields are unchanged (and the previous ARRAY if
+ * nothing changed at all). The native markers are memoised on row identity-a
+ * refetch that returns the same data as new objects would re-render every
+ * custom-view marker, and that re-render churn (blank/re-rasterise while
+ * tracksViewChanges=false) is what crashed Apple Maps over long sessions.
+ */
+function reconcileById<T extends object>(
+  prev: T[],
+  next: T[],
+  idOf: (t: T) => string,
+): T[] {
+  const prevById = new Map(prev.map((p) => [idOf(p), p]));
+  const out = next.map((n) => {
+    const p = prevById.get(idOf(n));
+    return p && shallowEqual(p, n) ? p : n;
+  });
+  if (out.length === prev.length && out.every((row, i) => row === prev[i])) return prev;
+  return out;
 }
 
 /* Squad Map-group members on a real map, by their home gym + today's status */
@@ -71,36 +102,83 @@ export function SquadMapScreen({ onBack }: { onBack: () => void }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [selectedGym, setSelectedGym] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    let map: SquadMapMember[] = [];
-    if (groupId) {
-      try { map = await getSquadMap(groupId); } catch { map = []; }
-    }
-    setMembers(map);
-    // Only load gyms within a 5-mile radius of the focus (keeps the payload +
-    // marker count small; UK-wide loads were crashing the map). Prefer the
-    // private current location so you see gyms near *you*, else the squad.
-    const { lat, lng } = myLocation ?? squadCenter(map);
-    getGymsMap(boundsAround(lat, lng, RADIUS_MILES)).then(setGyms).catch(() => setGyms([]));
-  }, [groupId, myLocation]);
-  useEffect(() => { load(); }, [load]);
+  // Latest private location, readable without re-running effects/callbacks that
+  // depend on it. Previously `load` depended on `myLocation` directly, so the
+  // location refresh on open re-ran it-refetching members AND gyms and
+  // replacing every row object, which re-rendered every native marker (the
+  // long-session crash; see reconcileById above).
+  const myLocationRef = useRef(myLocation);
+  myLocationRef.current = myLocation;
+
+  // Where the last gym fetch was centred-used to decide if a fresher private
+  // fix has moved far enough to warrant re-centring the gym layer.
+  const gymCenterRef = useRef<{ lat: number; lng: number } | null>(null);
+
+  // Fetch gyms within a 5-mile radius of a centre (keeps the payload + marker
+  // count small; UK-wide loads were crashing the map). Reconciled so unchanged
+  // gyms keep their object identity (no needless marker re-renders), and errors
+  // keep the existing pins instead of blanking the layer mid-session.
+  const fetchGyms = useCallback((lat: number, lng: number) => {
+    gymCenterRef.current = { lat, lng };
+    getGymsMap(boundsAround(lat, lng, RADIUS_MILES))
+      .then((list) => setGyms((prev) => reconcileById(prev, list, (g) => g.id)))
+      .catch(() => { });
+  }, []);
+
+  // Members: refetch only when the group changes. Prefer the private current
+  // location for the initial gym fetch so you see gyms near *you*, else the squad.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      let map: SquadMapMember[] = [];
+      if (groupId) {
+        try { map = await getSquadMap(groupId); } catch { map = []; }
+      }
+      if (cancelled) return;
+      setMembers((prev) => reconcileById(prev, map, (m) => m.user_id));
+      const { lat, lng } = myLocationRef.current ?? squadCenter(map);
+      // Skip if the location effect below already fetched this centre.
+      const c = gymCenterRef.current;
+      if (!c || milesBetween({ lat, lng }, c) >= 1) fetchGyms(lat, lng);
+    })();
+    return () => { cancelled = true; };
+  }, [groupId, fetchGyms]);
+
+  // A fresher private fix (e.g. the permission-gated refresh resolving after
+  // open) re-centres the gym layer only if it landed a meaningful distance from
+  // the last fetch-same "gyms near you" behaviour as before, without refetching
+  // members or churning identical gym rows on every location update.
+  useEffect(() => {
+    if (!myLocation) return;
+    const c = gymCenterRef.current;
+    if (c && milesBetween(myLocation, c) < 1) return;
+    fetchGyms(myLocation.lat, myLocation.lng);
+  }, [myLocation, fetchGyms]);
 
   // "Search this area"-refetch gyms within 5 miles of the new viewport's centre.
   const searchArea = useCallback((bounds: GymMapBounds) => {
     const lat = (bounds.south + bounds.north) / 2;
     const lng = (bounds.west + bounds.east) / 2;
-    getGymsMap(boundsAround(lat, lng, RADIUS_MILES)).then(setGyms).catch(() => { });
-  }, []);
+    fetchGyms(lat, lng);
+  }, [fetchGyms]);
 
-  // Memoised so it's a STABLE object across the app's background re-renders (the
-  // 60s location push, sibling-screen polls, etc.). A fresh object every render
-  // would defeat FullMap's React.memo and keep re-rendering the native map.
+  // Memoised AND identity-stable: the root 30s refreshAll poll replaces
+  // `groupMembers` with new (usually identical) rows; returning the previous
+  // record when the statuses are unchanged keeps FullMap's React.memo intact,
+  // so background polls never re-render the native map.
+  const statusRef = useRef<Record<string, Presence>>({});
   const statusById = useMemo(() => {
     const out: Record<string, Presence> = {};
     for (const m of groupMembers) {
       const s = m.thisWeek[todayDow]?.state;
       out[m.userId] = s === 'checked-in' ? 'in' : s === 'planned' || s === 'locked' ? 'pledged' : 'rest';
     }
+    const prev = statusRef.current;
+    const keys = Object.keys(out);
+    if (keys.length === Object.keys(prev).length && keys.every((k) => prev[k] === out[k])) {
+      return prev;
+    }
+    statusRef.current = out;
     return out;
   }, [groupMembers, todayDow]);
 
