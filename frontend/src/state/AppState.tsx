@@ -16,6 +16,8 @@ import * as usersApi from '../../lib/api/users';
 import { ApiError } from '../../lib/api/client';
 import { getStoredLocation, requestAndStoreLocation, type Coords } from '../../lib/location';
 import { readCache, writeCache } from '../../lib/cache';
+import { ensureSupabase } from '../../lib/supabase';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import { showToast } from '../ui/toast';
 import {
   AppStateShape, DAYS, DayStatus, Group, GroupMember, Gym, JoinRequest,
@@ -258,6 +260,41 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     bootstrap(true);
   }, [bootstrap]);
+
+  /* ----- Realtime: instant group updates -----
+   * Subscribe to the group's broadcast channel. After any group-affecting
+   * mutation (check-in, pledge change, nudge, pot edit, membership) the backend
+   * fires a lightweight "changed" ping on `group:<id>`. We react by refetching
+   * the group slice once, so other members' changes show up near-instantly
+   * without aggressive polling. Best-effort: if Realtime is unavailable the
+   * existing focus/interval polling still keeps things fresh. */
+  const rtGroupId = myGroupSummary?.id ?? null;
+  const rtIsLeader = myGroupSummary?.isLeader;
+  useEffect(() => {
+    if (!rtGroupId) return;
+    let cancelled = false;
+    let channel: RealtimeChannel | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const trigger = () => {
+      // Coalesce bursts (an action can write several rows) into one refetch.
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => { void refreshGroupContext(rtGroupId, rtIsLeader); }, 350);
+    };
+    ensureSupabase()
+      .then((sb) => {
+        if (cancelled) return;
+        channel = sb
+          .channel(`group:${rtGroupId}`)
+          .on('broadcast', { event: 'changed' }, trigger)
+          .subscribe();
+      })
+      .catch(() => { /* realtime is an enhancement; polling remains the fallback */ });
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+      if (channel) { void channel.unsubscribe(); }
+    };
+  }, [rtGroupId, rtIsLeader, refreshGroupContext]);
 
   /* ----- instant launch: stale-while-revalidate cache -----
    * Paint the last-known state immediately from local storage so the app feels

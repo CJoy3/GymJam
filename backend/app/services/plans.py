@@ -6,6 +6,7 @@ from app.core.supabase_client import get_supabase
 from app.core.time_utils import current_day_of_week, current_week_start, next_week_start
 from app.services import groups as groups_svc
 from app.services import pot as pot_svc
+from app.services import realtime
 from app.services import streak as streak_svc
 from app.services import users as users_svc
 
@@ -189,6 +190,7 @@ def set_planned_days(user_id: str, dows: list[int]) -> dict:
         ).in_("day_of_week", unselected).in_("state", ["planned", "unselected"]).execute()
 
     _recompute_stake(plan_row["id"])
+    realtime.broadcast_group_changed(plan_row.get("group_id"))
     return _load_plan_with_days(_ensure_plan(user_id, next_week_start()))
 
 
@@ -227,6 +229,7 @@ def set_current_week_days(user_id: str, dows: list[int]) -> dict:
     sb.table("weekly_plans").update({"stake_elo": 0}).eq("id", plan_row["id"]).execute()
     result = _load_plan_with_days(_ensure_plan(user_id, current_week_start()))
     result["is_practice"] = True
+    realtime.broadcast_group_changed(group_id)
     return result
 
 
@@ -286,6 +289,7 @@ def reschedule_missed_day(user_id: str, dow: int) -> dict:
         nxt_week = _load_plan_with_days(_ensure_plan(user_id, next_week_start()))
         this_week["is_practice"] = _current_week_is_practice_for(user_id, group_id)
         nxt_week["is_practice"] = _is_practice_week(next_plan.get("group_id"), "next")
+        realtime.broadcast_group_changed(group_id)
         return {
             "outcome": outcome,
             "moved_to_dow": moved_to,
@@ -364,6 +368,7 @@ def toggle_next_week_day(user_id: str, dow: int) -> dict:
 
     sb.table("plan_days").update({"state": new_state}).eq("plan_id", plan_row["id"]).eq("day_of_week", dow).execute()
     _recompute_stake(plan_row["id"])
+    realtime.broadcast_group_changed(plan_row.get("group_id"))
     return _load_plan_with_days(_ensure_plan(user_id, next_week_start()))
 
 
@@ -397,6 +402,7 @@ def lock_next_week(user_id: str) -> dict:
         if cond.get("setter_user_id") == user_id and not cond.get("is_finalized"):
             pot_svc.finalize_conditions(plan_row["group_id"], next_week_start())
 
+    realtime.broadcast_group_changed(plan_row.get("group_id"))
     return _load_plan_with_days(_ensure_plan(user_id, next_week_start()))
 
 
@@ -428,6 +434,7 @@ def check_in_today(user_id: str) -> dict:
 
     updated_user = users_svc.add_elo(user_id, ELO_PER_CHECKIN)
     plan = _load_plan_with_days(plan_row)
+    realtime.broadcast_group_changed(plan_row.get("group_id"))
     return {
         "plan": plan,
         "elo_awarded": ELO_PER_CHECKIN,

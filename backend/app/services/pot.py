@@ -12,6 +12,7 @@ from fastapi import HTTPException
 
 from app.core.supabase_client import get_supabase
 from app.core.time_utils import current_week_start, next_week_start
+from app.services import realtime
 from app.services import users as users_svc
 
 
@@ -355,6 +356,7 @@ def update_conditions(
         .upsert(payload, on_conflict="group_id,week_start")
     )
 
+    realtime.broadcast_group_changed(group_id)
     return {**cond, "required_pledges": required_pledges, "stake_per_miss": stake_per_miss}
 
 

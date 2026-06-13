@@ -5,6 +5,7 @@ from fastapi import HTTPException
 from app.core.supabase_client import get_supabase
 from app.core.time_utils import current_week_start, next_week_start
 from app.schemas.group import JoinType
+from app.services import realtime
 
 
 def _utc_now_iso() -> str:
@@ -166,6 +167,7 @@ def update_stake_type(group_id: str, user_id: str, stake_type: str) -> dict:
     # 3) Apply the new currency to next week explicitly.
     pot_svc.get_conditions(group_id, week="next")  # ensure the row exists
     _freeze_week_stake_type(group_id, next_week_start(), stake_type)
+    realtime.broadcast_group_changed(group_id)
     return {**grp, "stake_type": stake_type}
 
 
@@ -289,6 +291,7 @@ def join_or_request(group_id: str, user_id: str) -> dict:
     if group["join_type"] == "open":
         _insert_membership(group_id, user_id, "member")
         _link_plans_to_group(user_id, group_id)
+        realtime.broadcast_group_changed(group_id)
         return {"action": "joined", "group": group}
 
     existing = (
@@ -308,6 +311,7 @@ def join_or_request(group_id: str, user_id: str) -> dict:
         "user_id": user_id,
         "status": "pending",
     }).execute()
+    realtime.broadcast_group_changed(group_id)
     return {"action": "requested", "group": group}
 
 
@@ -349,6 +353,7 @@ def leave_group(group_id: str, user_id: str) -> dict:
 
     sb.table("group_memberships").delete().eq("group_id", group_id).eq("user_id", user_id).execute()
     _link_plans_to_group(user_id, None)
+    realtime.broadcast_group_changed(group_id)
     return {"deleted": False, "promoted_user_id": promoted_user_id}
 
 
@@ -568,6 +573,7 @@ def approve_request(request_id: str, leader_id: str) -> dict:
         "status": "approved",
         "resolved_at": _utc_now_iso(),
     }).eq("id", request_id).execute()
+    realtime.broadcast_group_changed(req["group_id"])
     return {"id": request_id, "status": "approved"}
 
 
@@ -581,4 +587,5 @@ def reject_request(request_id: str, leader_id: str) -> dict:
         "status": "rejected",
         "resolved_at": _utc_now_iso(),
     }).eq("id", request_id).execute()
+    realtime.broadcast_group_changed(req["group_id"])
     return {"id": request_id, "status": "rejected"}
