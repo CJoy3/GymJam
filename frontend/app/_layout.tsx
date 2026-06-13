@@ -16,7 +16,8 @@ import type { Session } from '@supabase/supabase-js';
 
 import { ensureSupabase } from '../lib/supabase';
 import { AppStateProvider } from '../src/state/AppState';
-import { ToastProvider } from '../src/ui/toast';
+import { OnboardingProvider } from '../src/state/OnboardingState';
+import { ToastProvider, ToastViewport } from '../src/ui/toast';
 import { LoginScreen } from '../src/screens/Login';
 
 export const unstable_settings = {
@@ -66,6 +67,7 @@ export default function RootLayout() {
       <ToastProvider>
         <ThemeProvider value={DarkTheme}>
           <LoginScreen />
+          <ToastViewport />
           <StatusBar style="light" />
         </ThemeProvider>
       </ToastProvider>
@@ -75,12 +77,14 @@ export default function RootLayout() {
   return (
     <ToastProvider>
       <AppStateProvider>
-        <ThemeProvider value={DarkTheme}>
-          <Stack>
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          </Stack>
-          <StatusBar style="light" />
-        </ThemeProvider>
+        <OnboardingProvider>
+          <ThemeProvider value={DarkTheme}>
+            <Stack>
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            </Stack>
+            <StatusBar style="light" />
+          </ThemeProvider>
+        </OnboardingProvider>
       </AppStateProvider>
     </ToastProvider>
   );

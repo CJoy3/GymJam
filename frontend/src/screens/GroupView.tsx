@@ -1,25 +1,30 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 
 import { C, FONT, SPACE } from '../theme/tokens';
-import { Card, Chip, Eyebrow, FadeInItem, H1, H3, Sub } from '../ui/components';
+import { Card, Chip, Eyebrow, FadeInItem, H1, H3, IconButton, Sub } from '../ui/components';
 import { Avatar } from '../ui/Avatar';
+import { useCoachTarget } from '../ui/CoachMarks';
 import { DayPicker } from '../ui/DayPicker';
 import { BlobBackground } from '../ui/Blob';
 import { useRefreshControl } from '../ui/useRefresh';
 import { usePolling } from '../ui/usePolling';
 import { useAppState } from '../state/AppState';
+import { readCache, writeCache } from '../../lib/cache';
+import { FriendsSection } from './FriendsSection';
 import { pageWrap, styles } from './_shared';
 
-/* Group view — members, notifications menu, per-day join + nudges */
+const DISMISSED_KEY = 'dismissedActivity';
+
+/* Group view-members, notifications menu, per-day join + nudges */
 
 const KIND_META: Record<string, { icon: keyof typeof MaterialIcons.glyphMap; color: string }> = {
   join_request: { icon: 'person-add', color: C.accent },
-  nudge:        { icon: 'campaign', color: C.accent },
-  missed:       { icon: 'close', color: C.danger },
-  checkin:      { icon: 'check-circle', color: C.success },
-  streak:       { icon: 'local-fire-department', color: C.accent },
+  nudge: { icon: 'campaign', color: C.accent },
+  missed: { icon: 'close', color: C.danger },
+  checkin: { icon: 'check-circle', color: C.success },
+  streak: { icon: 'local-fire-department', color: C.accent },
 };
 
 export function GroupView({ onBrowse, onLeaderboard }: { onBrowse: () => void; onLeaderboard: () => void }) {
@@ -28,7 +33,16 @@ export function GroupView({ onBrowse, onLeaderboard }: { onBrowse: () => void; o
     activity, refreshActivity, approveRequest, rejectRequest, nudge, nudgeCooldowns,
   } = useAppState();
   const refresh = useRefreshControl();
+  const tourTarget = useCoachTarget('tour-group');
+  // Two pages in one screen: the group itself, and your friends (people you
+  // follow who may be in other groups). Switched by the segmented tabs below.
+  const [page, setPage] = useState<'group' | 'friends'>('group');
   const [showFeed, setShowFeed] = useState(false);
+  // Locally-dismissed notification ids, persisted so they stay cleared across
+  // sessions. Join requests are never dismissable (they're actionable), so they
+  // always reappear regardless of this set.
+  const [dismissed, setDismissed] = useState<string[]>([]);
+  useEffect(() => { readCache<string[]>(DISMISSED_KEY).then((d) => { if (d) setDismissed(d); }); }, []);
   // Keep the group fresh: refresh on open, on app foreground, and gently while viewing.
   usePolling(refreshGroup, 9000);
   const setterName = potNext?.setter_user_id === userId ? 'You' : potNext?.setter_display_name;
@@ -36,7 +50,18 @@ export function GroupView({ onBrowse, onLeaderboard }: { onBrowse: () => void; o
   const orderedMembers = userId
     ? [...groupMembers].sort((a, b) => Number(b.userId === userId) - Number(a.userId === userId))
     : groupMembers;
-  const actionableCount = activity.filter((a) => a.kind === 'join_request' || a.kind === 'nudge').length;
+
+  // Join requests always show; everything else hides once dismissed.
+  const visibleActivity = activity.filter((a) => a.kind === 'join_request' || !dismissed.includes(a.id));
+  const actionableCount = visibleActivity.filter((a) => a.kind === 'join_request' || a.kind === 'nudge').length;
+  const clearableCount = visibleActivity.filter((a) => a.kind !== 'join_request').length;
+
+  const clearNotifications = () => {
+    const ids = activity.filter((a) => a.kind !== 'join_request').map((a) => a.id);
+    const next = Array.from(new Set([...dismissed, ...ids]));
+    setDismissed(next);
+    writeCache(DISMISSED_KEY, next);
+  };
 
   const toggleFeed = () => {
     setShowFeed((s) => {
@@ -50,44 +75,77 @@ export function GroupView({ onBrowse, onLeaderboard }: { onBrowse: () => void; o
       <BlobBackground variant="group" />
       <ScrollView refreshControl={refresh} contentContainerStyle={pageWrap} showsVerticalScrollIndicator={false}>
         <FadeInItem>
-          <View style={styles.rowBetween}>
+          <View ref={tourTarget} collapsable={false} style={styles.rowBetween}>
+            {/* Header follows the page: the group's name on the group page,
+                a friends header on the friends page (and back again). */}
             <View style={{ flex: 1 }}>
-              <Eyebrow>Your group</Eyebrow>
-              <H1 style={{ marginTop: 6 }}>{groupName}</H1>
+              <Eyebrow>{page === 'group' ? 'Your group' : 'Your friends'}</Eyebrow>
+              <H1 style={{ marginTop: 6 }}>{page === 'group' ? groupName : 'Friends'}</H1>
               <Sub style={{ marginTop: 6 }}>
-                {groupMembers.length} {groupMembers.length === 1 ? 'member' : 'members'} · this week
+                {page === 'group'
+                  ? `${groupMembers.length} ${groupMembers.length === 1 ? 'member' : 'members'} · this week`
+                  : 'Pledges from friends in any group'}
               </Sub>
             </View>
             <View style={[styles.rowGap, { gap: 8 }]}>
-              <Pressable onPress={toggleFeed} style={styles.iconBtn}>
-                <MaterialIcons name={showFeed ? 'notifications-active' : 'notifications-none'} size={20} color={showFeed ? C.accent : C.ink} />
+              <IconButton
+                icon={showFeed ? 'notifications-active' : 'notifications-none'}
+                color={showFeed ? C.accent : C.ink}
+                onPress={toggleFeed}
+              >
                 {actionableCount > 0 && (
                   <View style={badge.dot}>
                     <Text style={badge.text}>{actionableCount}</Text>
                   </View>
                 )}
-              </Pressable>
-              <Pressable onPress={onLeaderboard} style={styles.iconBtn}>
-                <MaterialIcons name="emoji-events" size={20} color={C.ink} />
-              </Pressable>
-              <Pressable onPress={onBrowse} style={styles.iconBtn}>
-                <MaterialIcons name="swap-horiz" size={20} color={C.ink} />
-              </Pressable>
+              </IconButton>
+              <IconButton icon="emoji-events" onPress={onLeaderboard} />
+              <IconButton icon="swap-horiz" onPress={onBrowse} />
             </View>
+          </View>
+        </FadeInItem>
+
+        {/* Page switcher: the group's pledges, or your friends' (read-only). */}
+        <FadeInItem delay={60} style={{ marginTop: 18 }}>
+          <View style={styles.tabBar}>
+            <Pressable
+              style={[styles.tab, page === 'group' && styles.tabOn]}
+              onPress={() => setPage('group')}
+            >
+              <Text style={[styles.tabText, { color: page === 'group' ? C.primaryFg : C.mutedFg }]}>
+                Group
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[styles.tab, page === 'friends' && styles.tabOn]}
+              onPress={() => setPage('friends')}
+            >
+              <Text style={[styles.tabText, { color: page === 'friends' ? C.primaryFg : C.mutedFg }]}>
+                Friends
+              </Text>
+            </Pressable>
           </View>
         </FadeInItem>
 
         {showFeed && (
           <FadeInItem delay={40} style={{ marginTop: 16 }}>
             <Card padding={SPACE.lg}>
-              <Eyebrow style={{ marginBottom: 12 }}>Notifications</Eyebrow>
-              {activity.length === 0 ? (
+              <View style={[styles.rowBetween, { marginBottom: 12 }]}>
+                <Eyebrow>Notifications</Eyebrow>
+                {clearableCount > 0 && (
+                  <Pressable onPress={clearNotifications} hitSlop={8} style={styles.rowGap}>
+                    <MaterialIcons name="clear-all" size={15} color={C.mutedFg} />
+                    <Text style={{ fontFamily: FONT.semibold, fontSize: 13, color: C.mutedFg }}>Clear</Text>
+                  </Pressable>
+                )}
+              </View>
+              {visibleActivity.length === 0 ? (
                 <Sub style={{ textAlign: 'center' }}>
                   No updates yet. Plan sessions and nudge teammates to get things going.
                 </Sub>
               ) : (
                 <View style={{ gap: 14 }}>
-                  {activity.map((a) => {
+                  {visibleActivity.map((a) => {
                     const meta = KIND_META[a.kind] ?? KIND_META.nudge;
                     return (
                       <View key={a.id} style={styles.rowGap}>
@@ -114,7 +172,7 @@ export function GroupView({ onBrowse, onLeaderboard }: { onBrowse: () => void; o
           </FadeInItem>
         )}
 
-        {setterName && (
+        {page === 'group' && setterName && (
           <FadeInItem delay={80} style={{ marginTop: 18 }}>
             <Card padding={SPACE.lg} tone="sage">
               <View style={styles.rowGap}>
@@ -132,7 +190,7 @@ export function GroupView({ onBrowse, onLeaderboard }: { onBrowse: () => void; o
           </FadeInItem>
         )}
 
-        {groupMembers.length === 0 ? (
+        {page === 'group' && (groupMembers.length === 0 ? (
           <FadeInItem delay={140} style={{ marginTop: 18 }}>
             <Card padding={SPACE.xl}><Sub style={{ textAlign: 'center' }}>No members yet.</Sub></Card>
           </FadeInItem>
@@ -183,7 +241,11 @@ export function GroupView({ onBrowse, onLeaderboard }: { onBrowse: () => void; o
               );
             })}
           </View>
-        )}
+        ))}
+
+        {/* Friends page: follow the pledges of people who aren't in the group
+            (read-only-no nudging or joining their days). */}
+        {page === 'friends' && <FriendsSection delay={100} showTitle={false} />}
       </ScrollView>
     </View>
   );

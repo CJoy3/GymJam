@@ -1,4 +1,4 @@
-"""Weekly pot — conditions and member breakdown.
+"""Weekly pot-conditions and member breakdown.
 
 Conditions for each week are set by the group's leader (who is always the "setter").
 Pledging is optional: members who pledge 0 days are excluded from the pot entirely.
@@ -12,6 +12,7 @@ from fastapi import HTTPException
 
 from app.core.supabase_client import get_supabase
 from app.core.time_utils import current_week_start, next_week_start
+from app.services import realtime
 from app.services import users as users_svc
 
 
@@ -78,7 +79,7 @@ def _leader_id(group_id: str) -> str | None:
 
 # Fixed Monday used as the rotation epoch. Rotating by whole weeks from a fixed
 # anchor makes the setter for any week deterministic and independent of when the
-# group was created — and it advances by exactly one member each time the
+# group was created-and it advances by exactly one member each time the
 # (dev-clock) week moves forward.
 _ROTATION_EPOCH = date(2024, 1, 1)  # a Monday
 
@@ -155,7 +156,7 @@ def _ensure_conditions(group_id: str, week_start: date) -> dict:
     defaults if no per-week row exists or the table is unwritable.
 
     The group's `default_required_pledges` / `default_stake_per_miss` are
-    source-of-truth — they're written atomically with the group itself, so
+    source-of-truth-they're written atomically with the group itself, so
     they survive even if `pot_conditions` inserts silently fail.
     """
     sb = get_supabase()
@@ -240,7 +241,7 @@ def seed_conditions(
     """Persist initial pot conditions for a group's week.
 
     Called by group creation to lock in the leader's chosen rules. Uses UPSERT so
-    the row is created on first call and overwritten on subsequent ones — the
+    the row is created on first call and overwritten on subsequent ones-the
     leader's values always win. Raises on DB failure (not swallowed) so a broken
     seed surfaces immediately at group-creation time instead of being silently
     replaced by defaults the next time the pot is read.
@@ -271,7 +272,7 @@ def seed_conditions(
     if row is not None:
         return row
 
-    # Older deployments may be missing newer columns — retry without them.
+    # Older deployments may be missing newer columns-retry without them.
     fallback = {k: v for k, v in payload.items() if k not in ("is_practice", "stake_type")}
     row = _try(fallback)
     if row is not None:
@@ -326,7 +327,7 @@ def update_conditions(
 
     sb = get_supabase()
 
-    # 1) Persist on the group itself — this is the source of truth and reliably
+    # 1) Persist on the group itself-this is the source of truth and reliably
     # works (we just used the same table to create the group). Future weeks
     # automatically pick up the new baseline.
     try:
@@ -335,7 +336,7 @@ def update_conditions(
             "default_stake_per_miss": stake_per_miss,
         }).eq("id", group_id).execute()
     except Exception:
-        # Column may be missing on an old schema — non-fatal; pot_conditions
+        # Column may be missing on an old schema-non-fatal; pot_conditions
         # below will still take effect for this week.
         pass
 
@@ -355,6 +356,7 @@ def update_conditions(
         .upsert(payload, on_conflict="group_id,week_start")
     )
 
+    realtime.broadcast_group_changed(group_id)
     return {**cond, "required_pledges": required_pledges, "stake_per_miss": stake_per_miss}
 
 
@@ -376,7 +378,7 @@ def get_conditions(group_id: str, week: str = "current") -> dict:
 def _settlement_inputs(group_id: str, week_start: date, stake: int) -> tuple[int, list[str]]:
     """Pot total + the user_ids who share it for a finished week.
 
-    A member only gets a slice if they actually pledged — pledging 0 days
+    A member only gets a slice if they actually pledged-pledging 0 days
     means they sat the week out and opted out of the pot entirely (mirrors the
     opt-out rule `pot_detail` already applies when reading the pot). Practice
     weeks naturally contribute nothing (stake_per_miss is seeded at 0), so no
@@ -407,7 +409,7 @@ def _settlement_inputs(group_id: str, week_start: date, stake: int) -> tuple[int
             1 for d in days if d["state"] in ("planned", "locked", "checked-in", "missed")
         )
         if pledged_count == 0:
-            continue  # sat this week out — no claim on the pot
+            continue  # sat this week out-no claim on the pot
 
         missed_count = sum(1 for d in days if d["state"] == "missed")
         pot_total += missed_count * stake
@@ -434,7 +436,7 @@ def _claim_for_settlement(group_id: str, week_start: date) -> dict | None:
 
 
 def _group_stake_type(group_id: str) -> str:
-    """'money' or 'elo' (default) — which currency the group's pot is in."""
+    """'money' or 'elo' (default)-which currency the group's pot is in."""
     sb = get_supabase()
     res = _safe_exec(sb.table("groups").select("stake_type").eq("id", group_id).limit(1))
     if not res or not res.data:
@@ -460,7 +462,7 @@ def _money_breakdown(group_id: str, week_start: date, stake: int) -> tuple[int, 
         days = plan.get("plan_days") or []
         pledged = sum(1 for d in days if d["state"] in ("planned", "locked", "checked-in", "missed"))
         if pledged == 0:
-            continue  # sat the week out — no claim on the pot
+            continue  # sat the week out-no claim on the pot
         contributed = sum(1 for d in days if d["state"] == "missed") * stake
         pot_total += contributed
         participants.append((plan["user_id"], contributed))
@@ -523,7 +525,7 @@ def settle_due_weeks(group_id: str) -> None:
     """Lazily pay out any finished-but-unsettled weeks for a group.
 
     There's no background job, so this runs opportunistically whenever the pot
-    is loaded (`pot_detail`) — which happens on every refresh — picking up
+    is loaded (`pot_detail`)-which happens on every refresh-picking up
     payouts as soon as the (possibly dev-clock-driven) week rolls over.
     """
     sb = get_supabase()
@@ -593,7 +595,7 @@ def pot_detail(group_id: str, week: str = "current") -> dict:
         pledged_count = sum(
             1 for d in days if d["state"] in ("planned", "locked", "checked-in", "missed")
         )
-        # Pledging is OPTIONAL — non-pledgers aren't in the pot breakdown.
+        # Pledging is OPTIONAL-non-pledgers aren't in the pot breakdown.
         if pledged_count == 0:
             continue
 
@@ -603,7 +605,7 @@ def pot_detail(group_id: str, week: str = "current") -> dict:
         elo_lost = missed_count * stake
 
         # Mid-week joiners missed this week's lock, so their current-week pledges
-        # are practice — no stakes on the line and nothing added to the pot.
+        # are practice-no stakes on the line and nothing added to the pot.
         member_is_midweek_practice = (
             not is_practice
             and week_start == current_week_start()

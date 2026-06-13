@@ -25,7 +25,7 @@ def compute_and_store_streak(user_id: str) -> int:
     streak = 0
     for p in plans:
         days = p.get("plan_days") or []
-        # 'rescheduled' days were excused (unforeseen circumstances) — they neither
+        # 'rescheduled' days were excused (unforeseen circumstances)-they neither
         # count as a pledge to fulfil nor break the streak.
         pledged_days = [d for d in days if d["state"] not in ("unselected", "rescheduled")]
         if not pledged_days:

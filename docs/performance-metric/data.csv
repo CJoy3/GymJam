@@ -1,0 +1,7 @@
+iteration,issue,label,change_summary,t1,t2,t3,t4,t5
+1,#41,Advanced avatar anims,Baseline timing; stake entered as free-text ELO (iteration focused on avatar animations),44,39,47,38,41
+2,#40,Unlock gym items,Gym-item unlocks; minor shared-component tidy-up touched the plan screen,40,35,38,41,33
+3,#42,Separate money wallet,Added ELO-vs-money stake choice to the pledge flow,48,41,52,39,44
+4,#43,Stake range + slider,Free-text stake replaced by a constrained £1–£20 slider with sensible defaults,31,27,33,26,29
+5,#39,Even Sunday payout,Sunday payout distribution (backend); pledge flow largely unchanged,28,24,29,25,27
+6,#44,Performance leaderboard,Pre-filled defaults + clearer rule-setter UI,25,22,27,23,24

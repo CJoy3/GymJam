@@ -6,11 +6,12 @@ import { C, SPACE } from '../theme/tokens';
 import { Btn, Card, Chip, Eyebrow, FadeInItem, H1, Ring, Sub } from '../ui/components';
 import { DayPicker } from '../ui/DayPicker';
 import { BlobBackground } from '../ui/Blob';
+import { useCoachTarget } from '../ui/CoachMarks';
 import { useRefreshControl } from '../ui/useRefresh';
 import { useAppState } from '../state/AppState';
-import { LABELS, pageWrap, styles } from './_shared';
+import { LABELS, pageWrap, styles, TAB_BAR_CLEARANCE } from './_shared';
 
-/* Home — greeting, this week, pot, primary CTAs */
+/* Home-greeting, this week, pot, primary CTAs */
 
 export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => void; onPlan: () => void; onPot: () => void; onGroup: () => void }) {
   const {
@@ -20,6 +21,10 @@ export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => v
   } = useAppState();
   const isMoney = stakeType === 'money';
   const refresh = useRefreshControl();
+  // Coach-mark targets: the first-run tour spotlights the week card and the
+  // check-in CTA (see TOUR_STEPS in app/(tabs)/index.tsx).
+  const weekTarget = useCoachTarget('home-week');
+  const checkinTarget = useCoachTarget('home-checkin');
   const done = thisWeek.filter((d) => d.state === 'checked-in').length;
   const pledged = thisWeek.filter((d) => d.state === 'checked-in' || d.state === 'planned' || d.state === 'locked').length;
   const pct = pledged ? (done / pledged) * 100 : 0;
@@ -48,7 +53,7 @@ export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => v
     const willMove = nextOccupied + 1 <= 7;
     const stake = potCurrent?.stake_per_miss ?? 0;
     Alert.alert(
-      'Reschedule — unforeseen circumstances',
+      'Reschedule-unforeseen circumstances',
       willMove
         ? 'Move this missed session into next week? No ELO penalty.'
         : `Next week is already full (7 days), so this can't be moved. A 50% penalty (${Math.round(stake * 0.5)} ELO) will apply instead of a full miss.`,
@@ -77,42 +82,45 @@ export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => v
         </FadeInItem>
 
         <FadeInItem delay={120} style={{ marginTop: 24 }}>
-          <Card padding={SPACE.xl}>
-            {/* Header navigates to the group; kept separate from the DayPicker so
-                its day-cell gestures (tap to pledge, long-press to reschedule)
-                aren't swallowed by a wrapping Pressable. */}
-            <Pressable onPress={onGroup} style={[styles.rowBetween, { marginBottom: 16 }]}>
-              <View>
-                <View style={styles.rowGap}>
-                  <Eyebrow style={styles.thisWeekHeader}>This week</Eyebrow>
-                  {thisWeekIsPractice && <Chip text="Practice" tone="accent" compact />}
+          {/* collapsable={false} keeps the wrapper measurable for the tour on Android. */}
+          <View ref={weekTarget} collapsable={false}>
+            <Card padding={SPACE.xl}>
+              {/* Header navigates to the group; kept separate from the DayPicker so
+                  its day-cell gestures (tap to pledge, long-press to reschedule)
+                  aren't swallowed by a wrapping Pressable. */}
+              <Pressable onPress={onGroup} style={[styles.rowBetween, { marginBottom: 16 }]}>
+                <View>
+                  <View style={styles.rowGap}>
+                    <Eyebrow style={styles.thisWeekHeader}>This week</Eyebrow>
+                    {thisWeekIsPractice && <Chip text="Practice" tone="accent" compact />}
+                  </View>
+                  <Text style={styles.pledgeSubhead}>{thisWeekIsPractice ? 'Practice pledge' : 'Your pledge'} · {LABELS[todayDow]}</Text>
                 </View>
-                <Text style={styles.pledgeSubhead}>{thisWeekIsPractice ? 'Practice pledge' : 'Your pledge'} · {LABELS[todayDow]}</Text>
-              </View>
-              <Ring progress={pct} size={68} thickness={6} label={done} sublabel={`/${pledged || 0}`} />
-            </Pressable>
-            <DayPicker
-              days={thisWeek}
-              editable={practiceEditable}
-              dulledDows={thisWeekIsPractice ? dulledDows : undefined}
-              onToggle={practiceEditable ? togglePractice : undefined}
-              onReschedule={onRescheduleDay}
-            />
-            <Sub style={{ marginTop: 14 }}>
-              {thisWeekIsPractice
-                ? (practiceRemaining > 0
-                    ? `Practice week — no ELO at stake. Tap the ${practiceRemaining} day${practiceRemaining === 1 ? '' : 's'} left to pledge. Plan next week as normal.`
-                    : 'Practice week — the real challenge starts next week. Plan it below.')
-                : pledged === 0 ? 'No sessions pledged yet — plan next week.'
-                : pledged - done > 0 ? `${pledged - done} more session${pledged - done === 1 ? '' : 's'} to go.`
-                : 'All sessions done. Strong week.'}
-            </Sub>
-            {thisWeek.some((d) => d.state === 'missed') && (
-              <Sub style={{ marginTop: 6, color: C.accent }}>
-                Missed a day for unforeseen circumstances? Tap the red day to reschedule it.
+                <Ring progress={pct} size={68} thickness={6} label={done} sublabel={`/${pledged || 0}`} />
+              </Pressable>
+              <DayPicker
+                days={thisWeek}
+                editable={practiceEditable}
+                dulledDows={thisWeekIsPractice ? dulledDows : undefined}
+                onToggle={practiceEditable ? togglePractice : undefined}
+                onReschedule={onRescheduleDay}
+              />
+              <Sub style={{ marginTop: 14 }}>
+                {thisWeekIsPractice
+                  ? (practiceRemaining > 0
+                    ? `Practice week-no ELO at stake. Tap the ${practiceRemaining} day${practiceRemaining === 1 ? '' : 's'} left to pledge. Plan next week as normal.`
+                    : 'Practice week-the real challenge starts next week. Plan it below.')
+                  : pledged === 0 ? 'No sessions pledged yet-plan next week.'
+                    : pledged - done > 0 ? `${pledged - done} more session${pledged - done === 1 ? '' : 's'} to go.`
+                      : 'All sessions done. Strong week.'}
               </Sub>
-            )}
-          </Card>
+              {thisWeek.some((d) => d.state === 'missed') && (
+                <Sub style={{ marginTop: 6, color: C.accent }}>
+                  Missed a day for unforeseen circumstances? Tap the red day to reschedule it.
+                </Sub>
+              )}
+            </Card>
+          </View>
         </FadeInItem>
 
         <FadeInItem delay={180} style={{ marginTop: 14 }}>
@@ -134,7 +142,7 @@ export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => v
               {memberCount > 0
                 ? `${onTrack} of ${memberCount} on track · ${isMoney ? `£${(totalAtStake / 100).toFixed(2)}` : totalAtStake.toLocaleString()} at stake`
                 : groupId
-                  ? 'No stakes yet — pledge sessions to build the pot'
+                  ? 'No stakes yet-pledge sessions to build the pot'
                   : 'Join a group to start the pot'}
             </Text>
           </Card>
@@ -143,14 +151,18 @@ export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => v
         <View style={{ height: 24 }} />
       </ScrollView>
 
-      <View style={styles.footer}>
+      {/* Extra bottom padding clears the floating tab bar so these actions
+          (Check in / Plan next week) never sit behind it. */}
+      <View style={[styles.footer, { paddingBottom: TAB_BAR_CLEARANCE }]}>
         <View style={{ gap: 10 }}>
-          <Btn
-            label={canCheck ? 'Check in' : 'All sessions checked in'}
-            icon={canCheck ? 'place' : 'check-circle'}
-            disabled={!canCheck}
-            onPress={() => { checkInToday(); onCheckIn(); }}
-          />
+          <View ref={checkinTarget} collapsable={false}>
+            <Btn
+              label={canCheck ? 'Check in' : 'All sessions checked in'}
+              icon={canCheck ? 'place' : 'check-circle'}
+              disabled={!canCheck}
+              onPress={() => { checkInToday(); onCheckIn(); }}
+            />
+          </View>
           <Btn label="Plan next week" variant="ghost" icon="event" onPress={onPlan} />
         </View>
       </View>

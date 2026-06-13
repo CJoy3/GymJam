@@ -1,26 +1,13 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { C } from '../theme/tokens';
 
 /**
- * Atmospheric background blobs — soft warm glows behind the content layer.
+ * Atmospheric background blobs-soft warm glows behind the content layer.
  * Variants tint different corners depending on screen mood.
  */
-export function BlobBackground({ variant = 'home' }: { variant?: 'home' | 'group' | 'progress' | 'profile' | 'celebrate' }) {
+export function BlobBackground({ variant = 'home' }: { variant?: 'home' | 'group' | 'progress' | 'profile' }) {
   switch (variant) {
-    case 'celebrate':
-      return (
-        <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-          <LinearGradient
-            colors={['rgba(232,155,124,0.22)', 'rgba(27,23,20,0)']}
-            start={{ x: 0.5, y: 0 }} end={{ x: 0.5, y: 0.65 }}
-            style={StyleSheet.absoluteFill}
-          />
-          <View style={[styles.blob, { width: 360, height: 360, top: -80, right: -120, backgroundColor: C.glowPeach }]} />
-          <View style={[styles.blob, { width: 280, height: 280, bottom: -60, left: -90, backgroundColor: C.glowCream }]} />
-        </View>
-      );
     case 'group':
       return (
         <View pointerEvents="none" style={StyleSheet.absoluteFill}>

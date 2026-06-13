@@ -1,9 +1,10 @@
 from fastapi import APIRouter
 
-from app.api.endpoints import checkins, dev, groups, gyms, plans, room, users
+from app.api.endpoints import checkins, dev, friends, groups, gyms, plans, room, users
 
 api_router = APIRouter()
 api_router.include_router(users.router, prefix="/users", tags=["users"])
+api_router.include_router(friends.router, prefix="/friends", tags=["friends"])
 api_router.include_router(gyms.router, prefix="/gyms", tags=["gyms"])
 api_router.include_router(groups.router, prefix="/groups", tags=["groups"])
 api_router.include_router(plans.router, prefix="/plans", tags=["plans"])

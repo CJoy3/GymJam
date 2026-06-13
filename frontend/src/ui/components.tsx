@@ -8,10 +8,11 @@ import Animated, {
 import Svg, { Circle } from 'react-native-svg';
 import { MaterialIcons } from '@expo/vector-icons';
 import { C, FONT, RADIUS, SPACE } from '../theme/tokens';
+import { Glass } from './Glass';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
-// Shared motion language — short, cubic ease-out, zero spring overshoot.
+// Shared motion language-short, cubic ease-out, zero spring overshoot.
 const EASE_OUT = Easing.out(Easing.cubic);
 const EASE_OUT_QUAD = Easing.out(Easing.quad);
 
@@ -52,8 +53,8 @@ export function Card({
 }) {
   const bg = tone === 'cream' ? C.primary
     : tone === 'peach' ? C.accentSoft
-    : tone === 'sage'  ? C.successSoft
-    : C.card;
+      : tone === 'sage' ? C.successSoft
+        : C.card;
   const border = tone === 'cream' ? 'transparent' : C.border;
   const content = (
     <View style={[styles.card, { padding, backgroundColor: bg, borderColor: border }, style]}>{children}</View>
@@ -87,9 +88,9 @@ export function Btn({
 }) {
   const v =
     variant === 'primary' ? { bg: C.primary, fg: C.primaryFg, border: 'transparent' }
-    : variant === 'inverse' ? { bg: C.card, fg: C.ink, border: C.borderHi }
-    : variant === 'danger' ? { bg: 'transparent', fg: C.danger, border: C.danger }
-    : { bg: 'transparent', fg: C.ink, border: C.borderHi };
+      : variant === 'inverse' ? { bg: C.card, fg: C.ink, border: C.borderHi }
+        : variant === 'danger' ? { bg: 'transparent', fg: C.danger, border: C.danger }
+          : { bg: 'transparent', fg: C.ink, border: C.borderHi };
 
   const scale = useSharedValue(1);
   const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
@@ -127,6 +128,43 @@ export function Btn({
   );
 }
 
+/* ─────────────────────  Icon button (glass)  ─────────────────────── */
+
+/** Round icon button on the liquid-glass material — back / notifications /
+ * close and similar chrome. Pass an icon; an optional `children` overlay (e.g.
+ * a notification badge) renders above it. Real Liquid Glass on iOS 26, frosted
+ * blur elsewhere (see ./Glass). */
+export function IconButton({
+  icon, onPress, color = C.ink, size = 40, iconSize = 20, style, disabled, children,
+}: {
+  icon: keyof typeof MaterialIcons.glyphMap;
+  onPress?: () => void;
+  color?: string;
+  size?: number;
+  iconSize?: number;
+  style?: ViewStyle;
+  disabled?: boolean;
+  children?: React.ReactNode;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      style={({ pressed }) => [
+        styles.iconButton,
+        { width: size, height: size, borderRadius: size / 2 },
+        disabled && { opacity: 0.4 },
+        pressed && { opacity: 0.85 },
+        style,
+      ]}
+    >
+      <Glass radius={size / 2} interactive dim={0.18} style={StyleSheet.absoluteFill} />
+      <MaterialIcons name={icon} size={iconSize} color={color} />
+      {children}
+    </Pressable>
+  );
+}
+
 /* ────────────────────────────  Chip  ─────────────────────────────── */
 
 export function Chip({
@@ -138,11 +176,11 @@ export function Chip({
   compact?: boolean;
 }) {
   const tones = {
-    neutral: { bg: C.muted,            fg: C.inkSoft },
-    success: { bg: C.successSoft,      fg: C.success },
-    accent:  { bg: C.accentSoft,       fg: C.accent  },
-    danger:  { bg: C.dangerSoft,       fg: C.danger  },
-    cream:   { bg: C.primary,          fg: C.primaryFg },
+    neutral: { bg: C.muted, fg: C.inkSoft },
+    success: { bg: C.successSoft, fg: C.success },
+    accent: { bg: C.accentSoft, fg: C.accent },
+    danger: { bg: C.dangerSoft, fg: C.danger },
+    cream: { bg: C.primary, fg: C.primaryFg },
   }[tone];
   return (
     <View style={[styles.chip, {
@@ -221,7 +259,7 @@ export function Ring({
           strokeWidth={stroke}
           fill="none"
         />
-        {/* progress arc — starts from 12 o'clock, sweeps clockwise */}
+        {/* progress arc-starts from 12 o'clock, sweeps clockwise */}
         <AnimatedCircle
           cx={center}
           cy={center}
@@ -246,7 +284,7 @@ export function Ring({
 /* ──────────────────────  Animated entrance  ──────────────────────── */
 
 /**
- * Calm opacity fade with cubic ease-out. No translation, no spring — premium feel.
+ * Calm opacity fade with cubic ease-out. No translation, no spring-premium feel.
  */
 export function FadeInItem({
   children, delay = 0, style,
@@ -266,7 +304,7 @@ export function FadeInItem({
 const styles = StyleSheet.create({
   eyebrow: { fontFamily: FONT.medium, fontSize: 12, color: C.mutedFg, letterSpacing: 0.6, textTransform: 'uppercase' },
   h1: { fontFamily: FONT.extra, fontSize: 32, color: C.ink, letterSpacing: -0.6, lineHeight: 38 },
-  h2: { fontFamily: FONT.bold,  fontSize: 22, color: C.ink, letterSpacing: -0.3, lineHeight: 28 },
+  h2: { fontFamily: FONT.bold, fontSize: 22, color: C.ink, letterSpacing: -0.3, lineHeight: 28 },
   h3: { fontFamily: FONT.semibold, fontSize: 17, color: C.ink, letterSpacing: -0.1, lineHeight: 22 },
   body: { fontFamily: FONT.regular, fontSize: 15, color: C.ink, lineHeight: 21 },
   sub: { fontFamily: FONT.regular, fontSize: 13, color: C.mutedFg, lineHeight: 18 },
@@ -274,6 +312,12 @@ const styles = StyleSheet.create({
   statValue: { fontFamily: FONT.bold, fontSize: 28, color: C.ink, letterSpacing: -0.4, marginTop: 4 },
 
   card: { borderRadius: RADIUS.xl, borderWidth: 1 },
+
+  iconButton: {
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: C.borderHi,
+    overflow: 'visible',
+  },
 
   btn: {
     borderRadius: RADIUS.pill,
@@ -288,5 +332,5 @@ const styles = StyleSheet.create({
   chipText: { fontFamily: FONT.semibold, letterSpacing: 0.2 },
 
   ringLabel: { fontFamily: FONT.bold, color: C.ink, letterSpacing: -0.4 },
-  ringSub:   { fontFamily: FONT.regular, color: C.mutedFg, marginTop: 2 },
+  ringSub: { fontFamily: FONT.regular, color: C.mutedFg, marginTop: 2 },
 });

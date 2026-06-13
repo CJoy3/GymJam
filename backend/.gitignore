@@ -1,1 +1,4 @@
 .vercel
+
+# Raw Overpass responses cached by scripts/fetch_uk_gyms.py-regenerable, not source.
+scripts/.cache/

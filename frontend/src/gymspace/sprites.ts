@@ -2,13 +2,13 @@
  * Hand-authored pixel sprites for the gym scene. Each sprite is an array of
  * equal-length rows; characters map to palette entries in `pixel.tsx` (`PX`).
  * Everything is painted in the warm theme palette so it sits inside the app's
- * "sanctuary" look. Swap any sprite freely — the renderer is data-driven.
+ * "sanctuary" look. Swap any sprite freely-the renderer is data-driven.
  *
  * Legend (see PX): d=hair  s/S=skin/shade  p/P=peach/shade  g/G=sage/shade
  *   c/d/e=dark surfaces  m/M=metal  l/w=cream  r=terracotta  k=outline
  */
 
-/** Characters — same identity, progressively more jacked. 12×16 each. */
+/** Characters-same identity, progressively more jacked. 12×16 each. */
 export const CHARACTERS: Record<string, string[]> = {
   scrawny: [
     '....dddd....',

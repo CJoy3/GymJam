@@ -7,9 +7,19 @@ class Gym(BaseModel):
     id: str
     name: str
     location: Optional[str] = None
+    brand: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     created_at: datetime
+
+
+class GymResolve(BaseModel):
+    """A gym picked from the live map (OSM), turned into a real gyms row so it
+    can be used as a home gym."""
+    osm_id: str
+    name: str
+    latitude: float
+    longitude: float
 
 
 class GymMapPoint(BaseModel):
@@ -18,8 +28,19 @@ class GymMapPoint(BaseModel):
     how many have checked in today."""
     id: str
     name: str
+    brand: Optional[str] = None
     latitude: float
     longitude: float
     member_count: int
     avg_elo: int
     active_today: int
+
+
+class GymLeaderboardEntry(BaseModel):
+    """A gym ranked on the leaderboard. Members are users whose home gym is this
+    gym; `total_elo` is their combined ELO, `avg_elo` the per-member average."""
+    id: str
+    name: str
+    member_count: int
+    total_elo: int
+    avg_elo: int

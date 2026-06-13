@@ -1,14 +1,14 @@
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
 
 import { C, FONT, SPACE } from '../theme/tokens';
-import { Card, Chip, Eyebrow, FadeInItem, H1, Sub } from '../ui/components';
+import { Card, Chip, Eyebrow, FadeInItem, H1, IconButton, Sub } from '../ui/components';
 import { Avatar } from '../ui/Avatar';
 import { BlobBackground } from '../ui/Blob';
 import { useRefreshControl } from '../ui/useRefresh';
 import { usePolling } from '../ui/usePolling';
 import { useAppState } from '../state/AppState';
+import { getGymsLeaderboard, type GymLeaderboardEntry } from '../../lib/api/gyms';
 import { pageWrap, styles } from './_shared';
 
 const RANK_TONE: Record<number, { bg: string; fg: string }> = {
@@ -17,16 +17,19 @@ const RANK_TONE: Record<number, { bg: string; fg: string }> = {
   2: { bg: '#E3B08C', fg: '#5A3418' },
 };
 
-type MainTab = 'groups' | 'squad';
+type MainTab = 'groups' | 'gyms' | 'squad';
 type SortMode = 'total' | 'average';
 
 export function Leaderboard({ onBack }: { onBack: () => void }) {
-  const { groupId, groups, groupMembers, userId, refreshGroupsAtGym } = useAppState();
+  const { groupId, groups, groupMembers, userId, gymId, refreshGroupsAtGym } = useAppState();
   const refresh = useRefreshControl();
   usePolling(refreshGroupsAtGym, 12000);
 
   const [mainTab, setMainTab] = useState<MainTab>('groups');
   const [sortMode, setSortMode] = useState<SortMode>('total');
+  const [gymBoard, setGymBoard] = useState<GymLeaderboardEntry[]>([]);
+  const loadGymBoard = useCallback(() => getGymsLeaderboard().then(setGymBoard).catch(() => {}), []);
+  usePolling(loadGymBoard, 12000);
 
   const rankedGroups = [...groups].sort((a, b) => {
     if (sortMode === 'average') {
@@ -37,17 +40,18 @@ export function Leaderboard({ onBack }: { onBack: () => void }) {
     return b.totalElo - a.totalElo;
   });
 
+  const rankedGyms = [...gymBoard].sort((a, b) =>
+    sortMode === 'average' ? b.avg_elo - a.avg_elo : b.total_elo - a.total_elo);
+
   const rankedMembers = [...groupMembers].sort((a, b) => b.elo - a.elo);
 
   return (
     <View style={styles.screen}>
-      <BlobBackground variant="celebrate" />
+      <BlobBackground variant="group" />
       <ScrollView refreshControl={refresh} contentContainerStyle={pageWrap} showsVerticalScrollIndicator={false}>
         <FadeInItem>
           <View style={styles.rowBetween}>
-            <Pressable onPress={onBack} style={styles.iconBtn}>
-              <MaterialIcons name="arrow-back" size={20} color={C.ink} />
-            </Pressable>
+            <IconButton icon="arrow-back" onPress={onBack} />
           </View>
         </FadeInItem>
 
@@ -64,7 +68,15 @@ export function Leaderboard({ onBack }: { onBack: () => void }) {
               onPress={() => setMainTab('groups')}
             >
               <Text style={[styles.tabText, { color: mainTab === 'groups' ? C.primaryFg : C.mutedFg }]}>
-                All Groups
+                Groups
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[styles.tab, mainTab === 'gyms' && styles.tabOn]}
+              onPress={() => setMainTab('gyms')}
+            >
+              <Text style={[styles.tabText, { color: mainTab === 'gyms' ? C.primaryFg : C.mutedFg }]}>
+                Gyms
               </Text>
             </Pressable>
             <Pressable
@@ -118,6 +130,57 @@ export function Leaderboard({ onBack }: { onBack: () => void }) {
                           </View>
                           <View style={[styles.rowGap, { gap: 8, marginTop: 6, flexWrap: 'wrap' }]}>
                             <Sub>{g.members} {g.members === 1 ? 'member' : 'members'}</Sub>
+                            <Text style={styles.dot}>·</Text>
+                            <Sub>{displayElo.toLocaleString()} ELO {sortMode === 'average' ? 'avg' : ''}</Sub>
+                          </View>
+                        </View>
+                      </View>
+                    </Card>
+                  </FadeInItem>
+                );
+              })}
+            </View>
+          </>
+        )}
+
+        {mainTab === 'gyms' && (
+          <>
+            {/* Sort toggle */}
+            <FadeInItem delay={120} style={{ marginTop: 14 }}>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <SortBtn label="Total ELO" active={sortMode === 'total'} onPress={() => setSortMode('total')} />
+                <SortBtn label="Average ELO" active={sortMode === 'average'} onPress={() => setSortMode('average')} />
+              </View>
+              <Sub style={{ marginTop: 8 }}>
+                {sortMode === 'total'
+                  ? 'Gyms ranked by combined member ELO'
+                  : 'Gyms ranked by average member ELO'}
+              </Sub>
+            </FadeInItem>
+
+            <View style={{ gap: 12, marginTop: 16 }}>
+              {rankedGyms.length === 0 ? (
+                <FadeInItem delay={140}>
+                  <Card padding={SPACE.xl}><Sub style={{ textAlign: 'center' }}>No gyms ranked yet.</Sub></Card>
+                </FadeInItem>
+              ) : rankedGyms.map((g, i) => {
+                const isMine = g.id === gymId;
+                const tone = RANK_TONE[i];
+                const displayElo = sortMode === 'average' ? g.avg_elo : g.total_elo;
+                return (
+                  <FadeInItem key={g.id} delay={140 + i * 40}>
+                    <Card padding={SPACE.lg} style={isMine ? { borderColor: C.primary, borderWidth: 1.5 } : undefined}>
+                      <View style={styles.rowGap}>
+                        <View style={[styles.avatar, { backgroundColor: tone?.bg ?? C.muted }]}>
+                          <Text style={{ fontFamily: FONT.bold, fontSize: 14, color: tone?.fg ?? C.inkSoft }}>{i + 1}</Text>
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <View style={[styles.rowGap, { flexWrap: 'wrap', gap: 6 }]}>
+                            <Text style={styles.cardTitle}>{g.name}</Text>
+                            {isMine && <Chip text="Your gym" tone="success" compact />}
+                          </View>
+                          <View style={[styles.rowGap, { gap: 8, marginTop: 6, flexWrap: 'wrap' }]}>
+                            <Sub>{g.member_count} {g.member_count === 1 ? 'member' : 'members'}</Sub>
                             <Text style={styles.dot}>·</Text>
                             <Sub>{displayElo.toLocaleString()} ELO {sortMode === 'average' ? 'avg' : ''}</Sub>
                           </View>

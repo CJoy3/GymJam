@@ -6,17 +6,19 @@ import { C, SPACE } from '../theme/tokens';
 import { Btn, Card, Eyebrow, FadeInItem, H1, Sub } from '../ui/components';
 import { BlobBackground } from '../ui/Blob';
 import { useAppState } from '../state/AppState';
+import { sortByProximity } from '../../lib/location';
 import { pageWrap, styles } from './_shared';
 
-/* Onboarding — first-launch gym picker */
+/* Onboarding-first-launch gym picker */
 
 export function Onboarding({ onDone }: { onDone: () => void }) {
-  const { gyms, setGym } = useAppState();
+  const { gyms, setGym, myLocation } = useAppState();
+  const sortedGyms = sortByProximity(gyms, myLocation);
   const [selId, setSelId] = useState<string | null>(null);
   const selName = gyms.find((g) => g.id === selId)?.name;
   return (
     <View style={styles.screen}>
-      <BlobBackground variant="celebrate" />
+      <BlobBackground variant="home" />
       <ScrollView contentContainerStyle={pageWrap} showsVerticalScrollIndicator={false}>
         <FadeInItem>
           <Eyebrow style={{ marginBottom: 10 }}>Welcome to GymJam</Eyebrow>
@@ -27,7 +29,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
         </FadeInItem>
 
         <View style={{ gap: 12 }}>
-          {gyms.map((g, i) => {
+          {sortedGyms.map((g, i) => {
             const on = selId === g.id;
             return (
               <FadeInItem key={g.id} delay={80 * (i + 1)}>

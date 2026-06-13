@@ -6,18 +6,18 @@
  *   green  = checked in today ("at the gym")
  *   peach  = pledged today, not yet in
  *   faint  = resting
- * Web has no native map — see ProfileMap.web.tsx for the SVG fallback.
+ * Web has no native map-see ProfileMap.web.tsx for the SVG fallback.
  */
 import React, { useState } from 'react';
-import { LayoutChangeEvent, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
+import { LayoutChangeEvent, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import MapView, { PROVIDER_DEFAULT } from 'react-native-maps';
 import { LinearGradient } from 'expo-linear-gradient';
 
-import { C } from '../theme/tokens';
+import { C, FONT } from '../theme/tokens';
 import { Avatar } from './Avatar';
 import type { SquadMapMember } from '../../lib/api/groups';
 import type { GymMapPoint } from '../../lib/api/gyms';
-import { turfRadius } from './FullMap';
+import { gymDiameter, gymInitials } from './FullMap';
 
 export type Presence = 'in' | 'pledged' | 'rest';
 
@@ -77,25 +77,31 @@ export function ProfileMap({
         rotateEnabled={false}
         pitchEnabled={false}
       />
-      {/* Warm scrim so cream avatars/text stay legible and it matches the theme. */}
-      <LinearGradient
-        pointerEvents="none"
-        colors={['rgba(27,23,20,0.30)', 'rgba(27,23,20,0.80)']}
-        style={StyleSheet.absoluteFill}
-      />
-      {/* Gym turf blobs (no labels in the compact header), sized by avg ELO. */}
+      {/* Gym pins-initials circle sized by avg ELO (compact, non-interactive).
+          Drawn *under* the scrim below so their cream initials don't clash with
+          the cream hero text once gyms load (the scrim sits between them). */}
       {size.w > 0 && (gyms ?? []).map((g) => {
         const { x, y } = project(g.latitude, g.longitude);
-        const r = turfRadius(g.avg_elo) * 0.7;
-        if (x < -r || y < -r || x > size.w + r || y > size.h + r) return null;
+        const d = gymDiameter(g.avg_elo) * 0.7;
+        if (x < -d || y < -d || x > size.w + d || y > size.h + d) return null;
         return (
           <View
             key={g.id}
             pointerEvents="none"
-            style={{ position: 'absolute', left: x - r, top: y - r, width: r * 2, height: r * 2, borderRadius: r, backgroundColor: 'rgba(156,181,143,0.16)', borderWidth: 1, borderColor: 'rgba(156,181,143,0.5)' }}
-          />
+            style={{ position: 'absolute', left: x - d / 2, top: y - d / 2, width: d, height: d, borderRadius: d / 2, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(27,23,20,0.82)', borderWidth: 1.5, borderColor: C.success }}
+          >
+            <Text style={{ fontFamily: FONT.bold, fontSize: Math.max(8, d * 0.32), color: C.ink }}>{gymInitials(g.name)}</Text>
+          </View>
         );
       })}
+      {/* Warm scrim so cream avatars/text stay legible and it matches the theme.
+          Sits above the map + gym pins so hero text contrast is unaffected by
+          however many gyms load underneath. */}
+      <LinearGradient
+        pointerEvents="none"
+        colors={['rgba(27,23,20,0.45)', 'rgba(27,23,20,0.88)']}
+        style={StyleSheet.absoluteFill}
+      />
       {size.w > 0 && located.map((m) => {
         const { x, y } = project(m.latitude as number, m.longitude as number);
         const p = statusById?.[m.user_id];

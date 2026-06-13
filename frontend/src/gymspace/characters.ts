@@ -1,5 +1,5 @@
 /**
- * Procedural pixel "lifter" — drawn on a 16×22 grid so it carries more detail
+ * Procedural pixel "lifter"-drawn on a 16×22 grid so it carries more detail
  * than a hand-typed sprite, and generated parametrically so all four arena
  * builds share one skeleton. Each character is a 3-frame **dumbbell curl** loop
  * (arms down → mid → up) that the scene plays on a timer.

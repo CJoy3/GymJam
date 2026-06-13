@@ -1,7 +1,7 @@
 """Group activity feed + nudges.
 
 The feed is synthesised on read from existing data (join requests, this week's
-plan_days, member streaks) plus recently received nudges — no event table to
+plan_days, member streaks) plus recently received nudges-no event table to
 maintain. Nudges are persisted only so we can rate-limit the button (one
 from→to nudge per hour) and surface "X nudged you".
 """
@@ -12,6 +12,7 @@ from fastapi import HTTPException
 
 from app.core.supabase_client import get_supabase
 from app.core.time_utils import current_day_of_week, current_week_start
+from app.services import realtime
 
 NUDGE_COOLDOWN = timedelta(hours=1)
 STREAK_MILESTONE = 2  # surface members consistent for >= this many weeks
@@ -72,7 +73,7 @@ def send_nudge(group_id: str, from_user_id: str, to_user_id: str) -> dict:
                 mins = int((next_allowed - now).total_seconds() // 60) + 1
                 raise HTTPException(
                     status_code=429,
-                    detail=f"Already nudged — you can nudge again in {mins} min",
+                    detail=f"Already nudged-you can nudge again in {mins} min",
                 )
 
     sb.table("nudges").insert({
@@ -80,6 +81,7 @@ def send_nudge(group_id: str, from_user_id: str, to_user_id: str) -> dict:
         "from_user_id": from_user_id,
         "to_user_id": to_user_id,
     }).execute()
+    realtime.broadcast_group_changed(group_id)
     return {
         "ok": True,
         "to_user_id": to_user_id,
@@ -112,7 +114,7 @@ def group_activity(group_id: str, user_id: str) -> list[dict]:
 
     items: list[dict] = []
 
-    # Pending join requests — actionable, leader only.
+    # Pending join requests-actionable, leader only.
     if is_leader:
         reqs = (
             sb.table("join_requests")

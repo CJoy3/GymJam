@@ -8,30 +8,32 @@ import { BlobBackground } from '../ui/Blob';
 import { useRefreshControl } from '../ui/useRefresh';
 import { useAppState } from '../state/AppState';
 import { GymScene, ALL_UNLOCKS } from '../gymspace';
+import { useCoachTarget } from '../ui/CoachMarks';
 import { pageWrap, styles } from './_shared';
 
-/* Progress — ELO ladder + badges */
+/* Progress-ELO ladder + badges */
 
 type BadgeKey = keyof import('../../lib/api/badges').Badges;
 const BADGE_CATALOG: { key: BadgeKey; name: string; icon: keyof typeof MaterialIcons.glyphMap }[] = [
-  { key: 'first_week',       name: 'First Week',       icon: 'flag' },
-  { key: 'streak_master',    name: 'Streak Master',    icon: 'local-fire-department' },
-  { key: 'early_bird',       name: 'Early Bird',       icon: 'wb-sunny' },
+  { key: 'first_week', name: 'First Week', icon: 'flag' },
+  { key: 'streak_master', name: 'Streak Master', icon: 'local-fire-department' },
+  { key: 'early_bird', name: 'Early Bird', icon: 'wb-sunny' },
   { key: 'consistency_king', name: 'Consistency King', icon: 'workspace-premium' },
-  { key: 'pot_winner',       name: 'Pot Winner',       icon: 'paid' },
-  { key: 'group_leader',     name: 'Group Leader',     icon: 'group' },
+  { key: 'pot_winner', name: 'Pot Winner', icon: 'paid' },
+  { key: 'group_leader', name: 'Group Leader', icon: 'group' },
 ];
 
 const TIERS = [
-  { name: 'Beginner', min: 0,    max: 500,      icon: 'fitness-center' as const },
-  { name: 'Rookie',   min: 500,  max: 1000,     icon: 'directions-run' as const },
-  { name: 'Regular',  min: 1000, max: 2000,     icon: 'sports-martial-arts' as const },
-  { name: 'Mogger',   min: 2000, max: Infinity, icon: 'military-tech' as const },
+  { name: 'Beginner', min: 0, max: 500, icon: 'fitness-center' as const },
+  { name: 'Rookie', min: 500, max: 1000, icon: 'directions-run' as const },
+  { name: 'Regular', min: 1000, max: 2000, icon: 'sports-martial-arts' as const },
+  { name: 'Mogger', min: 2000, max: Infinity, icon: 'military-tech' as const },
 ];
 
 export function Progress({ onGymSpace }: { onGymSpace: () => void }) {
   const { elo, badges: badgeFlags, roomItems } = useAppState();
   const refresh = useRefreshControl();
+  const tourTarget = useCoachTarget('tour-progress');
   const placedItemIds = new Set(roomItems.map((r) => r.item_id));
   const ti = TIERS.findIndex((t) => elo >= t.min && elo < t.max);
   const cur = TIERS[ti] ?? TIERS[0];
@@ -49,9 +51,9 @@ export function Progress({ onGymSpace }: { onGymSpace: () => void }) {
           <Sub style={{ marginTop: 6 }}>Track your growth and unlock rewards</Sub>
         </FadeInItem>
 
-        {/* Pixel-art gym — front and centre. Grows as you climb the arena. */}
+        {/* Pixel-art gym-front and centre. Grows as you climb the arena. */}
         <FadeInItem delay={80} style={{ marginTop: 20 }}>
-          <Pressable onPress={onGymSpace}>
+          <Pressable ref={tourTarget} collapsable={false} onPress={onGymSpace}>
             <GymScene elo={elo} placedItemIds={placedItemIds} />
             <View style={[styles.rowBetween, { marginTop: 12 }]}>
               <View style={{ flex: 1 }}>
@@ -59,7 +61,7 @@ export function Progress({ onGymSpace }: { onGymSpace: () => void }) {
                 <Sub style={{ marginTop: 2 }}>
                   {nextUnlock
                     ? `Next unlock: ${nextUnlock.label} · ${nextUnlock.elo.toLocaleString()} ELO`
-                    : 'Fully decked out — legendary status'}
+                    : 'Fully decked out-legendary status'}
                 </Sub>
               </View>
               <Chip text="Expand" tone="accent" icon="open-in-full" compact />
@@ -95,7 +97,9 @@ export function Progress({ onGymSpace }: { onGymSpace: () => void }) {
         </FadeInItem>
 
         <FadeInItem delay={200}>
-          <Card padding={0}>
+          {/* overflow:hidden clips the per-row highlight (and dividers) to the
+              card's rounded corners so the first/last tiers don't bleed past. */}
+          <Card padding={0} style={{ overflow: 'hidden' }}>
             {TIERS.map((t, i) => {
               const reached = elo >= t.min;
               const current = i === ti;

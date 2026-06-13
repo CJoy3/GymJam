@@ -33,14 +33,25 @@ async function request<T>(
       headers['Authorization'] = `Bearer ${session.access_token}`;
     }
   }
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    method,
-    headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}${path}`, {
+      method,
+      headers,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+  } catch {
+    // fetch only rejects on network failure (DNS, offline, CORS)-surface a
+    // clean status-0 ApiError so callers can show a friendly "network" message
+    // instead of a raw TypeError. See mappers.userFacingMessage.
+    throw new ApiError('Network request failed', 0);
+  }
   const text = await res.text();
   if (!res.ok) {
-    throw new ApiError(extractDetail(text) || `HTTP ${res.status}`, res.status);
+    // Don't propagate server-fault bodies (stack traces / "Internal Server
+    // Error") to the UI-keep the status so the UI layer can genericise 5xx.
+    const detail = res.status >= 500 ? `HTTP ${res.status}` : extractDetail(text) || `HTTP ${res.status}`;
+    throw new ApiError(detail, res.status);
   }
   return (text ? JSON.parse(text) : undefined) as T;
 }
@@ -70,3 +81,5 @@ export const apiPatch = <T>(path: string, body?: unknown, opts?: RequestOptions)
   request<T>('PATCH', path, body, opts);
 export const apiPut = <T>(path: string, body?: unknown, opts?: RequestOptions) =>
   request<T>('PUT', path, body, opts);
+export const apiDelete = <T>(path: string, opts?: RequestOptions) =>
+  request<T>('DELETE', path, undefined, opts);

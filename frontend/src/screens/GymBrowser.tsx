@@ -3,7 +3,7 @@ import { Alert, Platform, Pressable, ScrollView, Text, TextInput, View } from 'r
 import { MaterialIcons } from '@expo/vector-icons';
 
 import { C, FONT, SPACE } from '../theme/tokens';
-import { Btn, Card, Chip, Eyebrow, FadeInItem, H1, H3, Sub } from '../ui/components';
+import { Btn, Card, Chip, Eyebrow, FadeInItem, H1, H3, IconButton, Sub } from '../ui/components';
 import { Slider } from '../ui/Slider';
 import { BlobBackground } from '../ui/Blob';
 import { useRefreshControl } from '../ui/useRefresh';
@@ -11,7 +11,7 @@ import { usePolling } from '../ui/usePolling';
 import { useAppState, Group } from '../state/AppState';
 import { pageWrap, styles } from './_shared';
 
-/* Gym browser — list + create + leader inbox */
+/* Gym browser-list + create + leader inbox */
 
 export function GymBrowser({ onBack, onJoined, onCreated }: { onBack: () => void; onJoined: () => void; onCreated: () => void }) {
   const { groupId, groups, addGroup, joinGroup, leaveGroup, refreshGroupsAtGym } = useAppState();
@@ -87,16 +87,14 @@ export function GymBrowser({ onBack, onJoined, onCreated }: { onBack: () => void
       <ScrollView refreshControl={refresh} contentContainerStyle={pageWrap} showsVerticalScrollIndicator={false}>
         <FadeInItem>
           <View style={styles.rowBetween}>
-            <Pressable onPress={onBack} style={styles.iconBtn}>
-              <MaterialIcons name="arrow-back" size={20} color={C.ink} />
-            </Pressable>
+            <IconButton icon="arrow-back" onPress={onBack} />
           </View>
         </FadeInItem>
 
         <FadeInItem delay={60} style={{ marginTop: 18 }}>
           <Eyebrow>All groups · any gym</Eyebrow>
           <H1 style={{ marginTop: 6 }}>Browse groups</H1>
-          <Sub style={{ marginTop: 6 }}>Groups are global — join friends from any gym. Join requests now appear in the group notifications menu.</Sub>
+          <Sub style={{ marginTop: 6 }}>Groups are global-join friends from any gym. Join requests now appear in the group notifications menu.</Sub>
         </FadeInItem>
 
         <FadeInItem delay={140} style={{ marginTop: 22 }}>

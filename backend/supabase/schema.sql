@@ -1,6 +1,6 @@
 -- GymJam database schema
 -- Run this in the Supabase SQL editor (Project → SQL Editor → New query) and execute.
--- It is idempotent — safe to re-run.
+-- It is idempotent-safe to re-run.
 
 ------------------------------------------------------------
 -- Tables
@@ -18,13 +18,29 @@ create table if not exists gyms (
 alter table gyms add column if not exists latitude double precision;
 alter table gyms add column if not exists longitude double precision;
 
+-- OpenStreetMap id for gyms that originated from the live map (so a user picking
+-- a real nearby gym during setup resolves to a single, reusable gyms row). Also
+-- the upsert key for the bulk UK gym seed (see scripts/fetch_uk_gyms.py).
+alter table gyms add column if not exists osm_id text;
+create unique index if not exists gyms_osm_id_idx on gyms(osm_id) where osm_id is not null;
+
+-- Chain a gym belongs to (e.g. 'PureGym', 'The Gym Group'). Populated for the
+-- seeded UK chains; null for user-created/legacy rows.
+alter table gyms add column if not exists brand text;
+
+-- The Squad Map fetches gyms by viewport (bounding box) straight from this table,
+-- so index the coordinates for fast range scans. Partial: only geocoded rows are
+-- ever queried for the map.
+create index if not exists gyms_lat_lng_idx on gyms(latitude, longitude)
+    where latitude is not null and longitude is not null;
+
 create table if not exists users (
     id uuid primary key default gen_random_uuid(),
     device_id text not null unique,
     display_name text not null default 'Anonymous',
     -- Chosen pixel-art avatar id (see frontend avatar catalog). NULL ⇒ initials.
     avatar text,
-    elo integer not null default 1000 check (elo >= 0),
+    elo integer not null default 0 check (elo >= 0),
     streak integer not null default 0 check (streak >= 0),
     gym_id uuid references gyms(id) on delete set null,
     -- Opt-in live location sharing (Snap-Maps style); broadcast to the user's
@@ -39,6 +55,8 @@ create table if not exists users (
 
 -- Additive migrations for existing deployments.
 alter table users add column if not exists avatar text;
+-- New users start at 0 ELO (Beginner) rather than the old 1000 default.
+alter table users alter column elo set default 0;
 alter table users add column if not exists share_location boolean not null default false;
 alter table users add column if not exists latitude double precision;
 alter table users add column if not exists longitude double precision;
@@ -119,7 +137,7 @@ create table if not exists group_memberships (
 ); 
 
 -- Additive migration for existing deployments. NULL on legacy rows means
--- "established member" — never treated as a mid-week joiner.
+-- "established member"-never treated as a mid-week joiner.
 alter table group_memberships
     add column if not exists joined_week_start date;
 
@@ -161,7 +179,7 @@ create table if not exists plan_days (
 );
 
 -- Allow the 'rescheduled' state on existing deployments (a missed day that was
--- excused for "unforeseen circumstances" — either moved to next week or settled
+-- excused for "unforeseen circumstances"-either moved to next week or settled
 -- with a 50% penalty when next week was full).
 alter table plan_days drop constraint if exists plan_days_state_check;
 alter table plan_days add constraint plan_days_state_check
@@ -181,7 +199,7 @@ create table if not exists pot_conditions (
         check (stake_per_miss >= 0),
     is_finalized boolean not null default false,
     -- Pot currency for THIS week ('elo' or 'money'). Stored per-week so changing
-    -- a group's stake type only affects future weeks — the current week keeps the
+    -- a group's stake type only affects future weeks-the current week keeps the
     -- type it started with. Defaults to 'elo'; seeded from the group at creation.
     stake_type text not null default 'elo' check (stake_type in ('elo', 'money')),
     -- The first week after a group is created is a no-stakes "practice" week.
@@ -238,6 +256,25 @@ create table if not exists nudges (
 );
 create index if not exists nudges_to_idx   on nudges(to_user_id, created_at desc);
 create index if not exists nudges_pair_idx on nudges(from_user_id, to_user_id, created_at desc);
+
+-- Friendships: a directed friend request that becomes a mutual friendship once
+-- accepted. Friends can SEE each other's weekly pledges (read-only) even when
+-- they are not in the same group. One row per pair-the expression index below
+-- blocks duplicates in either direction. Declining simply deletes the row, so
+-- only 'pending' and 'accepted' exist.
+create table if not exists friendships (
+    id uuid primary key default gen_random_uuid(),
+    requester_id uuid not null references users(id) on delete cascade,
+    addressee_id uuid not null references users(id) on delete cascade,
+    status text not null default 'pending' check (status in ('pending', 'accepted')),
+    created_at timestamptz not null default now(),
+    accepted_at timestamptz,
+    check (requester_id <> addressee_id)
+);
+create unique index if not exists friendships_pair_idx
+    on friendships (least(requester_id, addressee_id), greatest(requester_id, addressee_id));
+create index if not exists friendships_requester_idx on friendships(requester_id, status);
+create index if not exists friendships_addressee_idx on friendships(addressee_id, status);
 
 -- Single-row development clock. `offset_days` shifts the app's notion of "today"
 -- forward (in whole weeks) so the week-by-week flow can be demoed on demand.
@@ -338,5 +375,6 @@ alter table plan_days           disable row level security;
 alter table pot_conditions      disable row level security;
 alter table user_room_items     disable row level security;
 alter table nudges              disable row level security;
+alter table friendships         disable row level security;
 alter table dev_clock           disable row level security;
  

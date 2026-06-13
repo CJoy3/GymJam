@@ -39,7 +39,7 @@ export interface Pot {
   contributor_count: number;
 }
 
-/** All groups on the platform — groups are global (not filtered by gym). */
+/** All groups on the platform-groups are global (not filtered by gym). */
 export const listAllGroups = () => apiGet<GroupSummary[]>('/groups');
 
 export const listGroupsAtGym = (gym_id: string) =>
@@ -117,9 +117,37 @@ export interface SquadMapMember {
   is_live?: boolean;
 }
 
-/** Group members located at their home gyms — for the Squad Map. */
+/** Group members located at their home gyms-for the Squad Map. */
 export const getSquadMap = (group_id: string) =>
   apiGet<SquadMapMember[]>(`/groups/${group_id}/squad-map`);
 
 export const updateStakeType = (group_id: string, stake_type: StakeType) =>
   apiPatch<Group>(`/groups/${group_id}/stake-type`, { stake_type });
+
+export interface CommunityGymMember {
+  user_id: string;
+  display_name: string;
+  avatar: string | null;
+  elo: number;
+  is_me: boolean;
+  items_placed: number;
+}
+
+export interface CommunityGymItem {
+  item_id: string;
+  count: number;
+}
+
+export interface CommunityGym {
+  group_id: string;
+  name: string;
+  member_count: number;
+  total_elo: number;
+  avg_elo: number;
+  members: CommunityGymMember[];
+  items: CommunityGymItem[];
+}
+
+/** The group's members' personalisable gyms joined into one shared space. */
+export const getCommunityGym = (group_id: string) =>
+  apiGet<CommunityGym>(`/groups/${group_id}/community-gym`);

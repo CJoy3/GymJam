@@ -7,6 +7,8 @@ from app.core.supabase_client import get_supabase
 from app.schemas.badge import Badges
 from app.schemas.user import TagUpdate, User, UserRegister, UserUpdate
 from app.services import badges as badges_svc
+from app.services import groups as groups_svc
+from app.services import realtime
 from app.services import users as users_svc
 
 router = APIRouter()
@@ -53,7 +55,14 @@ def update_me(
     current: dict = Depends(get_current_user),
 ) -> dict:
     fields = patch.model_dump(exclude_none=True)
-    return users_svc.update_profile(current["id"], fields)
+    updated = users_svc.update_profile(current["id"], fields)
+    # Identity/stat changes others can see (ELO, wallet, avatar, name) should
+    # reach the rest of the group instantly rather than on their next poll.
+    if fields.keys() & {"elo", "money", "avatar", "display_name"}:
+        membership = groups_svc.current_membership(current["id"])
+        if membership:
+            realtime.broadcast_group_changed(membership.get("group_id"))
+    return updated
 
 
 @router.post("/me/tag", response_model=User)

@@ -10,22 +10,67 @@ import {
   AccountSetup,
 } from '../../src/screens';
 import { useAppState } from '../../src/state/AppState';
+import { useOnboarding } from '../../src/state/OnboardingState';
 import { usePolling } from '../../src/ui/usePolling';
 import { BlobBackground } from '../../src/ui/Blob';
+import { CoachMarksOverlay, CoachMarksProvider, useCoachTarget, type CoachStep } from '../../src/ui/CoachMarks';
+import { Glass } from '../../src/ui/Glass';
+import { ToastViewport } from '../../src/ui/toast';
+import { WizardOverlay } from '../../src/screens/onboarding/WizardOverlay';
 import { C, FONT, RADIUS, SPACE } from '../../src/theme/tokens';
 
 const EASE_OUT = Easing.out(Easing.cubic);
+
+// The tab bar floats over the content (absolutely positioned). It's inset by
+// the SAME margin on the left, right and bottom, so its rounded (capsule)
+// corners sit concentric with the iPhone's screen corners — i.e. a constant gap
+// follows the curve, the way a professional Apple-style floating bar aligns.
+// (margin + barRadius ≈ device-corner radius.) Screens reserve TAB_BAR_CLEARANCE
+// (see _shared) so the bar overlays content, not an empty dark band.
+const BAR_MARGIN = SPACE.lg;          // equal float inset: left = right = bottom
+const TAB_GAP = SPACE.sm;             // equal gap around the active pill (sides = top/bottom)
+
+/** Coach-marks tour, in order. Each step highlights a real element ON its page
+ * (registered there via useCoachTarget): the two home-* targets live in
+ * Home.tsx, and tour-group / tour-progress / tour-profile in those screens.
+ * `screen` is reported by the overlay so the tour navigates the app, switching
+ * the background page to spotlight each one in turn. `navId` adds a second
+ * spotlight on that page's nav-bar tab, so the user sees both which page
+ * they're on and where the feature is. */
+const TOUR_STEPS: CoachStep[] = [
+  { id: 'home-week', text: 'This is your week-tap a day to see your plan', screen: 'home' },
+  { id: 'home-checkin', text: 'Hit this when you get to the gym', screen: 'home' },
+  { id: 'tour-group', text: "See your group's pledges and nudge people who've gone quiet", screen: 'group', navId: 'tab-group' },
+  { id: 'tour-progress', text: 'Your ELO score lives here-it goes up every time you show up', screen: 'progress', navId: 'tab-progress' },
+  { id: 'tour-profile', text: 'Your gym space, your squad on the map, and your settings', screen: 'profile', navId: 'tab-profile' },
+];
 
 type Screen =
   | 'account-setup' | 'onboarding' | 'home' | 'check-in' | 'plan-week' | 'group'
   | 'gym-browser' | 'leaderboard' | 'pot-tracker' | 'progress' | 'gym-space'
   | 'profile' | 'squad-map' | 'settings';
 
-export default function GymJamApp() {
+export default function GymJamAppRoot() {
+  // Coach-mark targets are registered from inside the shell (Home, the tab
+  // bar), so the registry must wrap the whole app component.
+  return (
+    <CoachMarksProvider>
+      <GymJamApp />
+    </CoachMarksProvider>
+  );
+}
+
+function GymJamApp() {
   const { ready, userId, gymId, groupId, tag, elo, refreshAll } = useAppState();
+  const { hasSeenWizard, hasSeenTour, completeWizard, completeTour } = useOnboarding();
   const [screen, setScreen] = useState<Screen | null>(null);
 
-  // Keep every device in sync — poll every 30 s and also refresh when the app
+  // Tab-bar coach-mark targets (Home registers its own two from inside).
+  const groupTabTarget = useCoachTarget('tab-group');
+  const progressTabTarget = useCoachTarget('tab-progress');
+  const profileTabTarget = useCoachTarget('tab-profile');
+
+  // Keep every device in sync-poll every 30 s and also refresh when the app
   // returns to the foreground (e.g. user switches back from another app).
   usePolling(refreshAll, 30000);
 
@@ -34,7 +79,7 @@ export default function GymJamApp() {
     // Wait until the account itself has loaded before deciding where to route.
     // Otherwise a warm launch (where `ready` flips true from the cache before
     // `me` is populated) would briefly see null tag/gym and wrongly show the
-    // account-setup screen — and then get stuck there.
+    // account-setup screen-and then get stuck there.
     if (!userId) return;
 
     const setUp = !!tag && !!gymId;
@@ -54,7 +99,7 @@ export default function GymJamApp() {
   if (!ready || screen === null) {
     return (
       <View style={styles.splash}>
-        <BlobBackground variant="celebrate" />
+        <BlobBackground variant="home" />
         <Animated.View entering={FadeIn.duration(420).easing(EASE_OUT)} style={styles.splashCenter}>
           <Text style={styles.splashBrand}>GymJam</Text>
           <ActivityIndicator color={C.ink} style={{ marginTop: 22 }} />
@@ -66,98 +111,177 @@ export default function GymJamApp() {
   const render = () => {
     switch (screen) {
       case 'account-setup': return <AccountSetup onDone={() => setScreen('gym-browser')} />;
-      case 'onboarding':   return <Onboarding onDone={() => setScreen('gym-browser')} />;
-      case 'home':         return <Home onCheckIn={() => setScreen('check-in')} onPlan={() => setScreen('plan-week')} onPot={() => setScreen('pot-tracker')} onGroup={() => setScreen('group')} />;
-      case 'check-in':     return <CheckIn onClose={() => setScreen('home')} />;
-      case 'plan-week':    return <PlanWeek onDone={() => setScreen('home')} onCancel={() => setScreen('home')} />;
-      case 'group':        return groupId
-                              ? <GroupView onBrowse={() => setScreen('gym-browser')} onLeaderboard={() => setScreen('leaderboard')} />
-                              : <NoGroup onBrowse={() => setScreen('gym-browser')} />;
-      case 'gym-browser':  return <GymBrowser onBack={() => setScreen(groupId ? 'group' : 'home')} onJoined={() => setScreen('home')} onCreated={() => setScreen('group')} />;
-      case 'leaderboard':  return <Leaderboard onBack={() => setScreen(groupId ? 'group' : 'home')} />;
-      case 'pot-tracker':  return <PotTracker onBack={() => setScreen('home')} />;
-      case 'progress':     return <Progress onGymSpace={() => setScreen('gym-space')} />;
-      case 'gym-space':    return <GymSpace onBack={() => setScreen('progress')} />;
-      case 'profile':      return <ProfileView onSettings={() => setScreen('settings')} onSquadMap={() => setScreen('squad-map')} />;
-      case 'squad-map':    return <SquadMapScreen onBack={() => setScreen('profile')} />;
-      case 'settings':     return <AppSettings onBack={() => setScreen('profile')} />;
-      default:             return <Home onCheckIn={() => setScreen('check-in')} onPlan={() => setScreen('plan-week')} onPot={() => setScreen('pot-tracker')} onGroup={() => setScreen('group')} />;
+      case 'onboarding': return <Onboarding onDone={() => setScreen('gym-browser')} />;
+      case 'home': return <Home onCheckIn={() => setScreen('check-in')} onPlan={() => setScreen('plan-week')} onPot={() => setScreen('pot-tracker')} onGroup={() => setScreen('group')} />;
+      case 'check-in': return <CheckIn onClose={() => setScreen('home')} />;
+      case 'plan-week': return <PlanWeek onDone={() => setScreen('home')} onCancel={() => setScreen('home')} />;
+      case 'group': return groupId
+        ? <GroupView onBrowse={() => setScreen('gym-browser')} onLeaderboard={() => setScreen('leaderboard')} />
+        : <NoGroup onBrowse={() => setScreen('gym-browser')} />;
+      case 'gym-browser': return <GymBrowser onBack={() => setScreen(groupId ? 'group' : 'home')} onJoined={() => setScreen('home')} onCreated={() => setScreen('group')} />;
+      case 'leaderboard': return <Leaderboard onBack={() => setScreen(groupId ? 'group' : 'home')} />;
+      case 'pot-tracker': return <PotTracker onBack={() => setScreen('home')} />;
+      case 'progress': return <Progress onGymSpace={() => setScreen('gym-space')} />;
+      case 'gym-space': return <GymSpace onBack={() => setScreen('progress')} />;
+      case 'profile': return <ProfileView onSettings={() => setScreen('settings')} onSquadMap={() => setScreen('squad-map')} />;
+      case 'squad-map': return <SquadMapScreen onBack={() => setScreen('profile')} />;
+      case 'settings': return <AppSettings onBack={() => setScreen('profile')} />;
+      default: return <Home onCheckIn={() => setScreen('check-in')} onPlan={() => setScreen('plan-week')} onPot={() => setScreen('pot-tracker')} onGroup={() => setScreen('group')} />;
     }
   };
 
   const showTabs = screen !== 'account-setup' && screen !== 'onboarding' && screen !== 'check-in' && screen !== 'plan-week' && screen !== 'settings';
+  // The squad map is a full-bleed map: no top safe-area inset (extends under the
+  // status bar) and no ELO ribbon, so it reads like a real map app.
+  const fullBleed = screen === 'squad-map';
+
+  // First-run onboarding: the welcome wizard shows once the user is in the main
+  // shell (post account-setup). When it finishes we route to Home (see its
+  // onDone below), then the coach-mark tour runs — it drives its own navigation,
+  // walking the pages as it highlights each tab, so it no longer needs to be
+  // gated on the current screen. Both flags are null until AsyncStorage resolves,
+  // which keeps everything hidden until we know.
+  const showWizard = showTabs && hasSeenWizard === false;
+  const showTour = !showWizard && hasSeenWizard === true && hasSeenTour === false;
 
   return (
-    <SafeAreaView style={styles.root} edges={['top']}>
-      {/* Persistent ELO bar — a fixed top header, part of the layout (not an
-          overlay), so it stays put while the content below scrolls. */}
-      {showTabs && (
-        <View style={styles.statHeader}>
-          <View style={styles.statBadge}>
-            <MaterialIcons name="emoji-events" size={13} color={C.accent} />
-            <Text style={styles.statText}>{elo.toLocaleString()}</Text>
+    <View style={styles.fill}>
+      <SafeAreaView style={styles.root} edges={fullBleed ? [] : ['top']}>
+        {/* Persistent ELO bar-a fixed top header, part of the layout (not an
+            overlay), so it stays put while the content below scrolls. */}
+        {showTabs && !fullBleed && (
+          <View style={styles.statHeader}>
+            <View style={styles.statBadge}>
+              <Glass radius={RADIUS.pill} dim={0.2} style={StyleSheet.absoluteFill} />
+              <MaterialIcons name="emoji-events" size={13} color={C.accent} />
+              <Text style={styles.statText}>{elo.toLocaleString()}</Text>
+            </View>
           </View>
-        </View>
-      )}
+        )}
 
-      <View style={{ flex: 1 }}>{render()}</View>
+        {/* Content fills the full height and sits under the floating bar, so the
+            bar overlays real content instead of an empty dark band. Screens
+            reserve TAB_BAR_CLEARANCE at the bottom so nothing hides behind it. */}
+        <View style={{ flex: 1 }}>{render()}</View>
 
-      {showTabs && (
-        <View style={styles.tabBar}>
-          <Tab label="Home"     icon="home"          active={screen === 'home'} onPress={() => setScreen('home')} />
-          <Tab label="Group"    icon="group"         active={['group', 'gym-browser', 'leaderboard', 'pot-tracker'].includes(screen)} onPress={() => setScreen('group')} />
-          <Tab label="Progress" icon="trending-up"   active={['progress', 'gym-space'].includes(screen)} onPress={() => setScreen('progress')} />
-          <Tab label="Profile"  icon="person"        active={['profile', 'squad-map'].includes(screen)} onPress={() => setScreen('profile')} />
-        </View>
+        {showTabs && (
+          <View style={styles.tabBar}>
+            <Glass radius={RADIUS.pill} dim={0.22} style={StyleSheet.absoluteFill} />
+            <Tab label="Home" icon="home" active={screen === 'home'} onPress={() => setScreen('home')} />
+            <Tab label="Group" icon="group" active={['group', 'gym-browser', 'leaderboard', 'pot-tracker'].includes(screen)} onPress={() => setScreen('group')} targetRef={groupTabTarget} />
+            <Tab label="Progress" icon="trending-up" active={['progress', 'gym-space'].includes(screen)} onPress={() => setScreen('progress')} targetRef={progressTabTarget} />
+            <Tab label="Profile" icon="person" active={['profile', 'squad-map'].includes(screen)} onPress={() => setScreen('profile')} targetRef={profileTabTarget} />
+          </View>
+        )}
+
+        {/* Toasts render here (inside the screen layer) so their liquid-glass
+            bubbles can refract the content behind them — a blur view can only
+            sample its own native layer, not across the navigator boundary. */}
+        <ToastViewport />
+      </SafeAreaView>
+
+      {/* First-run overlays sit outside the SafeAreaView so they cover the full
+          window (status-bar area included). */}
+      {/* Finishing the wizard lands on Home so the tour's first targets (the
+          week + check-in, registered by Home) are mounted before it starts. */}
+      {showWizard && <WizardOverlay onDone={() => { completeWizard(); setScreen('home'); }} />}
+      {showTour && (
+        <CoachMarksOverlay
+          steps={TOUR_STEPS}
+          // Walk the app: switch the background page to each step's screen.
+          onStepChange={(s) => { if (s.screen) setScreen(s.screen as Screen); }}
+          onDone={() => { completeTour(); setScreen('home'); }}
+          onSkip={() => { completeTour(); setScreen('home'); }}
+        />
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 
-function Tab({ label, icon, active, onPress }: { label: string; icon: keyof typeof MaterialIcons.glyphMap; active: boolean; onPress: () => void }) {
+function Tab({ label, icon, active, onPress, targetRef }: {
+  label: string;
+  icon: keyof typeof MaterialIcons.glyphMap;
+  active: boolean;
+  onPress: () => void;
+  /** Coach-mark registration ref (see ui/CoachMarks). */
+  targetRef?: (node: View | null) => void;
+}) {
   return (
-    <Pressable onPress={onPress} style={styles.tab}>
-      <View style={[styles.tabIconWrap, active && styles.tabIconActive]}>
-        <MaterialIcons name={icon} size={22} color={active ? C.primaryFg : C.mutedFg} />
-      </View>
-      <Text style={[styles.tabLabel, { color: active ? C.ink : C.mutedFg }]}>{label}</Text>
-    </Pressable>
+    <View style={styles.tab}>
+      {/* Icons only — no text labels. The coach-mark target is the icon chip
+          (not the full cell) so the tour spotlight is a neat rounded box that
+          fits inside the floating bar instead of overflowing its edges. The
+          label is kept for accessibility. */}
+      <Pressable onPress={onPress} style={styles.tabInner} accessibilityRole="button" accessibilityLabel={label}>
+        <View ref={targetRef} collapsable={false} style={[styles.tabIconWrap, active && styles.tabIconActive]}>
+          <MaterialIcons name={icon} size={22} color={active ? C.primaryFg : C.mutedFg} />
+        </View>
+      </Pressable>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  fill: { flex: 1, backgroundColor: C.bg },
   root: { flex: 1, backgroundColor: C.bg },
   splash: { flex: 1, backgroundColor: C.bg, alignItems: 'center', justifyContent: 'center' },
   splashCenter: { alignItems: 'center' },
   splashBrand: { fontFamily: FONT.extra, fontSize: 44, color: C.ink, letterSpacing: -1.2 },
 
+  // Floating ELO badge-absolutely positioned so it overlays the top-right
+  // corner without adding any vertical buffer to the screen, and stays put
+  // while content scrolls underneath.
   statHeader: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-    height: 44,
-    paddingHorizontal: SPACE.xl,
-    backgroundColor: C.bg,
+    position: 'absolute',
+    // Aligned with each screen's header row (the eyebrow / "Hi, name" line,
+    // which sits at pageWrap.paddingTop = 56).
+    top: 50,
+    right: SPACE.xl,
+    zIndex: 10,
   },
   statBadge: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     paddingHorizontal: 10, paddingVertical: 5,
     borderRadius: RADIUS.pill,
-    backgroundColor: C.card,
     borderWidth: 1, borderColor: C.borderHi,
   },
   statText: { fontFamily: FONT.semibold, fontSize: 13, color: C.ink },
 
+  // Floating tab bar: detached from the bottom edge with side margins, rounded
+  // corners and a shadow so it reads as an overlay. `bottom` is set inline from
+  // the safe-area inset. Screens reserve `tabBarClearance` below their content
+  // so nothing renders behind it.
   tabBar: {
+    position: 'absolute',
+    left: BAR_MARGIN,
+    right: BAR_MARGIN,
+    bottom: BAR_MARGIN,
     flexDirection: 'row',
-    backgroundColor: C.bgSoft,
-    borderTopWidth: 1,
-    borderTopColor: C.border,
-    paddingTop: 8,
-    paddingBottom: 18,
+    // No solid fill — the liquid-glass layer (see <Glass> above) is the bar's
+    // material; this view just positions it, draws the hairline edge and shadow.
+    // Full capsule: the most an Apple-style short bar can curve, and with the
+    // equal BAR_MARGIN inset it reads as concentric with the screen corners.
+    borderRadius: RADIUS.pill,
+    overflow: 'visible',
+    borderWidth: 1,
+    borderColor: C.borderHi,
+    // Equal vertical inset → the active pill's top/bottom gap matches its side
+    // gap (see tabIconWrap.marginHorizontal). Keep these two values identical.
+    paddingTop: TAB_GAP,
+    paddingBottom: TAB_GAP,
+    shadowColor: '#000',
+    shadowOpacity: 0.18,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 12,
   },
-  tab: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 4 },
-  tabIconWrap: { width: 44, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  tab: { flex: 1 },
+  // alignItems:'stretch' lets the pill fill the cell width minus its side
+  // margins, so its left/right gap to the bar equals the bar's vertical padding.
+  tabInner: { alignItems: 'stretch', justifyContent: 'center' },
+  // Active pill: a wide rounded capsule with an EQUAL gap on every side — the
+  // side margin matches the bar's vertical padding (both TAB_GAP), so on the end
+  // tabs (Home / Profile) the gap to the bar edge is identical to the top/bottom.
+  tabIconWrap: { height: 44, borderRadius: 22, marginHorizontal: TAB_GAP, alignItems: 'center', justifyContent: 'center' },
   tabIconActive: { backgroundColor: C.primary },
-  tabLabel: { fontFamily: FONT.medium, fontSize: 10.5, letterSpacing: 0.3 },
 });

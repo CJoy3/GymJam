@@ -9,7 +9,7 @@ import { BlobBackground } from '../ui/Blob';
 import { useAppState } from '../state/AppState';
 import { EASE_OUT, styles } from './_shared';
 
-/* CheckIn — celebratory success screen */
+/* CheckIn-celebratory success screen */
 
 export function CheckIn({ onClose }: { onClose: () => void }) {
   const { thisWeek, gymName, elo } = useAppState();
@@ -18,7 +18,7 @@ export function CheckIn({ onClose }: { onClose: () => void }) {
 
   return (
     <View style={styles.screen}>
-      <BlobBackground variant="celebrate" />
+      <BlobBackground variant="progress" />
       <View style={{ flex: 1, padding: SPACE.xl, paddingTop: 80, alignItems: 'center', justifyContent: 'center' }}>
         <Animated.View entering={FadeIn.duration(320).easing(EASE_OUT)} style={styles.bigCheck}>
           <MaterialIcons name="check" size={56} color={C.success} />
@@ -31,9 +31,9 @@ export function CheckIn({ onClose }: { onClose: () => void }) {
         <FadeInItem delay={220} style={{ width: '100%', marginTop: 36 }}>
           <Card padding={SPACE.xl}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-around' }}>
-              <SimpleStat label="Done"    value={String(done)}    color={C.success} />
+              <SimpleStat label="Done" value={String(done)} color={C.success} />
               <SimpleStat label="Pledged" value={String(pledged)} />
-              <SimpleStat label="ELO"     value="+10"             color={C.accent} />
+              <SimpleStat label="ELO" value="+10" color={C.accent} />
             </View>
           </Card>
         </FadeInItem>

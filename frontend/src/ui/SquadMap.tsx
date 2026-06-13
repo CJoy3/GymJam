@@ -1,5 +1,5 @@
 /**
- * Squad Map — a stylized landmass silhouette with member pins projected from
+ * Squad Map-a stylized landmass silhouette with member pins projected from
  * real lat/lng coordinates (their home gym). Pure SVG + absolutely-positioned
  * RN views, so it renders identically on native and web with no map-tile
  * dependency (mirrors the app's hand-illustrated aesthetic, like BlobBackground).
@@ -12,7 +12,7 @@ import { C, FONT } from '../theme/tokens';
 import { Avatar } from './Avatar';
 import type { SquadMapMember } from '../../lib/api/groups';
 
-// Bounding box the silhouette is projected against — a loose box around Great
+// Bounding box the silhouette is projected against-a loose box around Great
 // Britain, padded so coastal cities don't sit flush against the edge.
 const LAT_MIN = 49.8;
 const LAT_MAX = 59.0;
@@ -49,7 +49,7 @@ export interface SquadMapProps {
   members: SquadMapMember[];
   width: number;
   height: number;
-  /** Compact mode hides labels/pin chrome — for the small preview behind the avatar. */
+  /** Compact mode hides labels/pin chrome-for the small preview behind the avatar. */
   compact?: boolean;
   onSelect?: (m: SquadMapMember) => void;
   selectedUserId?: string | null;

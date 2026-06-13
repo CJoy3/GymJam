@@ -4,12 +4,12 @@ A development "clock offset" can shift the notion of *today* forward in whole
 weeks so the app can be demoed across week boundaries without waiting for real
 time to pass.
 
-IMPORTANT — the backend runs on Vercel (serverless): each request may be served
+IMPORTANT-the backend runs on Vercel (serverless): each request may be served
 by a *different* process, so in-process state is NOT shared between the request
 that sets the offset and the requests that read it. The single source of truth
 is therefore the one-row `dev_clock` table. `refresh_offset()` re-reads it and
 is called once at the start of every HTTP request (see main.py middleware), so
-every invocation — on whichever serverless instance — agrees on the offset. The
+every invocation-on whichever serverless instance-agrees on the offset. The
 module global is only a per-request scratch value, defaulting to 0.
 """
 import time
@@ -56,7 +56,7 @@ def refresh_offset(force: bool = False) -> int:
 
 
 def offset_is_persistent() -> bool:
-    """True when the offset can actually be read back from the DB — i.e. the
+    """True when the offset can actually be read back from the DB-i.e. the
     dev clock will survive across serverless instances. False usually means the
     `dev_clock` table has not been created yet."""
     return _read_offset_from_db() is not None

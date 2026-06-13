@@ -2,11 +2,13 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { C, FONT, RADIUS, SPACE } from '../theme/tokens';
-import { Btn, Card, Eyebrow, FadeInItem, H1 } from '../ui/components';
+import { Btn, Card, Eyebrow, FadeInItem, H1, IconButton } from '../ui/components';
 import { BlobBackground } from '../ui/Blob';
 import { showToast } from '../ui/toast';
 import { useAppState } from '../state/AppState';
+import { useOnboarding } from '../state/OnboardingState';
 import { checkTagAvailable } from '../../lib/api/users';
+import { milesTo, sortByProximity } from '../../lib/location';
 import { pageWrap } from './_shared';
 
 function useDebounce<T>(value: T, delay: number): T {
@@ -24,8 +26,10 @@ export function AppSettings({ onBack }: { onBack: () => void }) {
     tag, tagChanges, updateTag,
     gyms, gymId, setGym,
     goToPreviousWeek, goToNextWeek, goToPreviousDay, goToNextDay,
-    setElo, setMoney, shareLocation, setShareLocation,
+    setElo, setMoney, shareLocation, setShareLocation, myLocation,
   } = useAppState();
+  const { resetOnboarding } = useOnboarding();
+  const sortedGyms = sortByProximity(gyms, myLocation);
 
   // ── Tag ──────────────────────────────────────────────────────────────────
   const canChangeTag = tagChanges === 0;
@@ -122,9 +126,7 @@ export function AppSettings({ onBack }: { onBack: () => void }) {
               <Eyebrow>Account</Eyebrow>
               <H1 style={{ marginTop: 6 }}>Settings</H1>
             </View>
-            <Pressable onPress={onBack} style={closeBtn}>
-              <MaterialIcons name="close" size={20} color={C.ink} />
-            </Pressable>
+            <IconButton icon="close" onPress={onBack} />
           </View>
         </FadeInItem>
 
@@ -174,9 +176,9 @@ export function AppSettings({ onBack }: { onBack: () => void }) {
                   <Text style={valueText}>#{tag ?? '—'}</Text>
                   {!canChangeTag
                     ? <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
-                        <MaterialIcons name="lock" size={12} color={C.mutedFg} />
-                        <Text style={hint}>Tag is locked</Text>
-                      </View>
+                      <MaterialIcons name="lock" size={12} color={C.mutedFg} />
+                      <Text style={hint}>Tag is locked</Text>
+                    </View>
                     : <Text style={[hint, { marginTop: 4 }]}>1 change remaining</Text>
                   }
                 </View>
@@ -201,8 +203,9 @@ export function AppSettings({ onBack }: { onBack: () => void }) {
 
             {editingGym ? (
               <View style={{ gap: 10 }}>
-                {gyms.map((g) => {
+                {sortedGyms.map((g) => {
                   const on = gymId === g.id;
+                  const miles = milesTo(myLocation, g);
                   return (
                     <Pressable
                       key={g.id}
@@ -212,7 +215,10 @@ export function AppSettings({ onBack }: { onBack: () => void }) {
                     >
                       <MaterialIcons name="place" size={18} color={on ? C.primaryFg : C.mutedFg} />
                       <Text style={[gymOptionText, on && { color: C.primaryFg }]}>{g.name}</Text>
-                      {on && <MaterialIcons name="check" size={18} color={C.primaryFg} style={{ marginLeft: 'auto' }} />}
+                      {Number.isFinite(miles) && (
+                        <Text style={[gymOptionText, { marginLeft: 'auto', color: on ? C.primaryFg : C.mutedFg, fontSize: 12 }]}>{miles.toFixed(1)} mi</Text>
+                      )}
+                      {on && <MaterialIcons name="check" size={18} color={C.primaryFg} style={{ marginLeft: Number.isFinite(miles) ? 8 : 'auto' }} />}
                       {savingGym && on && <ActivityIndicator size="small" color={C.primaryFg} />}
                     </Pressable>
                   );
@@ -264,9 +270,9 @@ export function AppSettings({ onBack }: { onBack: () => void }) {
             <Eyebrow style={{ marginBottom: 16 }}>Simulated Clock</Eyebrow>
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <ClockBtn label="← Week" loading={steppingClock === 'prevWeek'} disabled={!!steppingClock} onPress={step('prevWeek', goToPreviousWeek)} />
-              <ClockBtn label="← Day"  loading={steppingClock === 'prevDay'}  disabled={!!steppingClock} onPress={step('prevDay',  goToPreviousDay)}  />
-              <ClockBtn label="Day →"  loading={steppingClock === 'nextDay'}  disabled={!!steppingClock} onPress={step('nextDay',  goToNextDay)}       />
-              <ClockBtn label="Week →" loading={steppingClock === 'nextWeek'} disabled={!!steppingClock} onPress={step('nextWeek', goToNextWeek)}       />
+              <ClockBtn label="← Day" loading={steppingClock === 'prevDay'} disabled={!!steppingClock} onPress={step('prevDay', goToPreviousDay)} />
+              <ClockBtn label="Day →" loading={steppingClock === 'nextDay'} disabled={!!steppingClock} onPress={step('nextDay', goToNextDay)} />
+              <ClockBtn label="Week →" loading={steppingClock === 'nextWeek'} disabled={!!steppingClock} onPress={step('nextWeek', goToNextWeek)} />
             </View>
           </Card>
         </FadeInItem>
@@ -293,6 +299,23 @@ export function AppSettings({ onBack }: { onBack: () => void }) {
           </Card>
         </FadeInItem>
 
+        <FadeInItem delay={280} style={{ marginTop: 14 }}>
+          <Card padding={SPACE.xl}>
+            <Eyebrow style={{ marginBottom: 4 }}>Onboarding tour</Eyebrow>
+            <Text style={subText}>
+              Dev only-clears the seen flags so the welcome wizard replays, with the coach marks following on Home.
+            </Text>
+            <Btn
+              label="Reset onboarding tour"
+              variant="ghost"
+              onPress={() => {
+                resetOnboarding();
+                showToast('Onboarding reset-the tour will replay', 'success');
+              }}
+            />
+          </Card>
+        </FadeInItem>
+
       </ScrollView>
     </View>
   );
@@ -309,11 +332,6 @@ function ClockBtn({ label, loading, disabled, onPress }: { label: string; loadin
   );
 }
 
-const closeBtn = {
-  width: 40, height: 40, borderRadius: 20,
-  backgroundColor: C.card, borderWidth: 1, borderColor: C.borderHi,
-  alignItems: 'center' as const, justifyContent: 'center' as const,
-};
 
 const sectionIcon = {
   width: 28, height: 28, borderRadius: 8,
