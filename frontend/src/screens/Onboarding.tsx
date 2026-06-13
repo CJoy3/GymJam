@@ -18,7 +18,7 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
   const selName = gyms.find((g) => g.id === selId)?.name;
   return (
     <View style={styles.screen}>
-      <BlobBackground variant="celebrate" />
+      <BlobBackground variant="home" />
       <ScrollView contentContainerStyle={pageWrap} showsVerticalScrollIndicator={false}>
         <FadeInItem>
           <Eyebrow style={{ marginBottom: 10 }}>Welcome to GymJam</Eyebrow>

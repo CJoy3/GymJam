@@ -15,7 +15,7 @@ export function NoGroup({ onBrowse }: { onBrowse: () => void }) {
   const tourTarget = useCoachTarget('tour-group');
   return (
     <View style={styles.screen}>
-      <BlobBackground variant="celebrate" />
+      <BlobBackground variant="group" />
       <ScrollView contentContainerStyle={pageWrap} showsVerticalScrollIndicator={false}>
         <View style={{ alignItems: 'center', paddingTop: 36 }}>
           <View style={styles.bigCheck}>

@@ -99,7 +99,7 @@ function GymJamApp() {
   if (!ready || screen === null) {
     return (
       <View style={styles.splash}>
-        <BlobBackground variant="celebrate" />
+        <BlobBackground variant="home" />
         <Animated.View entering={FadeIn.duration(420).easing(EASE_OUT)} style={styles.splashCenter}>
           <Text style={styles.splashBrand}>GymJam</Text>
           <ActivityIndicator color={C.ink} style={{ marginTop: 22 }} />

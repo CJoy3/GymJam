@@ -71,7 +71,7 @@ export function WizardOverlay({ onDone }: { onDone: () => void }) {
     <View style={[StyleSheet.absoluteFill, s.root]}>
       {/* Claim every touch so nothing leaks through to the shell underneath. */}
       <Pressable style={StyleSheet.absoluteFill} onPress={() => { }} accessible={false} />
-      <BlobBackground variant="celebrate" />
+      <BlobBackground variant="home" />
       <SafeAreaView edges={['top', 'bottom']} style={s.fill}>
         {/* Keyed so each step re-runs the entrance fade. */}
         <FadeInItem key={step} style={s.fill}>

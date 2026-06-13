@@ -47,7 +47,7 @@ export function Leaderboard({ onBack }: { onBack: () => void }) {
 
   return (
     <View style={styles.screen}>
-      <BlobBackground variant="celebrate" />
+      <BlobBackground variant="group" />
       <ScrollView refreshControl={refresh} contentContainerStyle={pageWrap} showsVerticalScrollIndicator={false}>
         <FadeInItem>
           <View style={styles.rowBetween}>

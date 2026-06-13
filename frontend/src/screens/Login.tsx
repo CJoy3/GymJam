@@ -68,7 +68,7 @@ export function LoginScreen() {
 
   return (
     <View style={s.root}>
-      <BlobBackground variant="celebrate" />
+      <BlobBackground variant="home" />
       <LinearGradient
         colors={['transparent', 'rgba(27,23,20,0.55)', C.bg]}
         locations={[0, 0.35, 0.8]}

@@ -18,7 +18,7 @@ export function CheckIn({ onClose }: { onClose: () => void }) {
 
   return (
     <View style={styles.screen}>
-      <BlobBackground variant="celebrate" />
+      <BlobBackground variant="progress" />
       <View style={{ flex: 1, padding: SPACE.xl, paddingTop: 80, alignItems: 'center', justifyContent: 'center' }}>
         <Animated.View entering={FadeIn.duration(320).easing(EASE_OUT)} style={styles.bigCheck}>
           <MaterialIcons name="check" size={56} color={C.success} />
