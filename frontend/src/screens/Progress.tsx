@@ -97,7 +97,9 @@ export function Progress({ onGymSpace }: { onGymSpace: () => void }) {
         </FadeInItem>
 
         <FadeInItem delay={200}>
-          <Card padding={0}>
+          {/* overflow:hidden clips the per-row highlight (and dividers) to the
+              card's rounded corners so the first/last tiers don't bleed past. */}
+          <Card padding={0} style={{ overflow: 'hidden' }}>
             {TIERS.map((t, i) => {
               const reached = elo >= t.min;
               const current = i === ti;
