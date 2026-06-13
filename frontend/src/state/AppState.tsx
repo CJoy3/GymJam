@@ -296,6 +296,32 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     };
   }, [rtGroupId, rtIsLeader, refreshGroupContext]);
 
+  /* ----- Realtime: instant dev-clock sync -----
+   * The simulated dev clock (time-skipping) is global server state, so a skip on
+   * one device must re-sync every other device. We subscribe to a single global
+   * `clock` channel and re-bootstrap on any change. (Dev/demo aid; harmless in
+   * production where the clock never moves.) */
+  useEffect(() => {
+    let cancelled = false;
+    let channel: RealtimeChannel | null = null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const trigger = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => { void bootstrap(false); }, 350);
+    };
+    ensureSupabase()
+      .then((sb) => {
+        if (cancelled) return;
+        channel = sb.channel('clock').on('broadcast', { event: 'changed' }, trigger).subscribe();
+      })
+      .catch(() => { /* realtime is an enhancement; polling remains the fallback */ });
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+      if (channel) { void channel.unsubscribe(); }
+    };
+  }, [bootstrap]);
+
   /* ----- instant launch: stale-while-revalidate cache -----
    * Paint the last-known state immediately from local storage so the app feels
    * instant on warm launches, then let `bootstrap` refresh from the network in

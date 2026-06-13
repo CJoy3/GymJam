@@ -80,15 +80,19 @@ function fox(): string[] {
   return out(g);
 }
 
-/* ── Bear ───────────────────────────────────────────── */
-function bear(): string[] {
+/* ── Otter ──────────────────────────────────────────── */
+function otter(): string[] {
   const g = blank();
-  box(g, 3, 3, 4, 4, 'e'); box(g, 11, 3, 12, 4, 'e');          // round ears
-  set(g, 3, 3, 'd'); set(g, 12, 3, 'd');
-  head(g, 4, 4, 11, 13, 'e');
-  box(g, 6, 10, 9, 12, 's');                                   // snout
-  set(g, 6, 8, 'k'); set(g, 9, 8, 'k');
-  set(g, 7, 10, 'k'); set(g, 8, 10, 'k');                      // nose
+  set(g, 4, 3, 'S'); set(g, 5, 3, 'S'); set(g, 10, 3, 'S'); set(g, 11, 3, 'S'); // small round ears
+  set(g, 4, 4, 's'); set(g, 11, 4, 's');                       // ear highlight
+  head(g, 4, 4, 11, 13, 'S');                                  // warm brown head (stands off the dark bg)
+  hs(g, 5, 10, 5, 's');                                        // lighter brow
+  box(g, 5, 9, 10, 12, 'w');                                   // wide cream muzzle/cheeks
+  set(g, 5, 9, '.'); set(g, 10, 9, '.');                       // soften the muzzle's top corners
+  set(g, 6, 8, 'k'); set(g, 9, 8, 'k');                        // eyes
+  set(g, 7, 10, 'k'); set(g, 8, 10, 'k');                      // button nose
+  hs(g, 7, 8, 12, 'S');                                        // mouth (brown on the cream muzzle)
+  set(g, 2, 10, 'l'); set(g, 3, 10, 'l'); set(g, 13, 10, 'l'); set(g, 12, 10, 'l'); // whiskers
   return out(g);
 }
 
@@ -132,7 +136,7 @@ export const AVATARS: Record<string, string[]> = {
   a2: cat(),
   a3: dog(),
   a4: fox(),
-  a5: bear(),
+  a5: otter(),
   a6: frog(),
   a7: robot(),
   a8: owl(),

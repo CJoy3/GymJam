@@ -32,25 +32,15 @@ def _credentials() -> tuple[str, str] | None:
     return url.rstrip("/"), key
 
 
-def broadcast_group_changed(group_id: str | None) -> None:
-    """Tell every client on `group:<group_id>` to refresh. Never raises."""
-    if not group_id:
-        return
+def _broadcast(topic: str) -> None:
+    """Fire a `changed` event on `topic`. Best-effort; never raises."""
     creds = _credentials()
     if not creds:
         return
     url, key = creds
     try:
         body = json.dumps(
-            {
-                "messages": [
-                    {
-                        "topic": f"group:{group_id}",
-                        "event": "changed",
-                        "payload": {},
-                    }
-                ]
-            }
+            {"messages": [{"topic": topic, "event": "changed", "payload": {}}]}
         ).encode("utf-8")
         req = urllib.request.Request(
             f"{url}/realtime/v1/api/broadcast",
@@ -66,3 +56,16 @@ def broadcast_group_changed(group_id: str | None) -> None:
     except Exception:
         # Best-effort: realtime is an enhancement, never a hard dependency.
         pass
+
+
+def broadcast_group_changed(group_id: str | None) -> None:
+    """Tell every client on `group:<group_id>` to refresh."""
+    if not group_id:
+        return
+    _broadcast(f"group:{group_id}")
+
+
+def broadcast_clock_changed() -> None:
+    """The simulated dev clock is global state, so tell *every* connected client
+    (channel `clock`) to re-sync, not just one group."""
+    _broadcast("clock")
