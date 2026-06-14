@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GymJam — Pitch Leaflet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- Plus Jakarta Sans — the same typeface the GymJam app ships with. -->
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    /* exact GymJam theme tokens (src/theme/tokens.ts) */
+    --bg:#1B1714;
+    --ink:#F2E5D2;
+    --peach:#E89B7C;
+    --sage:#9CB58F;
+    --muted:rgba(242,229,210,0.52);
+    --line:rgba(242,229,210,0.12);
+    --font:"Plus Jakarta Sans",-apple-system,system-ui,sans-serif;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:#15110E;font-family:var(--font);color:var(--ink);
+    -webkit-font-smoothing:antialiased;padding:30px 16px;
+    display:flex;justify-content:center;
+  }
+
+  .leaflet{
+    position:relative;width:100%;max-width:760px;aspect-ratio:1/1.414;
+    background:
+      radial-gradient(95% 55% at 88% 4%, rgba(232,155,124,0.16), transparent 55%),
+      radial-gradient(95% 55% at 0% 100%, rgba(156,181,143,0.12), transparent 55%),
+      var(--bg);
+    border:1px solid var(--line);border-radius:10px;overflow:hidden;
+    box-shadow:0 24px 80px rgba(0,0,0,0.55);
+  }
+  .inner{position:relative;z-index:2;height:100%;padding:60px 58px;display:flex;flex-direction:column;}
+
+  /* ---------- WORDMARK ---------- */
+  .brand{font-weight:800;font-size:26px;letter-spacing:-0.03em;color:var(--ink);}
+  .brand .jam{color:var(--peach);}
+  .eyebrow{
+    margin-top:8px;font-size:11px;font-weight:700;letter-spacing:0.34em;
+    text-transform:uppercase;color:var(--sage);
+  }
+
+  /* ---------- HERO PUNCH (the whole point) ---------- */
+  .hero{flex:1;display:flex;flex-direction:column;justify-content:center;}
+  .punch{
+    font-weight:800;letter-spacing:-0.045em;line-height:0.9;
+    font-size:clamp(56px,12vw,104px);color:var(--ink);margin:0;
+  }
+  .punch .pay{color:var(--peach);}
+  .sub{
+    margin:30px 0 0;max-width:340px;
+    font-weight:500;font-size:18px;line-height:1.5;color:var(--muted);
+  }
+  .sub b{color:var(--ink);font-weight:700;}
+
+  /* ---------- ONE STAT (the closer) ---------- */
+  .closer{font-weight:700;font-size:19px;letter-spacing:-0.01em;color:var(--ink);}
+  .closer .hl{color:var(--sage);}
+
+  /* ---------- FOOTER ---------- */
+  .foot{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;margin-top:22px;}
+  .foot .tag{font-weight:700;font-size:14px;color:var(--ink);}
+  .foot .tag .jam{color:var(--peach);}
+  .foot .src{font-size:9px;color:var(--muted);text-align:right;max-width:46%;line-height:1.5;}
+
+  /* ---------- PHONE + MASCOTS (personality, low on words) ---------- */
+  .phone{
+    position:absolute;z-index:1;right:30px;bottom:150px;width:208px;
+    transform:rotate(6deg);border:3px solid rgba(242,229,210,0.22);border-radius:26px;
+    overflow:hidden;background:#15110E;box-shadow:0 22px 60px rgba(0,0,0,0.6);line-height:0;
+  }
+  .phone img{display:block;width:100%;height:auto;}
+
+  .mascot{position:absolute;z-index:3;image-rendering:pixelated;
+    filter:drop-shadow(0 8px 16px rgba(0,0,0,0.5));}
+  /* GymJam's own GymSpace pixel lifters, rendered from the app's sprite code. */
+  .m-mogger{right:188px;bottom:300px;width:96px;transform:rotate(-8deg);}
+  .m-otter{right:8px;bottom:330px;width:50px;transform:rotate(10deg);}
+
+  @media print{
+    *{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+    @page{size:A4 portrait;margin:0;}
+    body{background:var(--bg);padding:0;}
+    .leaflet{box-shadow:none;border:0;max-width:none;width:100%;height:100%;border-radius:0;aspect-ratio:auto;}
+  }
+</style>
+</head>
+<body>
+  <div class="leaflet">
+
+    <!-- personality: one phone + two pixel mascots, very few words -->
+    <img class="mascot m-mogger" src="img/mascots/mogger.svg" alt="">
+    <img class="mascot m-otter" src="img/mascots/otter.svg" alt="">
+    <div class="phone"><img src="img/group-pot.png" alt="The group pot"></div>
+
+    <div class="inner">
+
+      <header>
+        <div class="brand">Gym<span class="jam">Jam</span></div>
+        <div class="eyebrow">Join · Pledge · Show up</div>
+      </header>
+
+      <div class="hero">
+        <h1 class="punch">Show up.<br>Or <span class="pay">pay up.</span></h1>
+        <p class="sub">Pledge your gym week with your mates. Skip a session and your money feeds the <b>squad's pot</b>.</p>
+      </div>
+
+      <div class="foot">
+        <div>
+          <div class="closer"><span class="hl">50%</span> quit within 8 weeks.<br>Squads don't.</div>
+        </div>
+        <div class="src">
+          [1] fitnessimage.com.au — gym drop-out rates
+        </div>
+      </div>
+
+    </div>
+  </div>
+</body>
+</html>
