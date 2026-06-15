@@ -5,6 +5,13 @@ from fastapi import HTTPException
 
 from app.core.supabase_client import get_supabase
 
+# Every new account is seeded with this much ELO so members can stake into ELO
+# pots from day one (the affordability rules require a balance to pledge). The
+# progression tiers are offset by the same amount (see frontend STARTING_ELO),
+# so a freshly-seeded user is still a "Beginner"-they start with a wallet, not a
+# head-start.
+STARTING_ELO = 500
+
 
 def register_or_get(device_id: str, display_name: Optional[str]) -> dict:
     """Upsert a user by device_id. On first registration, set display_name (or default)."""
@@ -19,7 +26,7 @@ def register_or_get(device_id: str, display_name: Optional[str]) -> dict:
     if existing.data:
         return existing.data[0]
 
-    row = {"device_id": device_id}
+    row = {"device_id": device_id, "elo": STARTING_ELO}
     if display_name:
         row["display_name"] = display_name
     inserted = sb.table("users").insert(row).execute()
@@ -41,7 +48,7 @@ def register_or_get_by_auth(auth_user_id: str, email: Optional[str] = None) -> d
     if existing.data:
         return existing.data[0]
 
-    row: dict = {"auth_user_id": auth_user_id}
+    row: dict = {"auth_user_id": auth_user_id, "elo": STARTING_ELO}
     if email:
         local = email.split("@")[0]
         safe = re.sub(r"[^a-zA-Z0-9 ]", "", local).strip() or "Athlete"
@@ -197,6 +204,15 @@ def add_elo(user_id: str, delta: int) -> dict:
     if not res.data:
         raise HTTPException(status_code=500, detail="Failed to award ELO")
     return res.data[0] if isinstance(res.data, list) else res.data
+
+
+def balance_for(user_id: str, stake_type: str) -> int:
+    """The user's spendable balance in a pot's currency: money (pence) for money
+    pots, ELO points otherwise. Used to verify a member can cover a pledge."""
+    user = get_by_id(user_id)
+    if stake_type == "money":
+        return int(user.get("money") or 0)
+    return int(user.get("elo") or 0)
 
 
 def add_money(user_id: str, delta: int) -> dict:

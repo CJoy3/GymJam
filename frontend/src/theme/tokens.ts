@@ -55,5 +55,13 @@ export const FONT = {
   extra:    'PlusJakartaSans_800ExtraBold',
 };
 
+// Every new account is seeded with STARTING_ELO (mirrors the backend grant), so
+// all progression thresholds are offset by it: a freshly-seeded user sits at the
+// bottom of the Beginner band exactly as a 0-ELO user used to.
+export const STARTING_ELO = 500;
+
 export const tierForElo = (elo: number) =>
-  elo >= 2000 ? 'Mogger' : elo >= 1000 ? 'Regular' : elo >= 500 ? 'Rookie' : 'Beginner';
+  elo >= 2000 + STARTING_ELO ? 'Mogger'
+    : elo >= 1000 + STARTING_ELO ? 'Regular'
+      : elo >= 500 + STARTING_ELO ? 'Rookie'
+        : 'Beginner';

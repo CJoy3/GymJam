@@ -8,13 +8,17 @@ import { Slider } from '../ui/Slider';
 import { BlobBackground } from '../ui/Blob';
 import { useRefreshControl } from '../ui/useRefresh';
 import { usePolling } from '../ui/usePolling';
+import { showToast } from '../ui/toast';
 import { useAppState, Group } from '../state/AppState';
 import { pageWrap, styles } from './_shared';
 
 /* Gym browser-list + create + leader inbox */
 
+/** Hard cap on ELO staked per missed session-mirrors the backend's ELO_STAKE_CAP. */
+const ELO_STAKE_CAP = 500;
+
 export function GymBrowser({ onBack, onJoined, onCreated }: { onBack: () => void; onJoined: () => void; onCreated: () => void }) {
-  const { groupId, groups, addGroup, joinGroup, leaveGroup, refreshGroupsAtGym } = useAppState();
+  const { groupId, groups, addGroup, joinGroup, leaveGroup, refreshGroupsAtGym, elo, money } = useAppState();
   const refresh = useRefreshControl();
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
@@ -42,16 +46,29 @@ export function GymBrowser({ onBack, onJoined, onCreated }: { onBack: () => void
     const ok = await joinGroup(g.id);
     if (ok && g.joinType === 'open') onJoined();
   };
+  // Derive the pot rules from the form so we can validate them before creating.
+  const requiredPledges = Math.max(1, Math.min(7, parseInt(freq, 10) || 3));
+  // Money pots store pence; the weekly figure is the £1–£20 slider value. ELO
+  // pots store the raw ELO total typed in. Either way, the per-miss stake is the
+  // weekly total spread across the pledged sessions.
+  const weeklyTotal = stakeType === 'money'
+    ? moneyStake * 100
+    : Math.max(0, parseInt(weeklyStake, 10) || 0);
+  const stakeMiss = Math.round(weeklyTotal / requiredPledges);
+  const balance = stakeType === 'money' ? money : elo;
+  const fmtStake = (amount: number) =>
+    stakeType === 'money' ? `£${(amount / 100).toFixed(2)}` : `${amount.toLocaleString()} ELO`;
+  // You can't set a stake you couldn't cover yourself: ELO per-miss is capped,
+  // and the weekly total must fit your balance.
+  const createError = (stakeType === 'elo' && stakeMiss > ELO_STAKE_CAP)
+    ? `Max ${ELO_STAKE_CAP} ELO per miss-lower the weekly stake or add sessions.`
+    : (weeklyTotal > balance)
+      ? `You can't cover ${fmtStake(weeklyTotal)}. Your balance is ${fmtStake(balance)}.`
+      : null;
+
   const create = async () => {
     if (!name.trim()) return;
-    const requiredPledges = Math.max(1, Math.min(7, parseInt(freq, 10) || 3));
-    // Money pots store pence; the weekly figure is the £1–£20 slider value.
-    // ELO pots store the raw ELO total typed in. Either way, the per-miss stake
-    // is the weekly total spread across the pledged sessions.
-    const weeklyTotal = stakeType === 'money'
-      ? moneyStake * 100
-      : Math.max(0, parseInt(weeklyStake, 10) || 0);
-    const stakeMiss = Math.round(weeklyTotal / requiredPledges);
+    if (createError) { showToast(createError, 'info'); return; }
     const ok = await addGroup({
       name: name.trim(),
       weekly_stake_elo: weeklyTotal,
@@ -166,9 +183,12 @@ export function GymBrowser({ onBack, onJoined, onCreated }: { onBack: () => void
                       style={styles.input}
                     />
                     <Sub style={{ marginTop: 4, fontSize: 11 }}>
-                      Total ELO · {Math.round((parseInt(weeklyStake, 10) || 0) / Math.max(1, Math.min(7, parseInt(freq, 10) || 3)))} per miss
+                      Total ELO · {stakeMiss} per miss · max {ELO_STAKE_CAP} per miss
                     </Sub>
                   </>
+                )}
+                {createError && (
+                  <Sub style={{ marginTop: 8, fontSize: 12, color: C.accent }}>{createError}</Sub>
                 )}
               </View>
 
@@ -195,7 +215,7 @@ export function GymBrowser({ onBack, onJoined, onCreated }: { onBack: () => void
                 })}
               </View>
               <View style={{ flexDirection: 'row', gap: 10, marginTop: 16 }}>
-                <Btn label="Create & join" disabled={!name.trim()} onPress={create} style={{ flex: 1 }} size="md" />
+                <Btn label="Create & join" disabled={!name.trim() || !!createError} onPress={create} style={{ flex: 1 }} size="md" />
                 <Btn label="Cancel" variant="ghost" onPress={() => setCreating(false)} style={{ flex: 1 }} size="md" />
               </View>
             </Card>

@@ -175,6 +175,7 @@ def set_planned_days(user_id: str, dows: list[int]) -> dict:
     _soft_unlock_next_week(plan_row)
 
     _enforce_cap_against_pot(plan_row.get("group_id"), next_week_start(), len(set(dows)))
+    _enforce_affordable(user_id, plan_row.get("group_id"), next_week_start(), len(set(dows)))
 
     selected = set(dows)
     sb = get_supabase()
@@ -365,6 +366,7 @@ def toggle_next_week_day(user_id: str, dow: int) -> dict:
         )
         count = (already_planned.count or 0)
         _enforce_cap_against_pot(plan_row.get("group_id"), next_week_start(), count + 1)
+        _enforce_affordable(user_id, plan_row.get("group_id"), next_week_start(), count + 1)
 
     sb.table("plan_days").update({"state": new_state}).eq("plan_id", plan_row["id"]).eq("day_of_week", dow).execute()
     _recompute_stake(plan_row["id"])
@@ -383,6 +385,35 @@ def _enforce_cap_against_pot(group_id: str | None, week_start: date, requested: 
         raise HTTPException(
             status_code=409,
             detail=f"Group pot allows up to {cap} pledges this week",
+        )
+
+
+def _enforce_affordable(user_id: str, group_id: str | None, week_start: date, pledged: int) -> None:
+    """A member may only pledge as many days as they can fully cover: the whole
+    amount their pledge puts at risk (pledged × stake_per_miss) must not exceed
+    their balance in the pot's currency. Solo users, practice weeks, and
+    zero-stake pots are unconstrained."""
+    if not group_id or pledged <= 0:
+        return
+    cond = pot_svc.get_conditions(group_id, "next" if week_start == next_week_start() else "current")
+    if cond.get("is_practice"):
+        return
+    stake = int(cond.get("stake_per_miss") or 0)
+    if stake <= 0:
+        return
+    stake_type = cond.get("stake_type") or "elo"
+    at_risk = pledged * stake
+    balance = users_svc.balance_for(user_id, stake_type)
+    if at_risk > balance:
+        currency = "funds" if stake_type == "money" else "ELO"
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Not enough {currency} to cover this pledge: {pledged} × "
+                f"{pot_svc.fmt_amount(stake, stake_type)} puts "
+                f"{pot_svc.fmt_amount(at_risk, stake_type)} at risk, but you have "
+                f"{pot_svc.fmt_amount(balance, stake_type)}."
+            ),
         )
 
 
