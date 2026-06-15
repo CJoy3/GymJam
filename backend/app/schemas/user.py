@@ -25,6 +25,17 @@ class TagUpdate(BaseModel):
     tag: str = Field(min_length=3, max_length=20, pattern=r'^[a-z0-9_-]+$')
 
 
+class LeaderboardUser(BaseModel):
+    user_id: str
+    display_name: str
+    avatar: Optional[str] = None
+    tag: Optional[str] = None
+    elo: int
+    is_me: bool = False
+    # Friend status relative to the requester: 'self' | 'friends' | 'requested' | 'none'.
+    friend_status: str = "none"
+
+
 class User(BaseModel):
     id: str
     device_id: Optional[str] = None

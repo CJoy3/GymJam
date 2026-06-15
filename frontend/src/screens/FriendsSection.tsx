@@ -10,8 +10,7 @@ import { usePolling } from '../ui/usePolling';
 import { showToast } from '../ui/toast';
 import { daysToWeek, userFacingMessage } from '../state/mappers';
 import {
-  acceptFriendRequest, declineFriendRequest, listFriendRequests, listFriends,
-  removeFriend, sendFriendRequest, type Friend, type FriendRequest,
+  listFriends, removeFriend, sendFriendRequest, type Friend,
 } from '../../lib/api/friends';
 import { styles } from './_shared';
 
@@ -20,6 +19,9 @@ import { styles } from './_shared';
  * pledges of friends who aren't in your group (read-only: no nudging, no
  * joining their days). Self-contained: fetches its own data so it can render
  * on any screen without touching the global app state.
+ *
+ * Incoming friend requests are NOT shown here-they live in the notifications
+ * menu (see Notifications.tsx) alongside group join requests.
  */
 export function FriendsSection({ delay = 0, showTitle = true }: {
   delay?: number;
@@ -28,7 +30,6 @@ export function FriendsSection({ delay = 0, showTitle = true }: {
   showTitle?: boolean;
 }) {
   const [friends, setFriends] = useState<Friend[]>([]);
-  const [requests, setRequests] = useState<FriendRequest[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [tag, setTag] = useState('');
@@ -36,9 +37,7 @@ export function FriendsSection({ delay = 0, showTitle = true }: {
 
   const refresh = useCallback(async () => {
     try {
-      const [f, r] = await Promise.all([listFriends(), listFriendRequests()]);
-      setFriends(f);
-      setRequests(r);
+      setFriends(await listFriends());
       setLoaded(true);
     } catch {
       // keep prior state; transient errors shouldn't blank the list
@@ -61,28 +60,6 @@ export function FriendsSection({ delay = 0, showTitle = true }: {
       showToast(userFacingMessage(e), 'error');
     } finally {
       setSending(false);
-    }
-  };
-
-  const accept = async (r: FriendRequest) => {
-    setRequests((prev) => prev.filter((x) => x.id !== r.id)); // optimistic
-    try {
-      await acceptFriendRequest(r.id);
-      showToast(`You're now friends with ${r.display_name}`, 'success');
-      void refresh();
-    } catch (e) {
-      showToast(userFacingMessage(e), 'error');
-      void refresh();
-    }
-  };
-
-  const decline = async (r: FriendRequest) => {
-    setRequests((prev) => prev.filter((x) => x.id !== r.id)); // optimistic
-    try {
-      await declineFriendRequest(r.id);
-    } catch (e) {
-      showToast(userFacingMessage(e), 'error');
-      void refresh();
     }
   };
 
@@ -133,33 +110,6 @@ export function FriendsSection({ delay = 0, showTitle = true }: {
                   ? <ActivityIndicator size="small" color={C.primaryFg} />
                   : <MaterialIcons name="send" size={18} color={C.primaryFg} />}
               </Pressable>
-            </View>
-          </Card>
-        </FadeInItem>
-      )}
-
-      {requests.length > 0 && (
-        <FadeInItem style={{ marginBottom: 12 }}>
-          <Card padding={SPACE.lg}>
-            <Eyebrow style={{ marginBottom: 10 }}>Friend requests</Eyebrow>
-            <View style={{ gap: 12 }}>
-              {requests.map((r) => (
-                <View key={r.id} style={styles.rowGap}>
-                  <Avatar id={r.avatar} name={r.display_name} size={36} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.cardTitle}>{r.display_name}</Text>
-                    {!!r.tag && <Sub style={{ marginTop: 1 }}>#{r.tag}</Sub>}
-                  </View>
-                  <View style={{ flexDirection: 'row', gap: 8 }}>
-                    <Pressable onPress={() => accept(r)} style={[styles.miniBtn, { backgroundColor: C.success }]}>
-                      <MaterialIcons name="check" size={16} color={C.primaryFg} />
-                    </Pressable>
-                    <Pressable onPress={() => decline(r)} style={[styles.miniBtn, { backgroundColor: C.muted }]}>
-                      <MaterialIcons name="close" size={16} color={C.inkSoft} />
-                    </Pressable>
-                  </View>
-                </View>
-              ))}
             </View>
           </Card>
         </FadeInItem>

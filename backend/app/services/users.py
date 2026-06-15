@@ -114,6 +114,36 @@ def get_by_id(user_id: str) -> dict:
     return res.data[0]
 
 
+def global_leaderboard(current_user_id: str, limit: int = 100) -> list[dict]:
+    """All users ranked by ELO (highest first), each tagged with the current
+    user's friend status toward them so the client can show an Add-friend button.
+    Bounded by `limit` to stay well under PostgREST's row cap."""
+    from app.services.friends import friend_status_map
+
+    sb = get_supabase()
+    rows = (
+        sb.table("users")
+        .select("id, display_name, avatar, tag, elo")
+        .order("elo", desc=True)
+        .limit(limit)
+        .execute()
+    ).data or []
+    statuses = friend_status_map(current_user_id)
+    return [
+        {
+            "user_id": u["id"],
+            "display_name": u.get("display_name") or "Anonymous",
+            "avatar": u.get("avatar"),
+            "tag": u.get("tag"),
+            "elo": u.get("elo") or 0,
+            "is_me": u["id"] == current_user_id,
+            "friend_status": "self" if u["id"] == current_user_id
+            else statuses.get(u["id"], "none"),
+        }
+        for u in rows
+    ]
+
+
 def check_tag_available(tag: str, exclude_user_id: Optional[str] = None) -> bool:
     """Return True if the tag is not yet taken by any other user."""
     sb = get_supabase()

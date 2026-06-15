@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 
-import { C, FONT, SPACE } from '../theme/tokens';
+import { C, SPACE } from '../theme/tokens';
 import { Card, Chip, Eyebrow, FadeInItem, H1, H3, IconButton, Sub } from '../ui/components';
 import { Avatar } from '../ui/Avatar';
 import { useCoachTarget } from '../ui/CoachMarks';
@@ -15,23 +15,15 @@ import { showToast } from '../ui/toast';
 import { userFacingMessage } from '../state/mappers';
 import { sendFriendRequestToUser } from '../../lib/api/friends';
 import { FriendsSection } from './FriendsSection';
+import { NotificationsBell, NotificationsFeed } from './Notifications';
 import { pageWrap, styles } from './_shared';
 
 /* Group view-members, notifications menu, per-day join + nudges */
 
-const KIND_META: Record<string, { icon: keyof typeof MaterialIcons.glyphMap; color: string }> = {
-  join_request: { icon: 'person-add', color: C.accent },
-  nudge: { icon: 'campaign', color: C.accent },
-  missed: { icon: 'close', color: C.danger },
-  checkin: { icon: 'check-circle', color: C.success },
-  streak: { icon: 'local-fire-department', color: C.accent },
-};
-
 export function GroupView({ onBrowse, onLeaderboard }: { onBrowse: () => void; onLeaderboard: () => void }) {
   const {
     groupName, groupMembers, refreshGroup, potNext, userId,
-    activity, refreshActivity, approveRequest, rejectRequest, nudge, nudgeCooldowns,
-    dismissedActivity, dismissActivity,
+    nudge, nudgeCooldowns,
   } = useAppState();
   const refresh = useRefreshControl();
   const tourTarget = useCoachTarget('tour-group');
@@ -55,9 +47,6 @@ export function GroupView({ onBrowse, onLeaderboard }: { onBrowse: () => void; o
       showToast(userFacingMessage(e), 'error');
     }
   };
-  // Dismissed notification ids live in app state now (so the nav-bar unread dot
-  // and this feed agree). Join requests are never dismissable (they're
-  // actionable), so they always reappear regardless of this set.
   // Keep the group fresh: refresh on open, on app foreground, and gently while viewing.
   usePolling(refreshGroup, 9000);
   const setterName = potNext?.setter_user_id === userId ? 'You' : potNext?.setter_display_name;
@@ -65,22 +54,6 @@ export function GroupView({ onBrowse, onLeaderboard }: { onBrowse: () => void; o
   const orderedMembers = userId
     ? [...groupMembers].sort((a, b) => Number(b.userId === userId) - Number(a.userId === userId))
     : groupMembers;
-
-  // Join requests always show; everything else hides once dismissed.
-  const visibleActivity = activity.filter((a) => a.kind === 'join_request' || !dismissedActivity.includes(a.id));
-  const actionableCount = visibleActivity.filter((a) => a.kind === 'join_request' || a.kind === 'nudge').length;
-  const clearableCount = visibleActivity.filter((a) => a.kind !== 'join_request').length;
-
-  const clearNotifications = () => {
-    dismissActivity(activity.filter((a) => a.kind !== 'join_request').map((a) => a.id));
-  };
-
-  const toggleFeed = () => {
-    setShowFeed((s) => {
-      if (!s) refreshActivity();
-      return !s;
-    });
-  };
 
   return (
     <View style={styles.screen}>
@@ -100,17 +73,7 @@ export function GroupView({ onBrowse, onLeaderboard }: { onBrowse: () => void; o
               </Sub>
             </View>
             <View style={[styles.rowGap, { gap: 8 }]}>
-              <IconButton
-                icon={showFeed ? 'notifications-active' : 'notifications-none'}
-                color={showFeed ? C.accent : C.ink}
-                onPress={toggleFeed}
-              >
-                {actionableCount > 0 && (
-                  <View style={badge.dot}>
-                    <Text style={badge.text}>{actionableCount}</Text>
-                  </View>
-                )}
-              </IconButton>
+              <NotificationsBell open={showFeed} onToggle={() => setShowFeed((s) => !s)} />
               <IconButton icon="emoji-events" onPress={onLeaderboard} />
               <IconButton icon="swap-horiz" onPress={onBrowse} />
             </View>
@@ -139,50 +102,7 @@ export function GroupView({ onBrowse, onLeaderboard }: { onBrowse: () => void; o
           </View>
         </FadeInItem>
 
-        {showFeed && (
-          <FadeInItem delay={40} style={{ marginTop: 16 }}>
-            <Card padding={SPACE.lg}>
-              <View style={[styles.rowBetween, { marginBottom: 12 }]}>
-                <Eyebrow>Notifications</Eyebrow>
-                {clearableCount > 0 && (
-                  <Pressable onPress={clearNotifications} hitSlop={8} style={styles.rowGap}>
-                    <MaterialIcons name="clear-all" size={15} color={C.mutedFg} />
-                    <Text style={{ fontFamily: FONT.semibold, fontSize: 13, color: C.mutedFg }}>Clear</Text>
-                  </Pressable>
-                )}
-              </View>
-              {visibleActivity.length === 0 ? (
-                <Sub style={{ textAlign: 'center' }}>
-                  No updates yet. Plan sessions and nudge teammates to get things going.
-                </Sub>
-              ) : (
-                <View style={{ gap: 14 }}>
-                  {visibleActivity.map((a) => {
-                    const meta = KIND_META[a.kind] ?? KIND_META.nudge;
-                    return (
-                      <View key={a.id} style={styles.rowGap}>
-                        <View style={[styles.iconChip, { backgroundColor: C.muted, width: 32, height: 32 }]}>
-                          <MaterialIcons name={meta.icon} size={16} color={meta.color} />
-                        </View>
-                        <Text style={{ flex: 1, fontFamily: FONT.medium, color: C.ink, fontSize: 14 }}>{a.message}</Text>
-                        {a.kind === 'join_request' && a.request_id && (
-                          <View style={{ flexDirection: 'row', gap: 8 }}>
-                            <Pressable onPress={() => approveRequest(a.request_id as string)} style={[styles.miniBtn, { backgroundColor: C.success }]}>
-                              <MaterialIcons name="check" size={16} color={C.primaryFg} />
-                            </Pressable>
-                            <Pressable onPress={async () => { await rejectRequest(a.request_id as string); refreshActivity(); }} style={[styles.miniBtn, { backgroundColor: C.muted }]}>
-                              <MaterialIcons name="close" size={16} color={C.inkSoft} />
-                            </Pressable>
-                          </View>
-                        )}
-                      </View>
-                    );
-                  })}
-                </View>
-              )}
-            </Card>
-          </FadeInItem>
-        )}
+        <NotificationsFeed open={showFeed} />
 
         {page === 'group' && setterName && (
           <FadeInItem delay={80} style={{ marginTop: 18 }}>
@@ -290,15 +210,3 @@ export function GroupView({ onBrowse, onLeaderboard }: { onBrowse: () => void; o
     </View>
   );
 }
-
-const badge = {
-  dot: {
-    position: 'absolute' as const,
-    top: -4, right: -4,
-    minWidth: 18, height: 18, borderRadius: 9,
-    paddingHorizontal: 4,
-    backgroundColor: C.accent,
-    alignItems: 'center' as const, justifyContent: 'center' as const,
-  },
-  text: { fontFamily: FONT.bold, fontSize: 10, color: C.primaryFg },
-};

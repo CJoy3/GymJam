@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 
@@ -7,16 +7,28 @@ import { Btn, FadeInItem, H1, Sub } from '../ui/components';
 import { BlobBackground } from '../ui/Blob';
 import { useCoachTarget } from '../ui/CoachMarks';
 import { FriendsSection } from './FriendsSection';
+import { NotificationsBell, NotificationsFeed } from './Notifications';
 import { pageWrap, styles } from './_shared';
 
 /* NoGroup-empty state (friends still work without a group, so they render here too) */
 
 export function NoGroup({ onBrowse }: { onBrowse: () => void }) {
   const tourTarget = useCoachTarget('tour-group');
+  // Friend requests live in the notifications menu even before you've joined a
+  // group, so the bell rides along here too.
+  const [showFeed, setShowFeed] = useState(false);
   return (
     <View style={styles.screen}>
       <BlobBackground variant="group" />
       <ScrollView contentContainerStyle={pageWrap} showsVerticalScrollIndicator={false}>
+        {/* Offset below the floating ELO badge (top:50) so the bell stays tappable. */}
+        <FadeInItem style={{ marginTop: 28 }}>
+          <View style={{ alignItems: 'flex-end' }}>
+            <NotificationsBell open={showFeed} onToggle={() => setShowFeed((s) => !s)} />
+          </View>
+        </FadeInItem>
+        <NotificationsFeed open={showFeed} />
+
         <View style={{ alignItems: 'center', paddingTop: 36 }}>
           <View style={styles.bigCheck}>
             <MaterialIcons name="group" size={48} color={C.accent} />
@@ -25,7 +37,7 @@ export function NoGroup({ onBrowse }: { onBrowse: () => void }) {
             <FadeInItem delay={100} style={{ alignItems: 'center', marginTop: 24 }}>
               <H1 style={{ textAlign: 'center' }}>Join a group</H1>
               <Sub style={{ textAlign: 'center', marginTop: 8, maxWidth: 280 }}>
-                You're at your gym but not in a group yet. Find one to start the weekly challenge.
+                You’re at your gym but not in a group yet. Find one to start the weekly challenge.
               </Sub>
             </FadeInItem>
             <FadeInItem delay={200} style={{ width: '100%', marginTop: 32 }}>

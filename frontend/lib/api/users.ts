@@ -35,3 +35,17 @@ export const updateTag = (tag: string) =>
 
 export const checkTagAvailable = (tag: string) =>
   apiGet<{ available: boolean; tag: string }>(`/users/check-tag?tag=${encodeURIComponent(tag)}`);
+
+export interface LeaderboardUser {
+  user_id: string;
+  display_name: string;
+  avatar: string | null;
+  tag: string | null;
+  elo: number;
+  is_me: boolean;
+  /** My friend status toward them: 'self' | 'friends' | 'requested' | 'none'. */
+  friend_status: 'self' | 'friends' | 'requested' | 'none';
+}
+
+/** Every user ranked by ELO, each tagged with my friend status (for Add-friend). */
+export const getUsersLeaderboard = () => apiGet<LeaderboardUser[]>('/users/leaderboard');

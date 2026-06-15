@@ -1,5 +1,6 @@
 /** Shared view-model types and constants for the GymJam app state. */
 import * as badgesApi from '../../lib/api/badges';
+import * as friendsApi from '../../lib/api/friends';
 import * as notificationsApi from '../../lib/api/notifications';
 import * as potApi from '../../lib/api/pot';
 import * as roomApi from '../../lib/api/room';
@@ -158,6 +159,12 @@ export interface AppStateShape {
   // Group activity feed + nudges
   activity: notificationsApi.ActivityItem[];
   refreshActivity: () => Promise<void>;
+  // Incoming friend requests addressed to me (group-independent). Shown in the
+  // notifications feed-not on the Friends tab-and counted by the nav-bar dot.
+  friendRequests: friendsApi.FriendRequest[];
+  refreshFriendRequests: () => Promise<void>;
+  acceptFriendRequest: (requestId: string) => Promise<void>;
+  declineFriendRequest: (requestId: string) => Promise<void>;
   // Locally-dismissed notification ids (persisted). Shared so both the group
   // feed and the nav-bar unread dot read the same set. Join requests are never
   // dismissable, so they're excluded from this entirely.
