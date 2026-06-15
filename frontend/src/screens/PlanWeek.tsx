@@ -324,7 +324,7 @@ function MemberPlanRow({ days, highlightDows }: { days: DayStatus[]; highlightDo
  * setter. Only editable on Monday-after that the conditions are locked.
  */
 /** Hard cap on ELO staked per missed session-mirrors the backend's ELO_STAKE_CAP. */
-const ELO_STAKE_CAP = 500;
+const ELO_STAKE_CAP = 1000;
 
 function PotConditionsEditor({
   potNext, onSave, isMonday, isMoney, balance,
@@ -441,7 +441,13 @@ function PotConditionsEditor({
                   keyboardType="number-pad"
                   style={styles.input}
                 />
-                <Sub style={{ marginTop: 4, fontSize: 11 }}>Total ELO · {perMiss} per miss · max {ELO_STAKE_CAP} per miss</Sub>
+                <Sub style={{ marginTop: 4, fontSize: 11 }}>Total ELO · {perMiss} per miss</Sub>
+                <View style={[styles.rowGap, { marginTop: 8, gap: 6 }]}>
+                  <MaterialIcons name="info-outline" size={14} color={C.mutedFg} />
+                  <Sub style={{ fontSize: 11, flex: 1 }}>
+                    The most you can stake is {ELO_STAKE_CAP.toLocaleString()} ELO per miss.
+                  </Sub>
+                </View>
               </>
             )}
           </View>

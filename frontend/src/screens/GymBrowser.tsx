@@ -15,7 +15,7 @@ import { pageWrap, styles } from './_shared';
 /* Gym browser-list + create + leader inbox */
 
 /** Hard cap on ELO staked per missed session-mirrors the backend's ELO_STAKE_CAP. */
-const ELO_STAKE_CAP = 500;
+const ELO_STAKE_CAP = 1000;
 
 export function GymBrowser({ onBack, onJoined, onCreated }: { onBack: () => void; onJoined: () => void; onCreated: () => void }) {
   const { groupId, groups, addGroup, joinGroup, leaveGroup, refreshGroupsAtGym, elo, money } = useAppState();

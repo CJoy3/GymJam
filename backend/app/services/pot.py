@@ -18,7 +18,7 @@ from app.services import users as users_svc
 
 # Highest ELO a rule setter may put on the line per missed session. Money pots
 # are already bounded to £1–£20/week in the client; ELO needs an explicit cap.
-ELO_STAKE_CAP = 500
+ELO_STAKE_CAP = 1000
 
 
 def _utc_now_iso() -> str:
