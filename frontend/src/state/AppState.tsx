@@ -6,6 +6,7 @@ import * as Location from 'expo-location';
 
 import * as badgesApi from '../../lib/api/badges';
 import * as devApi from '../../lib/api/dev';
+import * as friendsApi from '../../lib/api/friends';
 import * as gymsApi from '../../lib/api/gyms';
 import * as groupsApi from '../../lib/api/groups';
 import * as notificationsApi from '../../lib/api/notifications';
@@ -25,7 +26,7 @@ import {
 import {
   daysToWeek, initialsOf, lockPlannedDays, planToWeek, recalcPotDetail, reportError,
   setSelectedDays, setSelectedFutureDays, summaryToGroup, tierForElo, todayIndexForWeek,
-  toggleWeekDay,
+  toggleWeekDay, userFacingMessage,
 } from './mappers';
 
 // Re-exported so existing consumers can keep importing these from '../state/AppState'.
@@ -83,6 +84,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
   const [groupMembers, setGroupMembers] = useState<GroupMember[]>([]);
   const [activity, setActivity] = useState<notificationsApi.ActivityItem[]>([]);
+  // Incoming friend requests addressed to me. Group-independent, so they're
+  // loaded on their own (not part of refreshGroupContext) and surface in the
+  // notifications feed alongside group join requests.
+  const [friendRequests, setFriendRequests] = useState<friendsApi.FriendRequest[]>([]);
   // Locally-dismissed notification ids, persisted across sessions. Shared app-wide
   // so the group feed and the nav-bar unread dot agree on what's been seen.
   const [dismissedActivity, setDismissedActivity] = useState<string[]>([]);
@@ -194,6 +199,36 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const loadFriendRequests = useCallback(async () => {
+    try {
+      setFriendRequests(await friendsApi.listFriendRequests());
+    } catch {
+      // keep prior state; transient errors shouldn't blank the list
+    }
+  }, []);
+
+  const acceptFriendRequest = useCallback(async (requestId: string) => {
+    const target = friendRequests.find((r) => r.id === requestId);
+    setFriendRequests((prev) => prev.filter((r) => r.id !== requestId)); // optimistic
+    try {
+      await friendsApi.acceptFriendRequest(requestId);
+      if (target) showToast(`You're now friends with ${target.display_name}`, 'success');
+    } catch (e) {
+      showToast(userFacingMessage(e), 'error');
+      void loadFriendRequests();
+    }
+  }, [friendRequests, loadFriendRequests]);
+
+  const declineFriendRequest = useCallback(async (requestId: string) => {
+    setFriendRequests((prev) => prev.filter((r) => r.id !== requestId)); // optimistic
+    try {
+      await friendsApi.declineFriendRequest(requestId);
+    } catch (e) {
+      showToast(userFacingMessage(e), 'error');
+      void loadFriendRequests();
+    }
+  }, [loadFriendRequests]);
+
   // Restore the persisted set of dismissed notifications once on launch.
   useEffect(() => { readCache<string[]>(DISMISSED_ACTIVITY_KEY).then((d) => { if (d) setDismissedActivity(d); }); }, []);
 
@@ -260,6 +295,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         loadPlans(),
         loadBadges(),
         loadRoom(),
+        loadFriendRequests(),
       ]);
       // Only this depends on the resolved group id, so it runs after the batch.
       await refreshGroupContext(mine?.id ?? null, mine?.isLeader);
@@ -275,7 +311,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       setReady(true);
       setReloading(false);
     }
-  }, [loadGyms, loadGroupsForGym, loadPlans, loadClock, refreshGroupContext, loadBadges, loadRoom]);
+  }, [loadGyms, loadGroupsForGym, loadPlans, loadClock, refreshGroupContext, loadBadges, loadRoom, loadFriendRequests]);
 
   useEffect(() => {
     bootstrap(true);
@@ -1030,6 +1066,10 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
       activity,
       refreshActivity: () => loadActivity(myGroupSummary?.id ?? null),
+      friendRequests,
+      refreshFriendRequests: loadFriendRequests,
+      acceptFriendRequest,
+      declineFriendRequest,
       dismissedActivity,
       dismissActivity,
       nudge,
@@ -1051,6 +1091,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     };
   }, [
     activity, dismissedActivity, dismissActivity, addGroup, addNextWeekDay, approveRequest, badges, bootstrap, checkInToday,
+    friendRequests, loadFriendRequests, acceptFriendRequest, declineFriendRequest,
     goToNextDay, goToNextWeek, goToPreviousDay, goToPreviousWeek,
     groupMembers, groupsAtGym, gyms, joinGroup, joinRequests, leaveGroup, loadActivity, loadBadges, loadMembers,
     lockNextWeek, me, myGroupSummary, nextWeek, nudge, nudgeCooldowns, placeRoomItem, pot, potCurrent, potNext,

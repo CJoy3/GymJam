@@ -61,7 +61,7 @@ export default function GymJamAppRoot() {
 }
 
 function GymJamApp() {
-  const { ready, userId, gymId, groupId, tag, elo, refreshAll, activity, dismissedActivity } = useAppState();
+  const { ready, userId, gymId, groupId, tag, elo, refreshAll, activity, dismissedActivity, friendRequests } = useAppState();
   const { hasSeenWizard, hasSeenTour, completeWizard, completeTour } = useOnboarding();
   const [screen, setScreen] = useState<Screen | null>(null);
 
@@ -131,10 +131,12 @@ function GymJamApp() {
   };
 
   const showTabs = screen !== 'account-setup' && screen !== 'onboarding' && screen !== 'check-in' && screen !== 'plan-week' && screen !== 'settings';
-  // Unread group notifications → a red dot on the Group tab. Mirrors the group
-  // feed's logic: join requests always count; everything else clears once
-  // dismissed (dismissedActivity is shared app-wide so the two stay in sync).
-  const groupHasUnread = activity.some((a) => a.kind === 'join_request' || !dismissedActivity.includes(a.id));
+  // Unread notifications → a red dot on the Group tab. Mirrors the notifications
+  // feed: pending friend requests and join requests always count; everything
+  // else clears once dismissed (dismissedActivity is shared app-wide so the two
+  // stay in sync).
+  const groupHasUnread = friendRequests.length > 0
+    || activity.some((a) => a.kind === 'join_request' || !dismissedActivity.includes(a.id));
   // The squad map is a full-bleed map: no top safe-area inset (extends under the
   // status bar) and no ELO ribbon, so it reads like a real map app.
   const fullBleed = screen === 'squad-map';

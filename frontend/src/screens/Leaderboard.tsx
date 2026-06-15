@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 
 import { C, FONT, SPACE } from '../theme/tokens';
 import { Card, Chip, Eyebrow, FadeInItem, H1, IconButton, Sub } from '../ui/components';
@@ -7,8 +8,12 @@ import { Avatar } from '../ui/Avatar';
 import { BlobBackground } from '../ui/Blob';
 import { useRefreshControl } from '../ui/useRefresh';
 import { usePolling } from '../ui/usePolling';
+import { showToast } from '../ui/toast';
+import { userFacingMessage } from '../state/mappers';
 import { useAppState } from '../state/AppState';
 import { getGymsLeaderboard, type GymLeaderboardEntry } from '../../lib/api/gyms';
+import { getUsersLeaderboard, type LeaderboardUser } from '../../lib/api/users';
+import { sendFriendRequestToUser } from '../../lib/api/friends';
 import { pageWrap, styles } from './_shared';
 
 const RANK_TONE: Record<number, { bg: string; fg: string }> = {
@@ -17,7 +22,7 @@ const RANK_TONE: Record<number, { bg: string; fg: string }> = {
   2: { bg: '#E3B08C', fg: '#5A3418' },
 };
 
-type MainTab = 'groups' | 'gyms' | 'squad';
+type MainTab = 'groups' | 'gyms' | 'squad' | 'global';
 type SortMode = 'total' | 'average';
 
 export function Leaderboard({ onBack }: { onBack: () => void }) {
@@ -30,6 +35,24 @@ export function Leaderboard({ onBack }: { onBack: () => void }) {
   const [gymBoard, setGymBoard] = useState<GymLeaderboardEntry[]>([]);
   const loadGymBoard = useCallback(() => getGymsLeaderboard().then(setGymBoard).catch(() => {}), []);
   usePolling(loadGymBoard, 12000);
+
+  // Global leaderboard: every user ranked by ELO, with inline Add-friend.
+  const [globalBoard, setGlobalBoard] = useState<LeaderboardUser[]>([]);
+  const loadGlobalBoard = useCallback(() => getUsersLeaderboard().then(setGlobalBoard).catch(() => {}), []);
+  usePolling(loadGlobalBoard, 15000);
+  // Users we've sent a request to this session, so the button flips to 'Sent'.
+  const [requested, setRequested] = useState<string[]>([]);
+  const addFriend = async (u: LeaderboardUser) => {
+    setRequested((prev) => [...prev, u.user_id]); // optimistic
+    try {
+      const res = await sendFriendRequestToUser(u.user_id);
+      showToast(res.action === 'accepted' ? `You're now friends with ${u.display_name}` : 'Friend request sent', 'success');
+      void loadGlobalBoard();
+    } catch (e) {
+      setRequested((prev) => prev.filter((id) => id !== u.user_id));
+      showToast(userFacingMessage(e), 'error');
+    }
+  };
 
   const rankedGroups = [...groups].sort((a, b) => {
     if (sortMode === 'average') {
@@ -85,6 +108,14 @@ export function Leaderboard({ onBack }: { onBack: () => void }) {
             >
               <Text style={[styles.tabText, { color: mainTab === 'squad' ? C.primaryFg : C.mutedFg }]}>
                 My Squad
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[styles.tab, mainTab === 'global' && styles.tabOn]}
+              onPress={() => setMainTab('global')}
+            >
+              <Text style={[styles.tabText, { color: mainTab === 'global' ? C.primaryFg : C.mutedFg }]}>
+                Global
               </Text>
             </Pressable>
           </View>
@@ -228,6 +259,61 @@ export function Leaderboard({ onBack }: { onBack: () => void }) {
                           </View>
                           <Sub style={{ marginTop: 4 }}>{m.elo.toLocaleString()} ELO</Sub>
                         </View>
+                      </View>
+                    </Card>
+                  </FadeInItem>
+                );
+              })}
+            </View>
+          </>
+        )}
+
+        {mainTab === 'global' && (
+          <>
+            <FadeInItem delay={120} style={{ marginTop: 14 }}>
+              <Sub>Everyone ranked by ELO · add friends to follow their week</Sub>
+            </FadeInItem>
+
+            <View style={{ gap: 10, marginTop: 16 }}>
+              {globalBoard.length === 0 ? (
+                <FadeInItem delay={140}>
+                  <Card padding={SPACE.xl}><Sub style={{ textAlign: 'center' }}>No one ranked yet.</Sub></Card>
+                </FadeInItem>
+              ) : globalBoard.map((u, i) => {
+                const isMe = u.is_me || u.user_id === userId;
+                const tone = RANK_TONE[i];
+                const sent = u.friend_status === 'requested' || requested.includes(u.user_id);
+                return (
+                  <FadeInItem key={u.user_id} delay={140 + i * 30}>
+                    <Card padding={SPACE.lg} style={isMe ? { borderColor: C.primary, borderWidth: 1.5 } : undefined}>
+                      <View style={styles.rowGap}>
+                        <View style={[styles.avatar, { backgroundColor: tone?.bg ?? C.muted }]}>
+                          <Text style={{ fontFamily: FONT.bold, fontSize: 14, color: tone?.fg ?? C.inkSoft }}>{i + 1}</Text>
+                        </View>
+                        <Avatar id={u.avatar} name={u.display_name} size={38} />
+                        <View style={{ flex: 1 }}>
+                          <View style={[styles.rowGap, { flexWrap: 'wrap', gap: 6 }]}>
+                            <Text style={styles.cardTitle}>{u.display_name}</Text>
+                            {isMe && <Chip text="You" tone="success" compact />}
+                          </View>
+                          <Sub style={{ marginTop: 4 }}>
+                            {u.tag ? `#${u.tag} · ` : ''}{u.elo.toLocaleString()} ELO
+                          </Sub>
+                        </View>
+                        {/* Friends → a quiet chip; already requested → disabled 'Sent';
+                            otherwise an Add button (sends a request to that user). */}
+                        {!isMe && (u.friend_status === 'friends' ? (
+                          <Chip text="Friends" tone="accent" compact />
+                        ) : (
+                          <Pressable
+                            onPress={() => addFriend(u)}
+                            disabled={sent}
+                            style={[styles.linkBtn, sent && { opacity: 0.45 }]}
+                          >
+                            <MaterialIcons name={sent ? 'check' : 'person-add'} size={15} color={C.ink} />
+                            <Text style={styles.linkText}>{sent ? 'Sent' : 'Add'}</Text>
+                          </Pressable>
+                        ))}
                       </View>
                     </Card>
                   </FadeInItem>

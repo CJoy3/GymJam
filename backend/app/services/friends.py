@@ -37,6 +37,21 @@ def _existing_between(user_id: str, other_id: str) -> dict | None:
     return None
 
 
+def friend_status_map(user_id: str) -> dict[str, str]:
+    """Map of other_user_id -> friend status relative to `user_id`:
+    'friends' (accepted) or 'requested' (I have a pending outgoing request).
+    Users I have an *incoming* pending request from are omitted-they read as
+    addable, and sending auto-accepts (see `_request_friendship`)."""
+    out: dict[str, str] = {}
+    for r in _pair_rows(user_id):
+        other = r["addressee_id"] if r["requester_id"] == user_id else r["requester_id"]
+        if r["status"] == "accepted":
+            out[other] = "friends"
+        elif r["status"] == "pending" and r["requester_id"] == user_id:
+            out[other] = "requested"
+    return out
+
+
 def _user_by_tag(tag: str) -> dict:
     sb = get_supabase()
     res = (

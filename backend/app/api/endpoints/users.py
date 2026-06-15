@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from app.api.deps import get_current_user
 from app.core.supabase_client import get_supabase
 from app.schemas.badge import Badges
-from app.schemas.user import TagUpdate, User, UserRegister, UserUpdate
+from app.schemas.user import LeaderboardUser, TagUpdate, User, UserRegister, UserUpdate
 from app.services import badges as badges_svc
 from app.services import groups as groups_svc
 from app.services import realtime
@@ -68,6 +68,13 @@ def update_me(
 @router.post("/me/tag", response_model=User)
 def set_my_tag(body: TagUpdate, current: dict = Depends(get_current_user)) -> dict:
     return users_svc.set_tag(current["id"], body.tag)
+
+
+@router.get("/leaderboard", response_model=list[LeaderboardUser])
+def users_leaderboard(current: dict = Depends(get_current_user)) -> list[dict]:
+    """Every user ranked by ELO, each tagged with my friend status toward them
+    so the global leaderboard can offer an Add-friend button inline."""
+    return users_svc.global_leaderboard(current["id"])
 
 
 @router.get("/check-tag")
