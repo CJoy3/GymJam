@@ -159,8 +159,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         initials: initialsOf(m.display_name),
         avatar: m.avatar,
         elo: m.elo,
-        tag: m.tag,
         isLeader: m.role === 'leader',
+        friendStatus: m.friend_status ?? 'none',
         thisWeek: daysToWeek(m.this_week_days),
         nextWeek: daysToWeek(m.next_week_days),
       })));

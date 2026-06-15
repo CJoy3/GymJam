@@ -11,6 +11,9 @@ import { BlobBackground } from '../ui/Blob';
 import { useRefreshControl } from '../ui/useRefresh';
 import { usePolling } from '../ui/usePolling';
 import { useAppState } from '../state/AppState';
+import { showToast } from '../ui/toast';
+import { userFacingMessage } from '../state/mappers';
+import { sendFriendRequestToUser } from '../../lib/api/friends';
 import { FriendsSection } from './FriendsSection';
 import { pageWrap, styles } from './_shared';
 
@@ -36,6 +39,22 @@ export function GroupView({ onBrowse, onLeaderboard }: { onBrowse: () => void; o
   // follow who may be in other groups). Switched by the segmented tabs below.
   const [page, setPage] = useState<'group' | 'friends'>('group');
   const [showFeed, setShowFeed] = useState(false);
+  // Members we've sent a friend request to this session, so the button can flip
+  // to a sent state. We don't know prior friendship status here, so an existing
+  // friend simply gets a toast ("already friends") when tapped.
+  const [requestedFriends, setRequestedFriends] = useState<string[]>([]);
+
+  const addFriend = async (targetUserId: string) => {
+    setRequestedFriends((prev) => [...prev, targetUserId]); // optimistic
+    try {
+      const res = await sendFriendRequestToUser(targetUserId);
+      showToast(res.action === 'accepted' ? "You're now friends" : 'Friend request sent', 'success');
+      void refreshGroup(); // pick up the new friend_status from the server
+    } catch (e) {
+      setRequestedFriends((prev) => prev.filter((id) => id !== targetUserId));
+      showToast(userFacingMessage(e), 'error');
+    }
+  };
   // Dismissed notification ids live in app state now (so the nav-bar unread dot
   // and this feed agree). Join requests are never dismissable (they're
   // actionable), so they always reappear regardless of this set.
@@ -200,39 +219,63 @@ export function GroupView({ onBrowse, onLeaderboard }: { onBrowse: () => void; o
                   <Card
                     padding={SPACE.lg}
                     style={{
-                      ...(notPledging ? { opacity: 0.55 } : null),
                       ...(isMe ? { borderColor: C.accent, borderWidth: 1.5, backgroundColor: 'rgba(232,155,124,0.06)' } : null),
                     }}
                   >
                     <View style={[styles.rowBetween, { marginBottom: 14 }]}>
-                      <View style={[styles.rowGap, { flex: 1 }]}>
+                      {/* Dim only the person's info when they're sitting out-NOT the
+                          action buttons, which stay fully active-looking. (RN opacity
+                          composites the whole subtree, so the dim can't live on the
+                          Card or a child couldn't undo it.) */}
+                      <View style={[styles.rowGap, { flex: 1 }, notPledging && { opacity: 0.55 }]}>
                         <Avatar id={m.avatar} name={m.name} accent={isMe} size={40} />
                         <View style={{ flex: 1 }}>
-                          <View style={[styles.rowGap, { gap: 6 }]}>
-                            <Text style={[styles.cardTitle, isMe && { color: C.accent }]}>{isMe ? 'You' : m.name}</Text>
-                            {/* Public tag-shown so teammates can find & add each other as friends. */}
-                            {m.tag && <Text style={memberTag.text}>@{m.tag}</Text>}
-                          </View>
+                          <Text style={[styles.cardTitle, isMe && { color: C.accent }]}>{isMe ? 'You' : m.name}</Text>
                           <Sub style={{ marginTop: 2 }}>
                             {notPledging ? 'Sitting out this week' : `${done} of ${pledged} done`}
                           </Sub>
                         </View>
                       </View>
-                      <View style={[styles.rowGap, { gap: 8 }]}>
-                        {m.isLeader && <Chip text="Leader" tone="accent" compact />}
-                        {!isMe && (
-                          <Pressable
-                            onPress={() => nudge(m.userId)}
-                            disabled={onCooldown}
-                            style={[styles.linkBtn, onCooldown && { opacity: 0.45 }]}
-                          >
-                            <MaterialIcons name="campaign" size={15} color={C.ink} />
-                            <Text style={styles.linkText}>{onCooldown ? 'Nudged' : 'Nudge'}</Text>
-                          </Pressable>
+                      {/* Action column: the Leader tag sits up high (lifted toward the
+                          card's top edge), with the Add/Nudge buttons below it. */}
+                      <View style={{ alignItems: 'flex-end', gap: 10 }}>
+                        {m.isLeader && (
+                          <View style={{ marginTop: -4 }}>
+                            <Chip text="Leader" tone="accent" compact />
+                          </View>
                         )}
+                        <View style={[styles.rowGap, { gap: 8 }]}>
+                          {/* Already friends → no button. Pending (from the server or
+                              sent this session) → disabled 'Sent'. Otherwise 'Add'. */}
+                          {!isMe && m.friendStatus !== 'friends' && (() => {
+                            const requested = m.friendStatus === 'requested' || requestedFriends.includes(m.userId);
+                            return (
+                              <Pressable
+                                onPress={() => addFriend(m.userId)}
+                                disabled={requested}
+                                style={[styles.linkBtn, requested && { opacity: 0.45 }]}
+                              >
+                                <MaterialIcons name={requested ? 'check' : 'person-add'} size={15} color={C.ink} />
+                                <Text style={styles.linkText}>{requested ? 'Sent' : 'Add'}</Text>
+                              </Pressable>
+                            );
+                          })()}
+                          {!isMe && (
+                            <Pressable
+                              onPress={() => nudge(m.userId)}
+                              disabled={onCooldown}
+                              style={[styles.linkBtn, onCooldown && { opacity: 0.45 }]}
+                            >
+                              <MaterialIcons name="campaign" size={15} color={C.ink} />
+                              <Text style={styles.linkText}>{onCooldown ? 'Nudged' : 'Nudge'}</Text>
+                            </Pressable>
+                          )}
+                        </View>
                       </View>
                     </View>
-                    <DayPicker days={m.thisWeek} />
+                    <View style={notPledging && { opacity: 0.55 }}>
+                      <DayPicker days={m.thisWeek} />
+                    </View>
                   </Card>
                 </FadeInItem>
               );
@@ -247,12 +290,6 @@ export function GroupView({ onBrowse, onLeaderboard }: { onBrowse: () => void; o
     </View>
   );
 }
-
-const memberTag = {
-  // The user's public @tag, sized down and tinted muted so it reads as a
-  // secondary handle beside their display name.
-  text: { fontFamily: FONT.medium, fontSize: 13, color: C.mutedFg } as const,
-};
 
 const badge = {
   dot: {

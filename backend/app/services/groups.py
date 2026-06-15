@@ -357,12 +357,14 @@ def leave_group(group_id: str, user_id: str) -> dict:
     return {"deleted": False, "promoted_user_id": promoted_user_id}
 
 
-def list_members(group_id: str) -> list[dict]:
-    """List all members of a group with their this-week and next-week pledge state."""
+def list_members(group_id: str, current_user_id: str | None = None) -> list[dict]:
+    """List all members of a group with their this-week and next-week pledge
+    state, plus each member's friend status relative to the viewer so the UI can
+    hide 'Add friend' for existing friends and show 'Sent' for pending requests."""
     sb = get_supabase()
     memberships = (
         sb.table("group_memberships")
-        .select("user_id, role, joined_at, users(display_name, elo, avatar, tag)")
+        .select("user_id, role, joined_at, users(display_name, elo, avatar)")
         .eq("group_id", group_id)
         .order("joined_at", desc=False)
         .execute()
@@ -386,6 +388,24 @@ def list_members(group_id: str) -> list[dict]:
     for p in plans:
         plan_by_user_week[(p["user_id"], p["week_start"])] = p.get("plan_days") or []
 
+    # Friend status of each member relative to the viewer. 'friends' = accepted
+    # link; 'requested' = the viewer has an outgoing pending request; incoming
+    # pending requests stay 'none' (tapping Add auto-accepts them).
+    friend_status: dict[str, str] = {}
+    if current_user_id:
+        links = (
+            sb.table("friendships")
+            .select("requester_id, addressee_id, status")
+            .or_(f"requester_id.eq.{current_user_id},addressee_id.eq.{current_user_id}")
+            .execute()
+        ).data or []
+        for link in links:
+            other = link["addressee_id"] if link["requester_id"] == current_user_id else link["requester_id"]
+            if link["status"] == "accepted":
+                friend_status[other] = "friends"
+            elif link["status"] == "pending" and link["requester_id"] == current_user_id:
+                friend_status[other] = "requested"
+
     out: list[dict] = []
     for m in memberships:
         u = m.get("users") or {}
@@ -394,9 +414,9 @@ def list_members(group_id: str) -> list[dict]:
             "display_name": u.get("display_name") or "Anonymous",
             "avatar": u.get("avatar"),
             "elo": u.get("elo") or 0,
-            "tag": u.get("tag"),
             "role": m["role"],
             "joined_at": m["joined_at"],
+            "friend_status": friend_status.get(m["user_id"], "none"),
             "this_week_days": _fill_week(plan_by_user_week.get((m["user_id"], this_start))),
             "next_week_days": _fill_week(plan_by_user_week.get((m["user_id"], next_start))),
         })

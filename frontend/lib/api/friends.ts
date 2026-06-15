@@ -31,6 +31,11 @@ export const listFriendRequests = () => apiGet<FriendRequest[]>('/friends/reques
 export const sendFriendRequest = (tag: string) =>
   apiPost<{ action: 'requested' | 'accepted' }>('/friends/request', { tag });
 
+/** Send a friend request straight to a user id (e.g. a group member-no tag
+ *  needed, so tags stay private). Auto-accepts if they already requested me. */
+export const sendFriendRequestToUser = (userId: string) =>
+  apiPost<{ action: 'requested' | 'accepted' }>(`/friends/request-user/${userId}`);
+
 export const acceptFriendRequest = (request_id: string) =>
   apiPost<{ id: string; status: string }>(`/friends/requests/${request_id}/accept`);
 

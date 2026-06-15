@@ -51,15 +51,29 @@ def _user_by_tag(tag: str) -> dict:
     return res.data[0]
 
 
-def send_request(user_id: str, tag: str) -> dict:
-    """Send a friend request by tag. If the other user already requested US,
-    auto-accept instead (both sides clearly want the friendship)."""
-    other = _user_by_tag(tag)
-    if other["id"] == user_id:
-        raise HTTPException(status_code=400, detail="That's your own tag")
+def _user_by_id(other_id: str) -> dict:
+    sb = get_supabase()
+    res = (
+        sb.table("users")
+        .select("id, display_name, avatar, tag")
+        .eq("id", other_id)
+        .limit(1)
+        .execute()
+    )
+    if not res.data:
+        raise HTTPException(status_code=404, detail="No such user")
+    return res.data[0]
+
+
+def _request_friendship(user_id: str, other_id: str) -> dict:
+    """Create a pending friend request to `other_id`, or auto-accept if they
+    already requested US (both sides clearly want the friendship). Shared by the
+    by-tag and by-user-id entry points."""
+    if other_id == user_id:
+        raise HTTPException(status_code=400, detail="You can't friend yourself")
 
     sb = get_supabase()
-    existing = _existing_between(user_id, other["id"])
+    existing = _existing_between(user_id, other_id)
     if existing:
         if existing["status"] == "accepted":
             raise HTTPException(status_code=409, detail="You're already friends")
@@ -74,10 +88,23 @@ def send_request(user_id: str, tag: str) -> dict:
 
     sb.table("friendships").insert({
         "requester_id": user_id,
-        "addressee_id": other["id"],
+        "addressee_id": other_id,
         "status": "pending",
     }).execute()
     return {"action": "requested"}
+
+
+def send_request(user_id: str, tag: str) -> dict:
+    """Send a friend request by tag."""
+    other = _user_by_tag(tag)
+    return _request_friendship(user_id, other["id"])
+
+
+def send_request_to_user(user_id: str, target_user_id: str) -> dict:
+    """Send a friend request straight to a known user id (e.g. tapping 'Add
+    friend' on a group member-no tag needed, so tags stay private)."""
+    other = _user_by_id(target_user_id)
+    return _request_friendship(user_id, other["id"])
 
 
 def list_incoming_requests(user_id: str) -> list[dict]:

@@ -43,8 +43,10 @@ export interface GroupMember {
   initials: string;
   avatar: string | null;
   elo: number;
-  tag: string | null;
   isLeader: boolean;
+  /** Friend status relative to me: 'friends' hides the Add button, 'requested'
+   *  shows it as already-sent. */
+  friendStatus: 'none' | 'friends' | 'requested';
   thisWeek: DayStatus[];
   nextWeek: DayStatus[];
 }

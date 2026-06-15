@@ -105,8 +105,8 @@ def update_stake_type(
 
 
 @router.get("/{group_id}/members", response_model=list[GroupMemberDetail])
-def list_group_members(group_id: str) -> list[dict]:
-    return groups_svc.list_members(group_id)
+def list_group_members(group_id: str, current: dict = Depends(get_current_user)) -> list[dict]:
+    return groups_svc.list_members(group_id, current["id"])
 
 
 @router.get("/{group_id}/squad-map", response_model=list[SquadMapMember])
