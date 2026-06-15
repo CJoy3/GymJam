@@ -116,6 +116,7 @@ class GroupMemberDetail(BaseModel):
     display_name: str
     avatar: Optional[str] = None
     elo: int
+    tag: Optional[str] = None
     role: Role
     joined_at: datetime
     this_week_days: list[PlanDay]

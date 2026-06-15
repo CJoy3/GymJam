@@ -362,7 +362,7 @@ def list_members(group_id: str) -> list[dict]:
     sb = get_supabase()
     memberships = (
         sb.table("group_memberships")
-        .select("user_id, role, joined_at, users(display_name, elo, avatar)")
+        .select("user_id, role, joined_at, users(display_name, elo, avatar, tag)")
         .eq("group_id", group_id)
         .order("joined_at", desc=False)
         .execute()
@@ -394,6 +394,7 @@ def list_members(group_id: str) -> list[dict]:
             "display_name": u.get("display_name") or "Anonymous",
             "avatar": u.get("avatar"),
             "elo": u.get("elo") or 0,
+            "tag": u.get("tag"),
             "role": m["role"],
             "joined_at": m["joined_at"],
             "this_week_days": _fill_week(plan_by_user_week.get((m["user_id"], this_start))),

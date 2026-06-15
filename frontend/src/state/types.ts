@@ -43,6 +43,7 @@ export interface GroupMember {
   initials: string;
   avatar: string | null;
   elo: number;
+  tag: string | null;
   isLeader: boolean;
   thisWeek: DayStatus[];
   nextWeek: DayStatus[];
@@ -155,6 +156,11 @@ export interface AppStateShape {
   // Group activity feed + nudges
   activity: notificationsApi.ActivityItem[];
   refreshActivity: () => Promise<void>;
+  // Locally-dismissed notification ids (persisted). Shared so both the group
+  // feed and the nav-bar unread dot read the same set. Join requests are never
+  // dismissable, so they're excluded from this entirely.
+  dismissedActivity: string[];
+  dismissActivity: (ids: string[]) => void;
   nudge: (targetUserId: string) => Promise<void>;
   nudgeCooldowns: Record<string, number>; // userId → epoch ms until allowed again
 

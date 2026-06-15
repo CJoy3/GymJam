@@ -95,6 +95,7 @@ export interface GroupMemberDetail {
   display_name: string;
   avatar: string | null;
   elo: number;
+  tag: string | null;
   role: 'member' | 'leader';
   joined_at: string;
   this_week_days: PlanDay[];

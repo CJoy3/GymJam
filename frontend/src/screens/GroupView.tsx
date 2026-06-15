@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 
@@ -11,11 +11,8 @@ import { BlobBackground } from '../ui/Blob';
 import { useRefreshControl } from '../ui/useRefresh';
 import { usePolling } from '../ui/usePolling';
 import { useAppState } from '../state/AppState';
-import { readCache, writeCache } from '../../lib/cache';
 import { FriendsSection } from './FriendsSection';
 import { pageWrap, styles } from './_shared';
-
-const DISMISSED_KEY = 'dismissedActivity';
 
 /* Group view-members, notifications menu, per-day join + nudges */
 
@@ -31,6 +28,7 @@ export function GroupView({ onBrowse, onLeaderboard }: { onBrowse: () => void; o
   const {
     groupName, groupMembers, refreshGroup, potNext, userId,
     activity, refreshActivity, approveRequest, rejectRequest, nudge, nudgeCooldowns,
+    dismissedActivity, dismissActivity,
   } = useAppState();
   const refresh = useRefreshControl();
   const tourTarget = useCoachTarget('tour-group');
@@ -38,11 +36,9 @@ export function GroupView({ onBrowse, onLeaderboard }: { onBrowse: () => void; o
   // follow who may be in other groups). Switched by the segmented tabs below.
   const [page, setPage] = useState<'group' | 'friends'>('group');
   const [showFeed, setShowFeed] = useState(false);
-  // Locally-dismissed notification ids, persisted so they stay cleared across
-  // sessions. Join requests are never dismissable (they're actionable), so they
-  // always reappear regardless of this set.
-  const [dismissed, setDismissed] = useState<string[]>([]);
-  useEffect(() => { readCache<string[]>(DISMISSED_KEY).then((d) => { if (d) setDismissed(d); }); }, []);
+  // Dismissed notification ids live in app state now (so the nav-bar unread dot
+  // and this feed agree). Join requests are never dismissable (they're
+  // actionable), so they always reappear regardless of this set.
   // Keep the group fresh: refresh on open, on app foreground, and gently while viewing.
   usePolling(refreshGroup, 9000);
   const setterName = potNext?.setter_user_id === userId ? 'You' : potNext?.setter_display_name;
@@ -52,15 +48,12 @@ export function GroupView({ onBrowse, onLeaderboard }: { onBrowse: () => void; o
     : groupMembers;
 
   // Join requests always show; everything else hides once dismissed.
-  const visibleActivity = activity.filter((a) => a.kind === 'join_request' || !dismissed.includes(a.id));
+  const visibleActivity = activity.filter((a) => a.kind === 'join_request' || !dismissedActivity.includes(a.id));
   const actionableCount = visibleActivity.filter((a) => a.kind === 'join_request' || a.kind === 'nudge').length;
   const clearableCount = visibleActivity.filter((a) => a.kind !== 'join_request').length;
 
   const clearNotifications = () => {
-    const ids = activity.filter((a) => a.kind !== 'join_request').map((a) => a.id);
-    const next = Array.from(new Set([...dismissed, ...ids]));
-    setDismissed(next);
-    writeCache(DISMISSED_KEY, next);
+    dismissActivity(activity.filter((a) => a.kind !== 'join_request').map((a) => a.id));
   };
 
   const toggleFeed = () => {
@@ -215,7 +208,11 @@ export function GroupView({ onBrowse, onLeaderboard }: { onBrowse: () => void; o
                       <View style={[styles.rowGap, { flex: 1 }]}>
                         <Avatar id={m.avatar} name={m.name} accent={isMe} size={40} />
                         <View style={{ flex: 1 }}>
-                          <Text style={[styles.cardTitle, isMe && { color: C.accent }]}>{isMe ? 'You' : m.name}</Text>
+                          <View style={[styles.rowGap, { gap: 6 }]}>
+                            <Text style={[styles.cardTitle, isMe && { color: C.accent }]}>{isMe ? 'You' : m.name}</Text>
+                            {/* Public tag-shown so teammates can find & add each other as friends. */}
+                            {m.tag && <Text style={memberTag.text}>@{m.tag}</Text>}
+                          </View>
                           <Sub style={{ marginTop: 2 }}>
                             {notPledging ? 'Sitting out this week' : `${done} of ${pledged} done`}
                           </Sub>
@@ -250,6 +247,12 @@ export function GroupView({ onBrowse, onLeaderboard }: { onBrowse: () => void; o
     </View>
   );
 }
+
+const memberTag = {
+  // The user's public @tag, sized down and tinted muted so it reads as a
+  // secondary handle beside their display name.
+  text: { fontFamily: FONT.medium, fontSize: 13, color: C.mutedFg } as const,
+};
 
 const badge = {
   dot: {

@@ -36,6 +36,11 @@ export type {
 
 const Ctx = createContext<AppStateShape | null>(null);
 
+// Cache key for locally-dismissed group notifications (shared by the group feed
+// and the nav-bar unread dot). Was previously owned by GroupView; kept identical
+// so existing dismissals carry over.
+const DISMISSED_ACTIVITY_KEY = 'dismissedActivity';
+
 /** Slices persisted to local storage for instant (stale-while-revalidate) launches. */
 interface CachedSnapshot {
   me?: usersApi.User | null;
@@ -78,6 +83,9 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
   const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
   const [groupMembers, setGroupMembers] = useState<GroupMember[]>([]);
   const [activity, setActivity] = useState<notificationsApi.ActivityItem[]>([]);
+  // Locally-dismissed notification ids, persisted across sessions. Shared app-wide
+  // so the group feed and the nav-bar unread dot agree on what's been seen.
+  const [dismissedActivity, setDismissedActivity] = useState<string[]>([]);
   const [nudgeCooldowns, setNudgeCooldowns] = useState<Record<string, number>>({});
   const [badges, setBadges] = useState<badgesApi.Badges>({
     first_week: false,
@@ -151,6 +159,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
         initials: initialsOf(m.display_name),
         avatar: m.avatar,
         elo: m.elo,
+        tag: m.tag,
         isLeader: m.role === 'leader',
         thisWeek: daysToWeek(m.this_week_days),
         nextWeek: daysToWeek(m.next_week_days),
@@ -183,6 +192,17 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     } catch {
       setActivity([]);
     }
+  }, []);
+
+  // Restore the persisted set of dismissed notifications once on launch.
+  useEffect(() => { readCache<string[]>(DISMISSED_ACTIVITY_KEY).then((d) => { if (d) setDismissedActivity(d); }); }, []);
+
+  const dismissActivity = useCallback((ids: string[]) => {
+    setDismissedActivity((prev) => {
+      const next = Array.from(new Set([...prev, ...ids]));
+      writeCache(DISMISSED_ACTIVITY_KEY, next);
+      return next;
+    });
   }, []);
 
   const refreshGroupContext = useCallback(
@@ -1010,6 +1030,8 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
 
       activity,
       refreshActivity: () => loadActivity(myGroupSummary?.id ?? null),
+      dismissedActivity,
+      dismissActivity,
       nudge,
       nudgeCooldowns,
 
@@ -1028,7 +1050,7 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
       refreshAll: () => bootstrap(false),
     };
   }, [
-    activity, addGroup, addNextWeekDay, approveRequest, badges, bootstrap, checkInToday,
+    activity, dismissedActivity, dismissActivity, addGroup, addNextWeekDay, approveRequest, badges, bootstrap, checkInToday,
     goToNextDay, goToNextWeek, goToPreviousDay, goToPreviousWeek,
     groupMembers, groupsAtGym, gyms, joinGroup, joinRequests, leaveGroup, loadActivity, loadBadges, loadMembers,
     lockNextWeek, me, myGroupSummary, nextWeek, nudge, nudgeCooldowns, placeRoomItem, pot, potCurrent, potNext,
