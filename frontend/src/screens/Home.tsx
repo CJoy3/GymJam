@@ -9,7 +9,7 @@ import { BlobBackground } from '../ui/Blob';
 import { useCoachTarget } from '../ui/CoachMarks';
 import { useRefreshControl } from '../ui/useRefresh';
 import { useAppState } from '../state/AppState';
-import { LABELS, pageWrap, styles, TAB_BAR_CLEARANCE } from './_shared';
+import { LABELS, pageWrap, styles } from './_shared';
 
 /* Home-greeting, this week, pot, primary CTAs */
 
@@ -148,24 +148,22 @@ export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => v
           </Card>
         </FadeInItem>
 
-        <View style={{ height: 24 }} />
-      </ScrollView>
-
-      {/* Extra bottom padding clears the floating tab bar so these actions
-          (Check in / Plan next week) never sit behind it. */}
-      <View style={[styles.footer, { paddingBottom: TAB_BAR_CLEARANCE }]}>
-        <View style={{ gap: 10 }}>
-          <View ref={checkinTarget} collapsable={false}>
-            <Btn
-              label={canCheck ? 'Check in' : 'All sessions checked in'}
-              icon={canCheck ? 'place' : 'check-circle'}
-              disabled={!canCheck}
-              onPress={() => { checkInToday(); onCheckIn(); }}
-            />
+        {/* Primary actions sit inline at the end of the page now (no pinned bar);
+            pageWrap's bottom padding keeps them clear of the floating tab bar. */}
+        <FadeInItem delay={240} style={{ marginTop: 24 }}>
+          <View style={{ gap: 10 }}>
+            <View ref={checkinTarget} collapsable={false}>
+              <Btn
+                label={canCheck ? 'Check in' : 'All sessions checked in'}
+                icon={canCheck ? 'place' : 'check-circle'}
+                disabled={!canCheck}
+                onPress={() => { checkInToday(); onCheckIn(); }}
+              />
+            </View>
+            <Btn label="Plan next week" variant="ghost" icon="event" onPress={onPlan} />
           </View>
-          <Btn label="Plan next week" variant="ghost" icon="event" onPress={onPlan} />
-        </View>
-      </View>
+        </FadeInItem>
+      </ScrollView>
 
     </View>
   );

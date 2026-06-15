@@ -1,46 +1,66 @@
-import React from 'react';
-import { View, StyleSheet } from 'react-native';
-import { C } from '../theme/tokens';
+import React, { useId } from 'react';
+import { View, StyleSheet, type ViewStyle } from 'react-native';
+import Svg, { Defs, RadialGradient, Stop, Rect } from 'react-native-svg';
 
 /**
- * Atmospheric background blobs-soft warm glows behind the content layer.
- * Variants tint different corners depending on screen mood.
+ * Atmospheric background glows-soft warm light behind the content layer.
+ *
+ * These are true radial gradients (hue at the centre fading to fully
+ * transparent at the edge), not flat-filled circles, so they read as ambient
+ * light rather than hard discs. Variants tint different corners by mood.
  */
-export function BlobBackground({ variant = 'home' }: { variant?: 'home' | 'group' | 'progress' | 'profile' }) {
-  switch (variant) {
-    case 'group':
-      return (
-        <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-          <View style={[styles.blob, { width: 320, height: 320, top: -60, right: -110, backgroundColor: C.glowSage }]} />
-          <View style={[styles.blob, { width: 260, height: 260, top: 240, left: -110, backgroundColor: C.glowPeach }]} />
-        </View>
-      );
-    case 'progress':
-      return (
-        <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-          <View style={[styles.blob, { width: 360, height: 360, top: -100, right: -140, backgroundColor: C.glowCream }]} />
-        </View>
-      );
-    case 'profile':
-      return (
-        <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-          <View style={[styles.blob, { width: 320, height: 320, top: -90, left: -110, backgroundColor: C.glowPeach }]} />
-        </View>
-      );
-    case 'home':
-    default:
-      return (
-        <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-          <View style={[styles.blob, { width: 380, height: 380, top: -120, right: -120, backgroundColor: C.glowPeach }]} />
-          <View style={[styles.blob, { width: 280, height: 280, top: 380, left: -120, backgroundColor: C.glowSage }]} />
-        </View>
-      );
-  }
+
+// Glow hues (solid; the gradient's stop-opacity does the fading).
+const PEACH = 'rgb(232,155,124)';
+const SAGE = 'rgb(156,181,143)';
+const CREAM = 'rgb(242,229,210)';
+
+/** A single soft radial glow, absolutely positioned via `pos`. `size` is the
+ * box it fills; the gradient fades to transparent at 50% radius. */
+function Glow({
+  size, color, opacity, pos,
+}: {
+  size: number;
+  color: string;
+  opacity: number;
+  pos: ViewStyle;
+}) {
+  // Unique gradient id per instance so multiple glows don't share/override defs.
+  const gid = `glow-${useId()}`;
+  return (
+    <Svg width={size} height={size} style={[{ position: 'absolute' }, pos]} pointerEvents="none">
+      <Defs>
+        <RadialGradient id={gid} cx="50%" cy="50%" r="50%">
+          <Stop offset="0" stopColor={color} stopOpacity={opacity} />
+          <Stop offset="1" stopColor={color} stopOpacity={0} />
+        </RadialGradient>
+      </Defs>
+      <Rect x="0" y="0" width={size} height={size} fill={`url(#${gid})`} />
+    </Svg>
+  );
 }
 
-const styles = StyleSheet.create({
-  blob: {
-    position: 'absolute',
-    borderRadius: 999,
-  },
-});
+export function BlobBackground({ variant = 'home' }: { variant?: 'home' | 'group' | 'progress' | 'profile' }) {
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      {variant === 'home' && (
+        <>
+          <Glow size={460} color={PEACH} opacity={0.18} pos={{ top: -150, right: -150 }} />
+          <Glow size={360} color={SAGE} opacity={0.15} pos={{ top: 360, left: -150 }} />
+        </>
+      )}
+      {variant === 'group' && (
+        <>
+          <Glow size={400} color={SAGE} opacity={0.16} pos={{ top: -90, right: -140 }} />
+          <Glow size={340} color={PEACH} opacity={0.15} pos={{ top: 220, left: -150 }} />
+        </>
+      )}
+      {variant === 'progress' && (
+        <Glow size={460} color={CREAM} opacity={0.12} pos={{ top: -140, right: -170 }} />
+      )}
+      {variant === 'profile' && (
+        <Glow size={420} color={PEACH} opacity={0.17} pos={{ top: -120, left: -150 }} />
+      )}
+    </View>
+  );
+}
