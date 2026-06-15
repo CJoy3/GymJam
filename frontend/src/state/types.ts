@@ -44,6 +44,9 @@ export interface GroupMember {
   avatar: string | null;
   elo: number;
   isLeader: boolean;
+  /** Friend status relative to me: 'friends' hides the Add button, 'requested'
+   *  shows it as already-sent. */
+  friendStatus: 'none' | 'friends' | 'requested';
   thisWeek: DayStatus[];
   nextWeek: DayStatus[];
 }
@@ -155,6 +158,11 @@ export interface AppStateShape {
   // Group activity feed + nudges
   activity: notificationsApi.ActivityItem[];
   refreshActivity: () => Promise<void>;
+  // Locally-dismissed notification ids (persisted). Shared so both the group
+  // feed and the nav-bar unread dot read the same set. Join requests are never
+  // dismissable, so they're excluded from this entirely.
+  dismissedActivity: string[];
+  dismissActivity: (ids: string[]) => void;
   nudge: (targetUserId: string) => Promise<void>;
   nudgeCooldowns: Record<string, number>; // userId → epoch ms until allowed again
 

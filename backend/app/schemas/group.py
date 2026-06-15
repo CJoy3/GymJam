@@ -8,6 +8,7 @@ JoinType = Literal["open", "request"]
 StakeType = Literal["elo", "money"]
 Role = Literal["member", "leader"]
 RequestStatus = Literal["pending", "approved", "rejected"]
+FriendStatus = Literal["none", "friends", "requested"]
 
 
 class GroupCreate(BaseModel):
@@ -117,6 +118,7 @@ class GroupMemberDetail(BaseModel):
     avatar: Optional[str] = None
     elo: int
     role: Role
+    friend_status: FriendStatus = "none"
     joined_at: datetime
     this_week_days: list[PlanDay]
     next_week_days: list[PlanDay]

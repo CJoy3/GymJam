@@ -96,6 +96,9 @@ export interface GroupMemberDetail {
   avatar: string | null;
   elo: number;
   role: 'member' | 'leader';
+  /** Friend status relative to the viewer: hide 'Add' when 'friends', show
+   *  'Sent' when 'requested' (an outgoing pending request). */
+  friend_status: 'none' | 'friends' | 'requested';
   joined_at: string;
   this_week_days: PlanDay[];
   next_week_days: PlanDay[];

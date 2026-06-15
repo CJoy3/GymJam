@@ -61,7 +61,7 @@ export default function GymJamAppRoot() {
 }
 
 function GymJamApp() {
-  const { ready, userId, gymId, groupId, tag, elo, refreshAll } = useAppState();
+  const { ready, userId, gymId, groupId, tag, elo, refreshAll, activity, dismissedActivity } = useAppState();
   const { hasSeenWizard, hasSeenTour, completeWizard, completeTour } = useOnboarding();
   const [screen, setScreen] = useState<Screen | null>(null);
 
@@ -131,6 +131,10 @@ function GymJamApp() {
   };
 
   const showTabs = screen !== 'account-setup' && screen !== 'onboarding' && screen !== 'check-in' && screen !== 'plan-week' && screen !== 'settings';
+  // Unread group notifications → a red dot on the Group tab. Mirrors the group
+  // feed's logic: join requests always count; everything else clears once
+  // dismissed (dismissedActivity is shared app-wide so the two stay in sync).
+  const groupHasUnread = activity.some((a) => a.kind === 'join_request' || !dismissedActivity.includes(a.id));
   // The squad map is a full-bleed map: no top safe-area inset (extends under the
   // status bar) and no ELO ribbon, so it reads like a real map app.
   const fullBleed = screen === 'squad-map';
@@ -168,7 +172,7 @@ function GymJamApp() {
           <View style={styles.tabBar}>
             <Glass radius={RADIUS.pill} dim={0.22} style={StyleSheet.absoluteFill} />
             <Tab label="Home" icon="home" active={screen === 'home'} onPress={() => setScreen('home')} />
-            <Tab label="Group" icon="group" active={['group', 'gym-browser', 'leaderboard', 'pot-tracker'].includes(screen)} onPress={() => setScreen('group')} targetRef={groupTabTarget} />
+            <Tab label="Group" icon="group" active={['group', 'gym-browser', 'leaderboard', 'pot-tracker'].includes(screen)} onPress={() => setScreen('group')} targetRef={groupTabTarget} dot={groupHasUnread} />
             <Tab label="Progress" icon="trending-up" active={['progress', 'gym-space'].includes(screen)} onPress={() => setScreen('progress')} targetRef={progressTabTarget} />
             <Tab label="Profile" icon="person" active={['profile', 'squad-map'].includes(screen)} onPress={() => setScreen('profile')} targetRef={profileTabTarget} />
           </View>
@@ -198,13 +202,15 @@ function GymJamApp() {
   );
 }
 
-function Tab({ label, icon, active, onPress, targetRef }: {
+function Tab({ label, icon, active, onPress, targetRef, dot }: {
   label: string;
   icon: keyof typeof MaterialIcons.glyphMap;
   active: boolean;
   onPress: () => void;
   /** Coach-mark registration ref (see ui/CoachMarks). */
   targetRef?: (node: View | null) => void;
+  /** Show a small red unread indicator over the icon (e.g. group notifications). */
+  dot?: boolean;
 }) {
   return (
     <View style={styles.tab}>
@@ -215,6 +221,8 @@ function Tab({ label, icon, active, onPress, targetRef }: {
       <Pressable onPress={onPress} style={styles.tabInner} accessibilityRole="button" accessibilityLabel={label}>
         <View ref={targetRef} collapsable={false} style={[styles.tabIconWrap, active && styles.tabIconActive]}>
           <MaterialIcons name={icon} size={22} color={active ? C.primaryFg : C.mutedFg} />
+          {/* Simple unread dot, pinned to the icon's top-right corner. */}
+          {dot && <View style={styles.tabDot} />}
         </View>
       </Pressable>
     </View>
@@ -284,4 +292,15 @@ const styles = StyleSheet.create({
   // tabs (Home / Profile) the gap to the bar edge is identical to the top/bottom.
   tabIconWrap: { height: 44, borderRadius: 22, marginHorizontal: TAB_GAP, alignItems: 'center', justifyContent: 'center' },
   tabIconActive: { backgroundColor: C.primary },
+  // Unread indicator: a plain red circle nudged onto the icon's upper-right.
+  tabDot: {
+    position: 'absolute',
+    top: 8,
+    right: '50%',
+    marginRight: -13,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: C.danger,
+  },
 });

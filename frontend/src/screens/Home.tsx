@@ -13,6 +13,18 @@ import { LABELS, pageWrap, styles } from './_shared';
 
 /* Home-greeting, this week, pot, primary CTAs */
 
+// A different headline for each day of the week (0=Mon … 6=Sun) so the home
+// screen feels personal and welcoming rather than static. Indexed by todayDow.
+const GREETINGS = [
+  'New week, fresh start',   // Mon
+  'Keep the momentum',       // Tue
+  "You're over the hump",    // Wed
+  'Almost there',            // Thu
+  'Finish the week strong',  // Fri
+  'Weekend warrior mode',    // Sat
+  'Sunday reset',            // Sun
+];
+
 export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => void; onPlan: () => void; onPot: () => void; onGroup: () => void }) {
   const {
     thisWeek, nextWeek, pot, potCurrent, checkInToday, displayName,
@@ -78,7 +90,7 @@ export function Home({ onCheckIn, onPlan, onPot, onGroup }: { onCheckIn: () => v
       <ScrollView refreshControl={refresh} contentContainerStyle={pageWrap} showsVerticalScrollIndicator={false}>
         <FadeInItem>
           <Eyebrow>Hi, {firstName}</Eyebrow>
-          <H1 style={{ marginTop: 6 }}>It's your time</H1>
+          <H1 style={{ marginTop: 6 }}>{GREETINGS[todayDow] ?? "It's your time"}</H1>
         </FadeInItem>
 
         <FadeInItem delay={120} style={{ marginTop: 24 }}>
