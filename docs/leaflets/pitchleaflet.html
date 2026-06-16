@@ -94,8 +94,9 @@
   @media print{
     *{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
     @page{size:A4 portrait;margin:0;}
-    body{background:var(--bg);padding:0;}
-    .leaflet{box-shadow:none;border:0;max-width:none;width:100%;height:100%;border-radius:0;aspect-ratio:auto;}
+    html,body{height:100%;}
+    body{background:var(--bg);padding:0;display:block;}
+    .leaflet{box-shadow:none;border:0;max-width:none;width:100vw;height:100vh;border-radius:0;aspect-ratio:auto;}
   }
 </style>
 </head>
@@ -120,7 +121,7 @@
       </div>
 
       <div class="foot">
-        <div class="closer"><span class="hl">50%</span> quit within 8 weeks.<br>Squads don't.</div>
+        <div class="closer"><span class="hl">50%</span> quit within 6 months.<br>Squads don't.</div>
         <div class="src">[1] fitnessimage.com.au — gym drop-out rates</div>
       </div>
 

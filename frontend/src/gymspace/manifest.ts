@@ -8,7 +8,13 @@
  * `band` is depth: 0 = back wall, 1 = front edge (nearer = lower + drawn on top).
  * Wall `top` is a fraction of the wall band's height.
  */
+import { STARTING_ELO } from '../theme/tokens';
 import { PROPS, WALL } from './sprites';
+
+// Progression thresholds are offset by the seeded starting balance so a fresh
+// account (STARTING_ELO) sees the same room a 0-ELO user used to. `E()` shifts a
+// raw threshold into this offset space.
+const E = (raw: number) => STARTING_ELO + raw;
 
 export interface Tier {
   name: string;
@@ -41,10 +47,10 @@ export interface WallItem {
 }
 
 export const TIERS: Tier[] = [
-  { name: 'Beginner', min: 0,    wall: '#221C18', floor: '#1B1714', character: 'scrawny', glow: 0.07 },
-  { name: 'Rookie',   min: 500,  wall: '#2A231F', floor: '#221C18', character: 'fit',     glow: 0.12 },
-  { name: 'Regular',  min: 1000, wall: '#332B26', floor: '#2A231F', character: 'buff',    glow: 0.18 },
-  { name: 'Mogger',   min: 2000, wall: '#3D332D', floor: '#332B26', character: 'mogger',  glow: 0.26 },
+  { name: 'Beginner', min: E(0),    wall: '#221C18', floor: '#1B1714', character: 'scrawny', glow: 0.07 },
+  { name: 'Rookie',   min: E(500),  wall: '#2A231F', floor: '#221C18', character: 'fit',     glow: 0.12 },
+  { name: 'Regular',  min: E(1000), wall: '#332B26', floor: '#2A231F', character: 'buff',    glow: 0.18 },
+  { name: 'Mogger',   min: E(2000), wall: '#3D332D', floor: '#332B26', character: 'mogger',  glow: 0.26 },
 ];
 
 export function tierForScene(elo: number): { tier: Tier; index: number } {
@@ -56,20 +62,20 @@ export function tierForScene(elo: number): { tier: Tier; index: number } {
 export const CHARACTER_BAND = 0.5;
 
 export const FLOOR_ITEMS: FloorItem[] = [
-  { id: 'mat',        label: 'Yoga Mat',   sprite: PROPS.mat,        elo: 0,    x: 0.20, band: 0.86, slot: 0 },
-  { id: 'dumbbells',  label: 'Dumbbells',  sprite: PROPS.dumbbells,  elo: 0,    x: 0.82, band: 0.88, slot: 1 },
-  { id: 'bench',      label: 'Bench',      sprite: PROPS.bench,      elo: 500,  x: 0.30, band: 0.34, slot: 2 },
-  { id: 'plant',      label: 'Plant',      sprite: PROPS.plant,      elo: 500,  x: 0.92, band: 0.46, slot: 3 },
-  { id: 'barbell',    label: 'Barbell',    sprite: PROPS.barbell,    elo: 1000, x: 0.70, band: 0.72, slot: 4 },
-  { id: 'kettlebell', label: 'Kettlebell', sprite: PROPS.kettlebell, elo: 2000, x: 0.12, band: 0.58, slot: 5 },
-  { id: 'trophy',     label: 'Trophy',     sprite: PROPS.trophy,     elo: 2000, x: 0.88, band: 0.74, slot: 6 },
+  { id: 'mat',        label: 'Yoga Mat',   sprite: PROPS.mat,        elo: E(0),    x: 0.20, band: 0.86, slot: 0 },
+  { id: 'dumbbells',  label: 'Dumbbells',  sprite: PROPS.dumbbells,  elo: E(0),    x: 0.82, band: 0.88, slot: 1 },
+  { id: 'bench',      label: 'Bench',      sprite: PROPS.bench,      elo: E(500),  x: 0.30, band: 0.34, slot: 2 },
+  { id: 'plant',      label: 'Plant',      sprite: PROPS.plant,      elo: E(500),  x: 0.92, band: 0.46, slot: 3 },
+  { id: 'barbell',    label: 'Barbell',    sprite: PROPS.barbell,    elo: E(1000), x: 0.70, band: 0.72, slot: 4 },
+  { id: 'kettlebell', label: 'Kettlebell', sprite: PROPS.kettlebell, elo: E(2000), x: 0.12, band: 0.58, slot: 5 },
+  { id: 'trophy',     label: 'Trophy',     sprite: PROPS.trophy,     elo: E(2000), x: 0.88, band: 0.74, slot: 6 },
 ];
 
 export const WALL_ITEMS: WallItem[] = [
-  { id: 'light',  label: 'Lamp',      sprite: WALL.light,  elo: 0,    x: 0.50, top: 0.02, structural: true },
-  { id: 'window', label: 'Window',    sprite: WALL.window, elo: 0,    x: 0.28, top: 0.30, structural: true },
-  { id: 'banner', label: 'Banner',    sprite: WALL.banner, elo: 1000, x: 0.62, top: 0.16, slot: 7 },
-  { id: 'neon',   label: 'Neon Sign', sprite: WALL.neon,   elo: 1200, x: 0.85, top: 0.34, slot: 8 },
+  { id: 'light',  label: 'Lamp',      sprite: WALL.light,  elo: E(0),    x: 0.50, top: 0.02, structural: true },
+  { id: 'window', label: 'Window',    sprite: WALL.window, elo: E(0),    x: 0.28, top: 0.30, structural: true },
+  { id: 'banner', label: 'Banner',    sprite: WALL.banner, elo: E(1000), x: 0.62, top: 0.16, slot: 7 },
+  { id: 'neon',   label: 'Neon Sign', sprite: WALL.neon,   elo: E(1200), x: 0.85, top: 0.34, slot: 8 },
 ];
 
 /** Slot lookup by item id, for placement writes. */
