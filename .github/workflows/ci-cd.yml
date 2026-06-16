@@ -105,3 +105,44 @@ jobs:
         with:
           name: android-apk
           path: frontend/app.apk
+
+  build-ipa:
+    name: Build iOS IPA (EAS)
+    needs: deploy
+    runs-on: ubuntu-latest
+    # Build and upload IPA only on push to main branch
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Build IPA with EAS and upload artifact
+        working-directory: frontend
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EAS_BUILD_NO_EXPO_GO_WARNING: true
+        run: |
+          set -euo pipefail
+          npx eas-cli build --platform ios --profile production --non-interactive --wait --json 2>eas-logs.txt > build-output.json || (cat eas-logs.txt && exit 1)
+          ARTIFACT_URL=$(node -e "
+            const data = JSON.parse(require('fs').readFileSync('build-output.json','utf8'));
+            const arr = Array.isArray(data) ? data : [data];
+            const build = arr[0];
+            const url = build?.artifacts?.buildUrl
+              || build?.artifacts?.ipa?.url
+              || build?.buildUrl
+              || build?.url;
+            if (!url) { console.error('Available keys:', JSON.stringify(build, null, 2)); process.exit(1); }
+            process.stdout.write(url);
+          ")
+          curl -L -o app.ipa "$ARTIFACT_URL"
+          ls -lh app.ipa
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-ipa
+          path: frontend/app.ipa
