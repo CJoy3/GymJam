@@ -16,8 +16,48 @@ from app.services import realtime
 from app.services import users as users_svc
 
 
+# Highest ELO a rule setter may put on the line per missed session. Money pots
+# are already bounded to £1–£20/week in the client; ELO needs an explicit cap.
+ELO_STAKE_CAP = 1000
+
+
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def fmt_amount(amount: int, stake_type: str) -> str:
+    """Render an amount in its pot currency: '£5.00' for money, '300 ELO' otherwise."""
+    return f"£{amount / 100:.2f}" if stake_type == "money" else f"{amount} ELO"
+
+
+def assert_can_set_stake(
+    user_id: str, stake_type: str, required_pledges: int, stake_per_miss: int
+) -> None:
+    """Validate a rule setter's chosen pot conditions.
+
+    Two guards: ELO stake-per-miss is capped at ELO_STAKE_CAP, and the setter
+    must be able to cover the full weekly stake they're imposing
+    (required_pledges × stake_per_miss) in the pot's currency-you can't set a
+    pot you couldn't pay into yourself.
+    """
+    if stake_type != "money" and stake_per_miss > ELO_STAKE_CAP:
+        raise HTTPException(
+            status_code=400,
+            detail=f"ELO stake per miss can be at most {ELO_STAKE_CAP}",
+        )
+    weekly_total = required_pledges * stake_per_miss
+    balance = users_svc.balance_for(user_id, stake_type)
+    if weekly_total > balance:
+        currency = "funds" if stake_type == "money" else "ELO"
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Not enough {currency} to set this stake: {required_pledges} × "
+                f"{fmt_amount(stake_per_miss, stake_type)} puts "
+                f"{fmt_amount(weekly_total, stake_type)} at stake, but you have "
+                f"{fmt_amount(balance, stake_type)}."
+            ),
+        )
 
 
 def _resolve_week(week: str) -> date:
@@ -324,6 +364,11 @@ def update_conditions(
     cond = _ensure_conditions(group_id, week_start)
     if cond.get("is_finalized"):
         raise HTTPException(status_code=409, detail="Pot conditions are already finalized")
+
+    # Cap the ELO stake and make sure the setter can actually cover the full
+    # weekly stake they're imposing, in the week's frozen currency.
+    stake_type = cond.get("stake_type") or _group_stake_type(group_id)
+    assert_can_set_stake(user_id, stake_type, required_pledges, stake_per_miss)
 
     sb = get_supabase()
 

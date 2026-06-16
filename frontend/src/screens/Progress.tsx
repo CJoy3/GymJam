@@ -2,7 +2,7 @@ import React from 'react';
 import { Pressable, ScrollView, Text, View } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 
-import { C, FONT, SPACE } from '../theme/tokens';
+import { C, FONT, SPACE, STARTING_ELO } from '../theme/tokens';
 import { Card, Chip, Eyebrow, FadeInItem, H1, Sub } from '../ui/components';
 import { BlobBackground } from '../ui/Blob';
 import { useRefreshControl } from '../ui/useRefresh';
@@ -23,11 +23,13 @@ const BADGE_CATALOG: { key: BadgeKey; name: string; icon: keyof typeof MaterialI
   { key: 'group_leader', name: 'Group Leader', icon: 'group' },
 ];
 
+// Thresholds are offset by STARTING_ELO so a freshly-seeded user lands at the
+// bottom of the Beginner band (see tierForElo in theme/tokens).
 const TIERS = [
-  { name: 'Beginner', min: 0, max: 500, icon: 'fitness-center' as const },
-  { name: 'Rookie', min: 500, max: 1000, icon: 'directions-run' as const },
-  { name: 'Regular', min: 1000, max: 2000, icon: 'sports-martial-arts' as const },
-  { name: 'Mogger', min: 2000, max: Infinity, icon: 'military-tech' as const },
+  { name: 'Beginner', min: STARTING_ELO + 0, max: STARTING_ELO + 500, icon: 'fitness-center' as const },
+  { name: 'Rookie', min: STARTING_ELO + 500, max: STARTING_ELO + 1000, icon: 'directions-run' as const },
+  { name: 'Regular', min: STARTING_ELO + 1000, max: STARTING_ELO + 2000, icon: 'sports-martial-arts' as const },
+  { name: 'Mogger', min: STARTING_ELO + 2000, max: Infinity, icon: 'military-tech' as const },
 ];
 
 export function Progress({ onGymSpace }: { onGymSpace: () => void }) {

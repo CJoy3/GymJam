@@ -214,6 +214,11 @@ def create_group(
     if stake_type == "money" and join_type != "request":
         raise HTTPException(status_code=400, detail="Money-stake groups must be private")
 
+    # Cap the ELO stake and ensure the creator can cover the weekly stake they're
+    # setting (required_pledges × stake_per_miss) in the pot's currency.
+    from app.services import pot as pot_svc
+    pot_svc.assert_can_set_stake(creator_id, stake_type, required_pledges, stake_per_miss)
+
     sb = get_supabase()
     # Try inserting WITH the new columns first; if the schema is old, retry
     # without them so creation still works (the values live in pot_conditions
@@ -252,7 +257,6 @@ def create_group(
     # If seeding fails the group would otherwise live without conditions and
     # the next pot read would silently install defaults (3, 100)-so we roll
     # back the group + membership rows and surface the underlying error.
-    from app.services import pot as pot_svc
     from app.core.time_utils import current_day_of_week, current_week_start, next_week_start
 
     try:

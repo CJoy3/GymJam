@@ -18,6 +18,7 @@ export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: (
   const {
     nextWeek, setPlannedDays, groupName, potNext, updatePotConditions,
     userId, groupMembers, todayDow, nextStakeType, isLeader, joinType, updateStakeType,
+    elo, money,
   } = useAppState();
   // PlanWeek is about NEXT week, so it shows/edits next week's currency.
   const isMoney = nextStakeType === 'money';
@@ -38,16 +39,35 @@ export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: (
   // Treat missing / 0 conditions as "no cap" so screen stays usable.
   const required = potNext && potNext.required_pledges > 0 ? potNext.required_pledges : 7;
   const stakePerMiss = potNext?.stake_per_miss ?? 0;
+  // You can only pledge as many days as you can fully cover: each pledged day
+  // risks stakePerMiss of your balance (ELO points or money pence). Practice
+  // weeks / zero-stake pots are unconstrained.
+  const balance = isMoney ? money : elo;
+  const isPractice = !!potNext?.is_practice;
+  const maxAffordable = !isPractice && stakePerMiss > 0 ? Math.floor(balance / stakePerMiss) : 7;
+  const limitedByFunds = maxAffordable < required;
+  // The binding limit is the tighter of the pot rule and what you can afford.
+  const cap = Math.min(required, maxAffordable);
   const sel = local.filter((s) => s === 'planned' || s === 'locked').length;
-  const atCap = sel >= required;
-  const overCap = sel > required;
-  const overBy = Math.max(0, sel - required);
+  const atCap = sel >= cap;
+  const overCap = sel > cap;
+  const overBy = Math.max(0, sel - cap);
   const editableDays: DayStatus[] = local.map((state, i) => ({ day: LABELS[i], state }));
   const myPlannedDows = local
     .map((s, i) => ((s === 'planned' || s === 'locked') ? i : -1))
     .filter((i) => i !== -1);
 
   const toggle = (i: number) => {
+    const turningOn = local[i] === 'unselected';
+    if (turningOn && atCap && limitedByFunds && sel >= maxAffordable) {
+      showToast(
+        maxAffordable === 0
+          ? `Not enough ${isMoney ? 'funds' : 'ELO'} to pledge at ${fmtStake(stakePerMiss)} per miss`
+          : `You can only afford ${maxAffordable} ${maxAffordable === 1 ? 'day' : 'days'} at ${fmtStake(stakePerMiss)} each`,
+        'info',
+      );
+      return;
+    }
     setLocal((arr) => arr.map((s, idx) => {
       if (idx !== i) return s;
       if (s === 'checked-in' || s === 'missed') return s;
@@ -90,7 +110,7 @@ export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: (
 
         {isNextSetter && (
           <FadeInItem delay={80} style={{ marginTop: 24 }}>
-            <PotConditionsEditor potNext={potNext} onSave={updatePotConditions} isMonday={todayDow === 0} isMoney={isMoney} />
+            <PotConditionsEditor potNext={potNext} onSave={updatePotConditions} isMonday={todayDow === 0} isMoney={isMoney} balance={balance} />
           </FadeInItem>
         )}
         {!isNextSetter && potNext && (
@@ -186,7 +206,14 @@ export function PlanWeek({ onDone, onCancel }: { onDone: () => void; onCancel: (
             <DayPicker days={editableDays} editable onToggle={toggle} />
             {overCap && (
               <Sub style={{ marginTop: 14, color: C.accent }}>
-                You've pledged {overBy} more than this week's cap. Remove {overBy} to save.
+                {sel > maxAffordable
+                  ? `You can only cover ${maxAffordable} ${maxAffordable === 1 ? 'day' : 'days'} (${fmtStake(stakePerMiss)} each). Remove ${overBy} to save.`
+                  : `You've pledged ${overBy} more than this week's cap. Remove ${overBy} to save.`}
+              </Sub>
+            )}
+            {!overCap && limitedByFunds && (
+              <Sub style={{ marginTop: 14, color: C.mutedFg }}>
+                Your balance covers up to {maxAffordable} {maxAffordable === 1 ? 'day' : 'days'} at {fmtStake(stakePerMiss)} per miss.
               </Sub>
             )}
             <View style={styles.divider} />
@@ -296,13 +323,17 @@ function MemberPlanRow({ days, highlightDows }: { days: DayStatus[]; highlightDo
  * Editor for next-week pot rules, shown only to the current rotational rule
  * setter. Only editable on Monday-after that the conditions are locked.
  */
+/** Hard cap on ELO staked per missed session-mirrors the backend's ELO_STAKE_CAP. */
+const ELO_STAKE_CAP = 1000;
+
 function PotConditionsEditor({
-  potNext, onSave, isMonday, isMoney,
+  potNext, onSave, isMonday, isMoney, balance,
 }: {
   potNext: import('../../lib/api/pot').PotDetail | null;
   onSave: (week: 'current' | 'next', required: number, stake: number) => Promise<void>;
   isMonday: boolean;
   isMoney: boolean;
+  balance: number;
 }) {
   const initialRequired = potNext && potNext.required_pledges > 0 ? potNext.required_pledges : 3;
   const initialTotal = potNext && potNext.required_pledges > 0
@@ -327,7 +358,18 @@ function PotConditionsEditor({
   const fmtStake = (amount: number) =>
     isMoney ? `£${(amount / 100).toFixed(2)}` : `${amount.toLocaleString()} ELO`;
 
+  // The rules you set must be valid: ELO per-miss is capped, and you must be able
+  // to cover the full weekly stake (reqNum × perMiss) in the pot's currency.
+  const overEloCap = !isMoney && perMiss > ELO_STAKE_CAP;
+  const unaffordable = reqNum * perMiss > balance;
+  const ruleError = overEloCap
+    ? `Max ${ELO_STAKE_CAP} ELO per miss-lower the weekly stake or add days.`
+    : unaffordable
+      ? `You can't cover ${fmtStake(reqNum * perMiss)}. Your balance is ${fmtStake(balance)}.`
+      : null;
+
   const save = async () => {
+    if (ruleError) { showToast(ruleError, 'info'); return; }
     setSaving(true);
     try {
       await onSave('next', reqNum, perMiss);
@@ -400,16 +442,25 @@ function PotConditionsEditor({
                   style={styles.input}
                 />
                 <Sub style={{ marginTop: 4, fontSize: 11 }}>Total ELO · {perMiss} per miss</Sub>
+                <View style={[styles.rowGap, { marginTop: 8, gap: 6 }]}>
+                  <MaterialIcons name="info-outline" size={14} color={C.mutedFg} />
+                  <Sub style={{ fontSize: 11, flex: 1 }}>
+                    The most you can stake is {ELO_STAKE_CAP.toLocaleString()} ELO per miss.
+                  </Sub>
+                </View>
               </>
             )}
           </View>
+          {ruleError && (
+            <Sub style={{ marginTop: 12, color: C.accent }}>{ruleError}</Sub>
+          )}
           {saved ? (
             <View style={savedBtnStyle}>
               <MaterialIcons name="check-circle" size={18} color={C.success} />
               <Text style={savedBtnText}>Rules saved</Text>
             </View>
           ) : (
-            <Btn label={saving ? 'Saving…' : 'Save rules'} size="md" loading={saving} disabled={saving} onPress={save} style={{ marginTop: 14 }} />
+            <Btn label={saving ? 'Saving…' : 'Save rules'} size="md" loading={saving} disabled={saving || !!ruleError} onPress={save} style={{ marginTop: 14 }} />
           )}
         </>
       )}
