@@ -1,0 +1,111 @@
+\documentclass[a4paper,8pt]{extarticle}
+
+% ---- Geometry: tight margins so everything fits on one A4 side ----
+\usepackage[a4paper,top=8mm,bottom=8mm,left=9mm,right=9mm]{geometry}
+
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{multicol}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage[hidelinks]{hyperref}
+\usepackage{titlesec}
+
+% ---- Kill vertical whitespace ----
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{1.5pt}
+\setlength{\columnsep}{6mm}
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{0.95}
+\pagestyle{empty}
+
+% ---- Compact section headings ----
+\titleformat{\section}{\bfseries\small\color{black!85}}{\thesection.}{0.4em}{}
+\titlespacing{\section}{0pt}{3pt}{1pt}
+
+% ---- Helpers ----
+\newcommand{\lic}[1]{\textbf{#1}}
+\newcommand{\hd}[1]{\textbf{#1}}
+
+\begin{document}
+\footnotesize
+
+\begin{center}
+{\large\bfseries GymJam --- Copyright \& Legal Issues Report}\\[1pt]
+{\scriptsize Every third-party resource (libraries, fonts, icons, map data, images) used in the GymJam digital touchpoint, its licence, and the
+legal constraints a future team must respect before officially releasing the product. GymJam is an Expo / React Native app (iOS, Android, web) with a FastAPI + Supabase backend.}
+\end{center}
+\vspace{-2pt}
+\hrule
+\vspace{2pt}
+
+\begin{multicols}{2}
+
+\section{Third-party software libraries}
+
+\textbf{Frontend --- JS/TS (\texttt{frontend/package.json}).} All \lic{MIT} unless noted:
+react / react-dom / react-native (Meta); \texttt{expo} + every \texttt{expo-*} module (router, font, image, location, haptics, crypto, constants, linear-gradient, splash-screen, status-bar, symbols, system-ui, web-browser, apple-authentication, glass-effect, linking --- Expo/650 Industries);
+\texttt{@react-navigation/*}; \texttt{@supabase/supabase-js}; \texttt{async-storage};
+\texttt{react-native-maps} (\emph{map tiles behind it are not MIT --- see \S3});
+Software Mansion libs (reanimated, gesture-handler, screens, svg, worklets);
+safe-area-context; react-native-web; url-polyfill;
+\texttt{@expo/vector-icons} (\emph{wrapper MIT; glyphs separately licensed --- \S2});
+\texttt{@expo-google-fonts/plus-jakarta-sans} (\emph{font file is SIL OFL 1.1 --- \S2}).
+Dev-only: jest / jest-expo, eslint / eslint-config-expo, \texttt{@types/*} (all MIT).
+\texttt{typescript} (Microsoft) is \lic{Apache-2.0} --- preserve any \texttt{NOTICE}, state modifications, includes a patent grant (dev-only).
+
+\smallskip
+\textbf{Backend --- Python (\texttt{backend/requirements.txt}).}
+fastapi (MIT); \texttt{uvicorn[standard]} (Encode, \lic{BSD-3-Clause} --- keep notice, don't use author's name to endorse); pydantic / pydantic-settings (MIT); supabase python client (MIT); httpx (Encode, \lic{BSD-3-Clause}); pytest (MIT, dev-only).
+A local venv (\texttt{backend/venv/}) pulls in matplotlib + DejaVu/STIX fonts, but these are git-ignored, developer-only and \emph{not shipped} --- no release duty, but must not be committed.
+
+\smallskip
+\textbf{Position.} Every shipped dependency is \lic{permissive} (MIT, BSD-3-Clause, Apache-2.0). \textbf{No copyleft (GPL/AGPL/LGPL)}, so no duty to open-source GymJam's own code. The only practical duty is \textbf{attribution}: reproduce each library's copyright + licence text (auto-generated \texttt{licenses.txt} / in-app ``Open Source Licences'' screen).
+
+\smallskip
+\textbf{Hosting services (SaaS).} \emph{Supabase} (auth/DB/storage) acts as a \textbf{data processor} --- bound by its ToS + DPA; hosting region sets where personal data lives (\S\,GDPR). \emph{Expo/EAS} and \emph{Vercel} (web build) bound by their ToS. \emph{Overpass API / OpenStreetMap} (\texttt{fetch\_uk\_gyms.py}) --- data is \lic{ODbL}, with attribution + share-alike duties (\S3) and a fair-use policy on public mirrors.
+
+\section{Fonts \& icons}
+
+\begin{itemize}[leftmargin=1em,itemsep=0pt,topsep=1pt]
+\item \textbf{Plus Jakarta Sans} (Tokotype) --- main app typeface + leaflet --- \lic{SIL OFL 1.1}: free to embed in commercial apps; \emph{cannot be sold standalone}; reserved font name must not be reused on a modified version.
+\item \textbf{Inter} (Andersson) \& \textbf{Bricolage Grotesque} --- pitch-leaflet HTML via Google Fonts CDN --- \lic{SIL OFL 1.1} (as above).
+\item \textbf{Material Icons / Symbols} (Google) --- in-app UI via \texttt{@expo/vector-icons} --- \lic{Apache-2.0}: free commercial use; preserve the notice.
+\end{itemize}
+The leaflet pulls fonts from the \textbf{Google Fonts CDN}; free for commercial use, but for a production web release consider \textbf{self-hosting} --- a German court has ruled dynamic CDN embedding can send user IPs to Google and breach GDPR.
+
+\section{Map \& geographic data (key external resource)}
+
+\textbf{react-native-maps} uses \texttt{PROVIDER\_DEFAULT} (\texttt{FullMap.tsx}, \texttt{ProfileMap.tsx}) $\Rightarrow$ \textbf{Apple Maps on iOS}, \textbf{Google Maps on Android}.
+\emph{Apple MapKit} --- governed by the Apple Developer Program Licence; no separate fee.
+\emph{Google Maps Platform} --- billable above the free tier; needs an API key + billing for a public release; data/imagery may not be scraped or used outside a Google map.
+
+\smallskip
+\textbf{Gym dataset} (\texttt{gyms\_seed.sql} via \texttt{fetch\_uk\_gyms.py}) is derived from \textbf{OpenStreetMap / Overpass} under the \lic{Open Database Licence (ODbL) v1.0}. Duties: (a) \textbf{attribution} --- show ``© OpenStreetMap contributors'' wherever the data appears; (b) \textbf{share-alike} --- any publicly distributed derived database must itself be ODbL; (c) keep the data open. \emph{For release: add a visible OSM credit on/near the map screen.}
+
+\smallskip
+\textbf{Images \& original assets.} App icons/splash/adaptive icons, mascot pixel-art SVGs (\texttt{fit, scrawny, mogger, buff, otter}), leaflet imagery and the ``GJ'' logotype are all \textbf{group-owned original work} (brand subject to trademark clearance). No third-party photos / stock / clip-art are embedded --- the image-rights position is clean; track licence + source for any future stock additions.
+
+\section{Wider legal implications}
+
+\textbf{Data protection (UK GDPR / DPA 2018 / EU GDPR).} GymJam collects \textbf{personal data}: email + password (Supabase auth), precise \textbf{device location} (\texttt{expo-location}, maps), social graph, and behavioural data (check-ins, streaks, pledges). \texttt{Login.tsx} already shows ``you agree to GymJam's Terms of Service and Privacy Policy'' --- \textbf{neither document exists and both must be written}. Obligations: a lawful basis for processing, \textbf{explicit consent / justification for location}, data-subject rights (access, deletion, portability), data minimisation, breach notification, and a \textbf{DPA with Supabase}. As Supabase may host in the \textbf{US}, an international-transfer mechanism (SCCs) is needed; password handling mandates appropriate security.
+
+\smallskip
+\textbf{Financial / gambling regulation (highest risk).} The ``pot''/pledge mechanic (\texttt{services/pot.py}, pledge flows) lets users stake value on showing up. If \textbf{real money} is ever involved this may engage \textbf{gambling law (UK Gambling Act 2005)} and/or \textbf{payment-services / FCA} rules (client funds, e-money). Get legal advice before launch; keeping pledges to non-monetary points/ELO substantially reduces risk.
+
+\smallskip
+\textbf{Health \& liability.} As a fitness product encouraging gym attendance, GymJam should carry a \textbf{medical/injury disclaimer} (``consult a doctor before exercising'') and limit liability in its ToS.
+
+\smallskip
+\textbf{App-store policies.} A release must satisfy \textbf{Apple App Store Review Guidelines} and \textbf{Google Play policies}: published privacy policy, accurate permission strings (location etc.), account-deletion support, and --- since \texttt{expo-apple-authentication} is a dependency --- Apple's ``Sign in with Apple'' parity rule if any third-party social login is offered.
+
+\smallskip
+\textbf{Trademark \& brand.} Clear the name \textbf{``GymJam''} against the UK trademark register before launch. The dataset references gym-chain names (PureGym, The Gym Group, Virgin Active); using them \textbf{as factual location names} is generally permissible \emph{nominative use}, but the app must \textbf{not} use their logos or imply partnership/endorsement.
+
+\smallskip
+\textbf{Open-source attribution.} Though all licences are permissive, MIT/BSD/Apache all require their notices to be reproduced. Ship an \textbf{``Open Source Licences'' acknowledgements screen} (or bundled \texttt{NOTICE}/\texttt{licenses.txt}) listing every \S1 dependency, the \S2 fonts, and the \textbf{``© OpenStreetMap contributors''} credit from \S3.
+
+\end{multicols}
+\end{document}
